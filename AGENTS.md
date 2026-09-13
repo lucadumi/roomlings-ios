@@ -9,6 +9,7 @@ Roomlings is an iPhone and iPad app, with iOS 18 as its minimum deployment targe
 - Match the web UI as well as its graphics: generate colours and control radius from the shared CSS, and use the licensed DM Sans and Baloo 2 fonts.
 - Keep the generated `WebThemeValues.swift` reference in Xcode and its build-phase output declaration; the native theme depends on it.
 - Account entry uses a native sheet over the room, bottom-aligned on iPhone and centered on iPad.
+- Fill the screen with the shared room background, including behind system bars. Keep native and room controls within measured safe-area insets.
 - The shared server ledger remains authoritative. Keep money in integer cents and preserve optimistic version checks.
 - Consult the owner before new UI, UX, branding or navigation decisions. The initial app is a room-rendering foundation, not a collection of placeholder screens.
 - Every visible control must work. Do not show unfinished household actions.

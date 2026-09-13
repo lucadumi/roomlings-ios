@@ -40,6 +40,24 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await page.goto(`http://127.0.0.1:${server.address().port}/`)
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(page.locator('canvas')).toHaveAttribute('data-render-ready', 'true')
+    await page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original',
+      viewportInsets: { top: 100, right: 12, bottom: 34, left: 12 },
+    }))
+    await expect(page.locator('.kitchen-world')).toHaveCSS('top', '100px')
+    assert.deepEqual(await page.locator('main').boundingBox(), { x: 0, y: 0, width: 390, height: 750 })
+    assert.deepEqual(await page.locator('canvas').boundingBox(), { x: 0, y: 0, width: 390, height: 750 })
+    const safeRoom = await page.locator('.kitchen-world').boundingBox()
+    assert.deepEqual(safeRoom, { x: 12, y: 100, width: 366, height: 616 })
+    const quickActions = await page.locator('.world-quick-actions').boundingBox()
+    assert.ok(quickActions && quickActions.y + quickActions.height <= 716)
+    await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original',
+      viewportInsets: { top: -1, right: 0, bottom: 0, left: 0 },
+    })))
+    await page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original',
+    }))
     await expect(page.getByRole('button')).toHaveCount(6)
     await expect(page.getByRole('button', { name: 'Hide object labels' })).toHaveCount(0)
     await expect(page.locator('.world-hotspots')).toHaveCount(0)

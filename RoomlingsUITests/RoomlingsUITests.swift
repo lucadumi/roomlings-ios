@@ -19,6 +19,9 @@ final class RoomlingsUITests: XCTestCase {
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.waitForExistence(timeout: 30))
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: 45))
+        XCTAssertEqual(room.frame.minY, app.frame.minY, accuracy: 1)
+        XCTAssertEqual(room.frame.maxY, app.frame.maxY, accuracy: 1)
+        XCTAssertEqual(room.frame.width, app.frame.width, accuracy: 1)
         let zoomIn = room.buttons["Zoom in"]
         XCTAssertTrue(zoomIn.waitForExistence(timeout: 45))
         XCTAssertFalse(app.staticTexts["Room unavailable"].exists)
@@ -57,6 +60,8 @@ final class RoomlingsUITests: XCTestCase {
             room.frame.width > room.frame.height
         }, object: room)
         XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed)
+        XCTAssertEqual(room.frame.minX, app.frame.minX, accuracy: 1)
+        XCTAssertEqual(room.frame.maxX, app.frame.maxX, accuracy: 1)
         XCTAssertTrue(zoomIn.waitForExistence(timeout: 10))
         XCTAssertTrue(zoomIn.isHittable)
         tapControl(room.switches["Reset room view"])
