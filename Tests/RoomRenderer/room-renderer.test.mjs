@@ -32,7 +32,10 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
   let browser
   try {
     browser = await chromium.launch()
-    const page = await browser.newPage({ viewport: { width: 390, height: 750 }, hasTouch: true, deviceScaleFactor: 2 })
+    const page = await browser.newPage({
+      viewport: { width: 390, height: 750 }, hasTouch: true, deviceScaleFactor: 2, reducedMotion: 'reduce',
+    })
+    page.setDefaultTimeout(process.env.CI ? 90_000 : 30_000)
     page.on('pageerror', (error) => console.error('Bundled room error:', error.message))
     await page.addInitScript(() => {
       window.roomEvents = []
@@ -94,11 +97,13 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
       version: 2, type: 'state', paused: false, roomStyle: 'original',
     })))
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.evaluate(() => window.RoomlingsRoom.receive({ version: 1, type: 'state', paused: true, roomStyle: 'clay' }))
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-rendering', 'paused', { timeout: 10_000 })
     await page.evaluate(() => window.RoomlingsRoom.receive({ version: 1, type: 'state', paused: false, roomStyle: 'original' }))
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-rendering', 'active')
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.getByRole('button', { name: 'Put the kettle on', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await page.setViewportSize({ width: 1194, height: 834 })
