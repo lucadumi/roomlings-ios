@@ -14,3 +14,6 @@ Roomlings is an iPhone and iPad app, with iOS 18 as its minimum deployment targe
 - Work on a local `feat/...` branch. Do not push, create a remote repository or open a pull request without explicit approval.
 - Commit messages are short imperative sentences without bodies, trailers or attribution watermarks. Do not use em dashes.
 - Keep generated bundles, build output, signing credentials and test artifacts out of commits.
+- Base the web and iOS root READMEs on [Make a README](https://www.makeareadme.com/). Keep them very short, without big paragraphs, and link to detailed guides.
+- Build on the existing README templates as features land; do not replace them with long implementation summaries.
+- After the initial bootstrap, use feature branches and pull requests rather than direct pushes to `main`.
