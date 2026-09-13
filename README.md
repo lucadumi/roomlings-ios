@@ -31,3 +31,5 @@ node Scripts/test-accounts.mjs
 ```
 
 Use **Product > Test** for room controls. Follow the [contributor rules](AGENTS.md); changes go through PRs.
+
+[CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.

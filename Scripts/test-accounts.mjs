@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util'
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
-const { values } = parseArgs({ options: { destination: { type: 'string' } } })
+const { values } = parseArgs({ options: { destination: { type: 'string' }, 'include-room': { type: 'boolean' } } })
 const { createApp } = await import(pathToFileURL(join(web, 'server/app.ts')).href)
 const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
@@ -83,7 +83,9 @@ try {
     '-project', join(project, 'Roomlings.xcodeproj'), '-scheme', 'Roomlings',
     '-destination', destination, '-derivedDataPath', join(project, 'Build', 'DerivedData'),
     '-resultBundlePath', result, '-only-testing:RoomlingsTests', '-only-testing:RoomlingsUITests/AccountUITests',
+    ...(values['include-room'] ? ['-only-testing:RoomlingsUITests/RoomlingsUITests'] : []),
     '-parallel-testing-enabled', 'NO', '-quiet', 'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
+    `NODE_BINARY=${process.execPath}`, `ROOMLINGS_WEB_ROOT=${web}`,
   ], { stdio: 'inherit' })
   const [code, signal] = await once(child, 'exit')
   if (code !== 0) {
@@ -91,7 +93,8 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    if (summary.result !== 'Passed' || summary.passedTests < 8 || summary.skippedTests !== 0) {
+    const expected = values['include-room'] ? 9 : 8
+    if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
     }
   }

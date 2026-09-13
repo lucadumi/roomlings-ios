@@ -1,0 +1,142 @@
+name: iOS CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WEB_REVISION: 7c8371e7da444003f4a1e7dd5ffba6869f4f29fc
+  ROOMLINGS_WEB_ROOT: ../roomlings
+
+defaults:
+  run:
+    working-directory: roomlings-ios
+
+jobs:
+  renderer:
+    name: Shared renderer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: roomlings-ios
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: lucadumi/roomlings
+          ref: ${{ env.WEB_REVISION }}
+          path: roomlings
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: roomlings/package-lock.json
+      - run: npm --prefix ../roomlings ci --no-audit --no-fund
+      - name: Check the preinstalled browser version
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const lock = JSON.parse(readFileSync("../roomlings/package-lock.json", "utf8"));
+            if (lock.packages["node_modules/@playwright/test"].version !== "1.63.0") {
+              throw new Error("Align the Playwright image with the pinned web lockfile.");
+            }
+          '
+      - run: node Scripts/build-room.mjs
+      - run: node --test Tests/RoomRenderer/room-renderer.test.mjs
+
+  native:
+    name: Native (${{ matrix.name }})
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iPhone
+            simulator: iPhone 16 Pro
+          - name: iPad
+            simulator: iPad Pro 11-inch (M4)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: roomlings-ios
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: lucadumi/roomlings
+          ref: ${{ env.WEB_REVISION }}
+          path: roomlings
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: roomlings/package-lock.json
+      - name: Select Xcode 16.4
+        run: sudo xcode-select --switch /Applications/Xcode_16.4.app/Contents/Developer
+      - run: npm --prefix ../roomlings ci --no-audit --no-fund
+      - run: swift test --package-path Packages/RoomlingsCore
+      - name: Build the release app
+        if: matrix.name == 'iPhone'
+        run: |
+          xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
+            -configuration Release -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath Build/Release -quiet build \
+            NODE_BINARY="$(command -v node)" \
+            ROOMLINGS_WEB_ROOT="$GITHUB_WORKSPACE/roomlings" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Boot the iOS 18.5 simulator
+        id: simulator
+        env:
+          SIMULATOR_NAME: ${{ matrix.simulator }}
+        run: |
+          device=$(xcrun simctl list devices available --json | jq -r --arg name "$SIMULATOR_NAME" '
+            .devices["com.apple.CoreSimulator.SimRuntime.iOS-18-5"][]
+            | select(.name == $name and .isAvailable)
+            | .udid
+          ')
+          test -n "$device"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          echo "destination=platform=iOS Simulator,id=$device" >> "$GITHUB_OUTPUT"
+      - name: Run native account and room flows
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: native-failure-${{ matrix.name }}
+          path: roomlings-ios/Build/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  complete:
+    name: iOS checks
+    if: ${{ always() }}
+    needs: [renderer, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require every job to pass
+        env:
+          RENDERER_RESULT: ${{ needs.renderer.result }}
+          NATIVE_RESULT: ${{ needs.native.result }}
+        run: test "$RENDERER_RESULT" = success && test "$NATIVE_RESULT" = success

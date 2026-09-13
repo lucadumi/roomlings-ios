@@ -11,7 +11,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
-const { chromium, expect } = requireWeb('@playwright/test')
+const { chromium, expect: baseExpect } = requireWeb('@playwright/test')
+const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 })
 const { defaultRoomComponents } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 
 test('@room the bundled kitchen stays offline, uses the shared controls and validates the native bridge', async () => {
