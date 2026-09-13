@@ -1,137 +1,523 @@
 // !$*UTF8*$!
 {
-    archiveVersion = 1;
-    classes = {};
-    objectVersion = 60;
-    objects = {
-        A00000000000000000000001 = { isa = PBXBuildFile; fileRef = B00000000000000000000001; };
-        A00000000000000000000002 = { isa = PBXBuildFile; fileRef = B00000000000000000000002; };
-        A00000000000000000000003 = { isa = PBXBuildFile; fileRef = B00000000000000000000003; };
-        A00000000000000000000004 = { isa = PBXBuildFile; productRef = F00000000000000000000002; };
-        A00000000000000000000005 = { isa = PBXBuildFile; fileRef = B00000000000000000000005; };
-        A00000000000000000000006 = { isa = PBXBuildFile; fileRef = B00000000000000000000006; };
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
 
-        B00000000000000000000001 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomlingsApp.swift; sourceTree = "<group>"; };
-        B00000000000000000000002 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPreviewScreen.swift; sourceTree = "<group>"; };
-        B00000000000000000000003 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomWebView.swift; sourceTree = "<group>"; };
-        B00000000000000000000004 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-        B00000000000000000000005 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomBridgeTests.swift; sourceTree = "<group>"; };
-        B00000000000000000000006 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomlingsUITests.swift; sourceTree = "<group>"; };
-        B00000000000000000000007 = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
-        B00000000000000000000008 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Roomlings.app; sourceTree = BUILT_PRODUCTS_DIR; };
-        B00000000000000000000009 = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomlingsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-        B0000000000000000000000A = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomlingsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* Begin PBXBuildFile section */
+		A00000000000000000000001 /* RoomlingsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* RoomlingsApp.swift */; };
+		A00000000000000000000002 /* RoomPreviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000002 /* RoomPreviewScreen.swift */; };
+		A00000000000000000000003 /* RoomWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* RoomWebView.swift */; };
+		A00000000000000000000004 /* RoomlingsCore in Frameworks */ = {isa = PBXBuildFile; productRef = F00000000000000000000002 /* RoomlingsCore */; };
+		A00000000000000000000005 /* RoomBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000005 /* RoomBridgeTests.swift */; };
+		A00000000000000000000006 /* RoomlingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000006 /* RoomlingsUITests.swift */; };
+		A00000000000000000000007 /* AccountModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000B /* AccountModel.swift */; };
+		A00000000000000000000008 /* AccountSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000C /* AccountSheet.swift */; };
+		A00000000000000000000009 /* RoomVisualState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000D /* RoomVisualState.swift */; };
+		A0000000000000000000000A /* AccountUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* AccountUITests.swift */; };
+		A0000000000000000000000B /* RoomTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* RoomTheme.swift */; };
+		A0000000000000000000000C /* WebThemeValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* WebThemeValues.swift */; };
+		A0000000000000000000000D /* Resources/Fonts in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* Resources/Fonts */; };
+/* End PBXBuildFile section */
 
-        C00000000000000000000001 = {
-            isa = PBXGroup;
-            children = (C00000000000000000000002, C00000000000000000000003, C00000000000000000000004, C00000000000000000000005, C00000000000000000000006);
-            sourceTree = "<group>";
-        };
-        C00000000000000000000002 = {
-            isa = PBXGroup; path = Roomlings; sourceTree = "<group>";
-            children = (B00000000000000000000001, B00000000000000000000002, B00000000000000000000003, B00000000000000000000004);
-        };
-        C00000000000000000000003 = { isa = PBXGroup; path = RoomlingsTests; sourceTree = "<group>"; children = (B00000000000000000000005); };
-        C00000000000000000000004 = { isa = PBXGroup; path = RoomlingsUITests; sourceTree = "<group>"; children = (B00000000000000000000006); };
-        C00000000000000000000005 = { isa = PBXGroup; path = Configuration; sourceTree = "<group>"; children = (B00000000000000000000007); };
-        C00000000000000000000006 = { isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (B00000000000000000000008, B00000000000000000000009, B0000000000000000000000A); };
+/* Begin PBXContainerItemProxy section */
+		D00000000000000000000021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D00000000000000000000001;
+			remoteInfo = Roomlings;
+		};
+/* End PBXContainerItemProxy section */
 
-        D00000000000000000000001 = {
-            isa = PBXNativeTarget; name = Roomlings; productName = Roomlings;
-            buildConfigurationList = E00000000000000000000002;
-            buildPhases = (D00000000000000000000010, D00000000000000000000011, D00000000000000000000012, D00000000000000000000013);
-            buildRules = (); dependencies = (); packageProductDependencies = (F00000000000000000000002);
-            productReference = B00000000000000000000008;
-            productType = "com.apple.product-type.application";
-        };
-        D00000000000000000000002 = {
-            isa = PBXNativeTarget; name = RoomlingsTests; productName = RoomlingsTests;
-            buildConfigurationList = E00000000000000000000003;
-            buildPhases = (D00000000000000000000014, D00000000000000000000015);
-            buildRules = (); dependencies = (D00000000000000000000020);
-            productReference = B00000000000000000000009;
-            productType = "com.apple.product-type.bundle.unit-test";
-        };
-        D00000000000000000000003 = {
-            isa = PBXNativeTarget; name = RoomlingsUITests; productName = RoomlingsUITests;
-            buildConfigurationList = E00000000000000000000004;
-            buildPhases = (D00000000000000000000016, D00000000000000000000017);
-            buildRules = (); dependencies = (D00000000000000000000020);
-            productReference = B0000000000000000000000A;
-            productType = "com.apple.product-type.bundle.ui-testing";
-        };
-        D00000000000000000000010 = {
-            isa = PBXShellScriptBuildPhase;
-            alwaysOutOfDate = 1;
-            buildActionMask = 2147483647;
-            files = (); inputPaths = (); outputPaths = ();
-            name = "Bundle shared web room";
-            runOnlyForDeploymentPostprocessing = 0;
-            shellPath = /bin/sh;
-            shellScript = "set -eu\n\"${NODE_BINARY}\" \"${PROJECT_DIR}/Scripts/build-room.mjs\" --web-root \"${ROOMLINGS_WEB_ROOT}\"\n/usr/bin/ditto \"${PROJECT_DIR}/Build/RoomRenderer\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RoomRenderer\"\n";
-        };
-        D00000000000000000000011 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001, A00000000000000000000002, A00000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000012 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000004); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000013 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000014 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000005); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000015 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000016 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000006); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000017 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-        D00000000000000000000020 = { isa = PBXTargetDependency; target = D00000000000000000000001; targetProxy = D00000000000000000000021; };
-        D00000000000000000000021 = { isa = PBXContainerItemProxy; containerPortal = F00000000000000000000001; proxyType = 1; remoteGlobalIDString = D00000000000000000000001; remoteInfo = Roomlings; };
+/* Begin PBXFileReference section */
+		B00000000000000000000001 /* RoomlingsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomlingsApp.swift; sourceTree = "<group>"; };
+		B00000000000000000000002 /* RoomPreviewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPreviewScreen.swift; sourceTree = "<group>"; };
+		B00000000000000000000003 /* RoomWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomWebView.swift; sourceTree = "<group>"; };
+		B00000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000005 /* RoomBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomBridgeTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000006 /* RoomlingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomlingsUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000007 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000008 /* Roomlings.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Roomlings.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000009 /* RoomlingsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomlingsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0000000000000000000000A /* RoomlingsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RoomlingsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0000000000000000000000B /* AccountModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountModel.swift; sourceTree = "<group>"; };
+		B0000000000000000000000C /* AccountSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSheet.swift; sourceTree = "<group>"; };
+		B0000000000000000000000D /* RoomVisualState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomVisualState.swift; sourceTree = "<group>"; };
+		B0000000000000000000000E /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		B0000000000000000000000F /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000010 /* AccountUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000011 /* RoomTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTheme.swift; sourceTree = "<group>"; };
+		B00000000000000000000012 /* WebThemeValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebThemeValues.swift; sourceTree = DERIVED_FILE_DIR; };
+		B00000000000000000000013 /* Resources/Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Fonts; sourceTree = "<group>"; };
+		B00000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
 
-        E00000000000000000000001 = { isa = XCConfigurationList; buildConfigurations = (E00000000000000000000010, E00000000000000000000011); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        E00000000000000000000002 = { isa = XCConfigurationList; buildConfigurations = (E00000000000000000000012, E00000000000000000000013); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        E00000000000000000000003 = { isa = XCConfigurationList; buildConfigurations = (E00000000000000000000014, E00000000000000000000015); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        E00000000000000000000004 = { isa = XCConfigurationList; buildConfigurations = (E00000000000000000000016, E00000000000000000000017); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-        E00000000000000000000010 = {
-            isa = XCBuildConfiguration; name = Debug; baseConfigurationReference = B00000000000000000000007;
-            buildSettings = { SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; ENABLE_TESTABILITY = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; ONLY_ACTIVE_ARCH = YES; DEBUG_INFORMATION_FORMAT = dwarf; };
-        };
-        E00000000000000000000011 = {
-            isa = XCBuildConfiguration; name = Release; baseConfigurationReference = B00000000000000000000007;
-            buildSettings = { SDKROOT = iphoneos; CLANG_ENABLE_MODULES = YES; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_COMPILATION_MODE = wholemodule; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; };
-        };
-        E00000000000000000000012 = {
-            isa = XCBuildConfiguration; name = Debug;
-            buildSettings = { INFOPLIST_FILE = Roomlings/Info.plist; GENERATE_INFOPLIST_FILE = NO; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 0.1.0; };
-        };
-        E00000000000000000000013 = {
-            isa = XCBuildConfiguration; name = Release;
-            buildSettings = { INFOPLIST_FILE = Roomlings/Info.plist; GENERATE_INFOPLIST_FILE = NO; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 0.1.0; };
-        };
-        E00000000000000000000014 = {
-            isa = XCBuildConfiguration; name = Debug;
-            buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.tests; GENERATE_INFOPLIST_FILE = YES; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Roomlings.app/Roomlings"; };
-        };
-        E00000000000000000000015 = {
-            isa = XCBuildConfiguration; name = Release;
-            buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.tests; GENERATE_INFOPLIST_FILE = YES; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Roomlings.app/Roomlings"; };
-        };
-        E00000000000000000000016 = {
-            isa = XCBuildConfiguration; name = Debug;
-            buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.uitests; GENERATE_INFOPLIST_FILE = YES; TEST_TARGET_NAME = Roomlings; };
-        };
-        E00000000000000000000017 = {
-            isa = XCBuildConfiguration; name = Release;
-            buildSettings = { PRODUCT_NAME = "$(TARGET_NAME)"; PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.uitests; GENERATE_INFOPLIST_FILE = YES; TEST_TARGET_NAME = Roomlings; };
-        };
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000004 /* RoomlingsCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000017 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
-        F00000000000000000000001 = {
-            isa = PBXProject;
-            attributes = { BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2600; };
-            buildConfigurationList = E00000000000000000000001;
-            compatibilityVersion = "Xcode 15.0";
-            developmentRegion = en;
-            knownRegions = (en, Base);
-            mainGroup = C00000000000000000000001;
-            productRefGroup = C00000000000000000000006;
-            packageReferences = (F00000000000000000000003);
-            projectDirPath = ""; projectRoot = "";
-            targets = (D00000000000000000000001, D00000000000000000000002, D00000000000000000000003);
-        };
-        F00000000000000000000002 = { isa = XCSwiftPackageProductDependency; package = F00000000000000000000003; productName = RoomlingsCore; };
-        F00000000000000000000003 = { isa = XCLocalSwiftPackageReference; relativePath = Packages/RoomlingsCore; };
-    };
-    rootObject = F00000000000000000000001;
+/* Begin PBXGroup section */
+		C00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000002 /* Roomlings */,
+				C00000000000000000000003 /* RoomlingsTests */,
+				C00000000000000000000004 /* RoomlingsUITests */,
+				C00000000000000000000005 /* Configuration */,
+				C00000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C00000000000000000000002 /* Roomlings */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000001 /* RoomlingsApp.swift */,
+				B00000000000000000000002 /* RoomPreviewScreen.swift */,
+				B00000000000000000000003 /* RoomWebView.swift */,
+				B00000000000000000000004 /* Info.plist */,
+				B0000000000000000000000B /* AccountModel.swift */,
+				B0000000000000000000000C /* AccountSheet.swift */,
+				B0000000000000000000000D /* RoomVisualState.swift */,
+				B00000000000000000000011 /* RoomTheme.swift */,
+				B00000000000000000000012 /* WebThemeValues.swift */,
+				B00000000000000000000013 /* Resources/Fonts */,
+			);
+			path = Roomlings;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000003 /* RoomlingsTests */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000005 /* RoomBridgeTests.swift */,
+			);
+			path = RoomlingsTests;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000004 /* RoomlingsUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000006 /* RoomlingsUITests.swift */,
+				B00000000000000000000010 /* AccountUITests.swift */,
+				B00000000000000000000014 /* Info.plist */,
+			);
+			path = RoomlingsUITests;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000005 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000007 /* Shared.xcconfig */,
+				B0000000000000000000000E /* Debug.xcconfig */,
+				B0000000000000000000000F /* Release.xcconfig */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000008 /* Roomlings.app */,
+				B00000000000000000000009 /* RoomlingsTests.xctest */,
+				B0000000000000000000000A /* RoomlingsUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D00000000000000000000001 /* Roomlings */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00000000000000000000002 /* Build configuration list for PBXNativeTarget "Roomlings" */;
+			buildPhases = (
+				D00000000000000000000010 /* Bundle shared web room */,
+				D00000000000000000000011 /* Sources */,
+				D00000000000000000000012 /* Frameworks */,
+				D00000000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Roomlings;
+			packageProductDependencies = (
+				F00000000000000000000002 /* RoomlingsCore */,
+			);
+			productName = Roomlings;
+			productReference = B00000000000000000000008 /* Roomlings.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D00000000000000000000002 /* RoomlingsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00000000000000000000003 /* Build configuration list for PBXNativeTarget "RoomlingsTests" */;
+			buildPhases = (
+				D00000000000000000000014 /* Sources */,
+				D00000000000000000000015 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000020 /* PBXTargetDependency */,
+			);
+			name = RoomlingsTests;
+			productName = RoomlingsTests;
+			productReference = B00000000000000000000009 /* RoomlingsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D00000000000000000000003 /* RoomlingsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E00000000000000000000004 /* Build configuration list for PBXNativeTarget "RoomlingsUITests" */;
+			buildPhases = (
+				D00000000000000000000016 /* Sources */,
+				D00000000000000000000017 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D00000000000000000000020 /* PBXTargetDependency */,
+			);
+			name = RoomlingsUITests;
+			productName = RoomlingsUITests;
+			productReference = B0000000000000000000000A /* RoomlingsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		F00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2660;
+			};
+			buildConfigurationList = E00000000000000000000001 /* Build configuration list for PBXProject "Roomlings" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = C00000000000000000000001;
+			packageReferences = (
+				F00000000000000000000003 /* XCLocalSwiftPackageReference "Packages/RoomlingsCore" */,
+			);
+			productRefGroup = C00000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D00000000000000000000001 /* Roomlings */,
+				D00000000000000000000002 /* RoomlingsTests */,
+				D00000000000000000000003 /* RoomlingsUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00000000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0000000000000000000000D /* Resources/Fonts in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D00000000000000000000010 /* Bundle shared web room */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle shared web room";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/WebThemeValues.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n\"${NODE_BINARY}\" \"${PROJECT_DIR}/Scripts/build-room.mjs\" --web-root \"${ROOMLINGS_WEB_ROOT}\"\n/usr/bin/ditto \"${PROJECT_DIR}/Build/RoomRenderer\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RoomRenderer\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00000000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000001 /* RoomlingsApp.swift in Sources */,
+				A00000000000000000000002 /* RoomPreviewScreen.swift in Sources */,
+				A00000000000000000000003 /* RoomWebView.swift in Sources */,
+				A00000000000000000000007 /* AccountModel.swift in Sources */,
+				A00000000000000000000008 /* AccountSheet.swift in Sources */,
+				A00000000000000000000009 /* RoomVisualState.swift in Sources */,
+				A0000000000000000000000B /* RoomTheme.swift in Sources */,
+				A0000000000000000000000C /* WebThemeValues.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000005 /* RoomBridgeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000016 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000000000000000000006 /* RoomlingsUITests.swift in Sources */,
+				A0000000000000000000000A /* AccountUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D00000000000000000000020 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D00000000000000000000001 /* Roomlings */;
+			targetProxy = D00000000000000000000021 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E00000000000000000000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B0000000000000000000000E /* Debug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E00000000000000000000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B0000000000000000000000F /* Release.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		E00000000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Roomlings/Info.plist;
+				MARKETING_VERSION = 0.1.0;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Debug;
+		};
+		E00000000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Roomlings/Info.plist;
+				MARKETING_VERSION = 0.1.0;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+			};
+			name = Release;
+		};
+		E00000000000000000000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Roomlings.app/Roomlings";
+			};
+			name = Debug;
+		};
+		E00000000000000000000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Roomlings.app/Roomlings";
+			};
+			name = Release;
+		};
+		E00000000000000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RoomlingsUITests/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Roomlings;
+			};
+			name = Debug;
+		};
+		E00000000000000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RoomlingsUITests/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roomlings.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Roomlings;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E00000000000000000000001 /* Build configuration list for PBXProject "Roomlings" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000010 /* Debug */,
+				E00000000000000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E00000000000000000000002 /* Build configuration list for PBXNativeTarget "Roomlings" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000012 /* Debug */,
+				E00000000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E00000000000000000000003 /* Build configuration list for PBXNativeTarget "RoomlingsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000014 /* Debug */,
+				E00000000000000000000015 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E00000000000000000000004 /* Build configuration list for PBXNativeTarget "RoomlingsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000016 /* Debug */,
+				E00000000000000000000017 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		F00000000000000000000003 /* XCLocalSwiftPackageReference "Packages/RoomlingsCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/RoomlingsCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F00000000000000000000002 /* RoomlingsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F00000000000000000000003 /* XCLocalSwiftPackageReference "Packages/RoomlingsCore" */;
+			productName = RoomlingsCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = F00000000000000000000001 /* Project object */;
 }

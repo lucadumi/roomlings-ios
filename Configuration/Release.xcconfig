@@ -1,0 +1,4 @@
+#include "Shared.xcconfig"
+ROOMLINGS_API_SCHEME = https
+ROOMLINGS_API_HOST =
+#include? "Local.xcconfig"

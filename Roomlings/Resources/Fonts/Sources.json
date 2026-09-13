@@ -1,0 +1,10 @@
+{
+  "DM Sans": {
+    "source": "https://github.com/google/fonts/tree/5b35b7208dd4100571326fdf37f030b32a524232/ofl/dmsans",
+    "license": "DMSans-OFL.txt"
+  },
+  "Baloo 2": {
+    "source": "https://github.com/google/fonts/tree/c13390277dfb1fcc7415d84ef7ef9cfc1e52f8c1/ofl/baloo2",
+    "license": "Baloo2-OFL.txt"
+  }
+}

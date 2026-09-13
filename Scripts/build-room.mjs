@@ -5,6 +5,7 @@ import { copyFile, mkdir, readFile, realpath, writeFile } from 'node:fs/promises
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { buildTheme } from './build-theme.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const { values } = parseArgs({ options: { 'web-root': { type: 'string' } } })
@@ -12,6 +13,7 @@ const requestedSource = values['web-root'] ?? process.env.ROOMLINGS_WEB_ROOT ?? 
 const source = await realpath(resolve(project, requestedSource))
 const requireWeb = createRequire(join(source, 'package.json'))
 const output = join(project, 'Build', 'RoomRenderer')
+await buildTheme({ source, project, requireWeb })
 const { build } = await import(pathToFileURL(requireWeb.resolve('vite')).href)
 const react = (await import(pathToFileURL(requireWeb.resolve('@vitejs/plugin-react')).href)).default
 const revision = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()

@@ -3,14 +3,16 @@ import { once } from 'node:events'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
+import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
 const { chromium, expect } = requireWeb('@playwright/test')
+const { defaultRoomComponents } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 
 test('@room the bundled kitchen stays offline, uses the shared controls and validates the native bridge', async () => {
   const types = { '/': 'text/html', '/room.js': 'text/javascript', '/room.css': 'text/css' }
@@ -82,6 +84,22 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await page.setViewportSize({ width: 1194, height: 834 })
     await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeInViewport()
+    const householdId = randomUUID()
+    const roomComponents = defaultRoomComponents().map((component) =>
+      component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents,
+    })
+    await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+    await expect(page.locator('main')).toHaveAttribute('data-household-id', householdId)
+    await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
+    await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveCount(0)
+    await page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original',
+    }))
+    await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+    await expect(page.locator('main')).toHaveAttribute('data-household-id', '')
+    await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
     await assert.rejects(page.evaluate(() => fetch('/api/account')))
     assert.ok(!requests.some((path) => path.startsWith('/api/')))
     assert.ok((await page.evaluate(() => window.roomEvents)).some((event) => event.version === 1 && event.status === 'ready'))

@@ -12,11 +12,13 @@ open Roomlings.xcodeproj
 ```
 
 Run the **Roomlings** scheme on a simulator. Physical devices need your signing team.
-Override `ROOMLINGS_WEB_ROOT` or `NODE_BINARY` in ignored `Configuration/Local.xcconfig`.
+Keep `npm --prefix ../roomlings run preview:local` running for local sign-in.
+Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `ROOMLINGS_API_HOST` in `Configuration/Local.xcconfig`.
 
 ## Usage
 
-- Offline kitchen preview with camera, fridge, kettle and lighting controls.
+- Sign in or recover access, create/join a household, and open its saved kitchen.
+- Shared web fonts, colours and graphics; sessions stay in the native Keychain.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
 ## Contributing
@@ -25,6 +27,7 @@ Override `ROOMLINGS_WEB_ROOT` or `NODE_BINARY` in ignored `Configuration/Local.x
 swift test --package-path Packages/RoomlingsCore
 node Scripts/build-room.mjs
 node --test Tests/RoomRenderer/room-renderer.test.mjs
+node Scripts/test-accounts.mjs
 ```
 
-Use **Product > Test** for device flows. Follow the [contributor rules](AGENTS.md); changes go through PRs.
+Use **Product > Test** for room controls. Follow the [contributor rules](AGENTS.md); changes go through PRs.

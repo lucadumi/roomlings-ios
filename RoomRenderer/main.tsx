@@ -5,6 +5,7 @@ import { KitchenPreview } from '@roomlings-web/src/KitchenWorld.tsx'
 import { SceneLoading } from '@roomlings-web/src/Branding.tsx'
 import { PreviewBoundary } from '@roomlings-web/src/landing/PreviewStatus.tsx'
 import { roomStyleSchema } from '@roomlings-web/shared/domain.ts'
+import { getRoomComponents, roomComponentLimit, roomComponentSchema } from '@roomlings-web/shared/roomComponents.ts'
 import { installRoomTouchControls } from './touchControls.ts'
 import '@fontsource-variable/dm-sans/index.css'
 import '@fontsource-variable/baloo-2/index.css'
@@ -17,6 +18,8 @@ const stateSchema = z.object({
   type: z.literal('state'),
   paused: z.boolean(),
   roomStyle: roomStyleSchema,
+  householdId: z.string().uuid().nullable().default(null),
+  roomComponents: z.array(roomComponentSchema).max(roomComponentLimit).optional(),
 }).strict()
 
 type RoomState = z.infer<typeof stateSchema>
@@ -30,7 +33,7 @@ declare global {
   }
 }
 
-let state: RoomState = { version: 1, type: 'state', paused: false, roomStyle: 'original' }
+let state: RoomState = { version: 1, type: 'state', paused: false, roomStyle: 'original', householdId: null }
 let status: Status = 'loading'
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void) => {
@@ -41,7 +44,12 @@ const subscribe = (listener: () => void) => {
 Object.defineProperty(window, 'RoomlingsRoom', {
   value: Object.freeze({
     receive(message: unknown) {
-      state = stateSchema.parse(message)
+      const next = stateSchema.parse(message)
+      if (next.householdId !== state.householdId) {
+        status = 'loading'
+        document.documentElement.dataset.roomStatus = 'loading'
+      }
+      state = next
       for (const listener of listeners) listener()
       return { accepted: true as const }
     },
@@ -60,9 +68,11 @@ function reportStatus(next: Status) {
 function Room() {
   const current = useSyncExternalStore(subscribe, () => state)
   const currentStatus = useSyncExternalStore(subscribe, () => status)
-  return <main className="game-home native-room" aria-label="Roomlings kitchen preview">
-    <PreviewBoundary onFailure={() => reportStatus('unavailable')}>
-      <KitchenPreview roomStyle={current.roomStyle} paused={current.paused} onStatus={reportStatus} />
+  return <main className="game-home native-room" aria-label={current.householdId ? 'Shared household kitchen' : 'Roomlings kitchen preview'}
+    data-household-id={current.householdId ?? ''}>
+    <PreviewBoundary key={current.householdId ?? 'preview'} onFailure={() => reportStatus('unavailable')}>
+      <KitchenPreview roomStyle={current.roomStyle} paused={current.paused} onStatus={reportStatus}
+        components={getRoomComponents({ roomComponents: current.roomComponents })} />
     </PreviewBoundary>
     {currentStatus === 'loading' && <SceneLoading label="Opening the kitchen..." />}
     {currentStatus === 'ready' && <span className="sr-only" role="status">Kitchen ready</span>}

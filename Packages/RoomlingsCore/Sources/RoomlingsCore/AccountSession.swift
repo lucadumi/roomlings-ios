@@ -88,6 +88,49 @@ public actor AccountSession {
         }
     }
 
+    @discardableResult
+    public func createHousehold(
+        name: String, memberName: String, currency: HouseholdCurrency, budgetCents: Int64, requestID: UUID
+    ) async throws -> AccountState {
+        try await mutateHousehold { [api] token in
+            try await api.createHousehold(
+                name: name, memberName: memberName, currency: currency, budgetCents: budgetCents,
+                requestID: requestID, token: token
+            )
+        }
+    }
+
+    @discardableResult
+    public func acceptInvitation(code: String, memberName: String) async throws -> AccountState {
+        try await mutateHousehold { [api] token in
+            try await api.acceptInvitation(code: code, memberName: memberName, token: token)
+        }
+    }
+
+    @discardableResult
+    public func selectHousehold(id: UUID) async throws -> AccountState {
+        try await mutateHousehold { [api] token in
+            try await api.selectHousehold(id: id, token: token)
+        }
+    }
+
+    private func mutateHousehold(
+        _ operation: @Sendable (SessionToken?) async throws -> AccountState
+    ) async throws -> AccountState {
+        try beginOperation()
+        defer { isBusy = false }
+        let token = try await readCredential()
+        do {
+            let response = try await operation(token)
+            guard token != nil, response.isSignedIn else { throw AccountError.invalidResponse }
+            state = response
+            return response
+        } catch {
+            try await handleConfirmedExpiry(error)
+            throw error
+        }
+    }
+
     private func beginOperation() throws {
         guard !isBusy else { throw AccountError.operationInProgress }
         try Task.checkCancellation()

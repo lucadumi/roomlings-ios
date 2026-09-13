@@ -6,6 +6,9 @@ Roomlings is an iPhone and iPad app, with iOS 18 as its minimum deployment targe
 - Bundle the web app's existing Three.js room renderer in WKWebView. Do not recreate the graphics in SceneKit or RealityKit, or fork copies of the models, lighting, materials or animations.
 - Keep the renderer source in the sibling web project. The local build must record the source revision and fail clearly if the required web source or dependencies are missing.
 - Keep authentication, API requests and Keychain storage native. Do not expose session tokens to JavaScript, browser storage, logs or URLs.
+- Match the web UI as well as its graphics: generate colours and control radius from the shared CSS, and use the licensed DM Sans and Baloo 2 fonts.
+- Keep the generated `WebThemeValues.swift` reference in Xcode and its build-phase output declaration; the native theme depends on it.
+- Account entry uses a native sheet over the room, bottom-aligned on iPhone and centered on iPad.
 - The shared server ledger remains authoritative. Keep money in integer cents and preserve optimistic version checks.
 - Consult the owner before new UI, UX, branding or navigation decisions. The initial app is a room-rendering foundation, not a collection of placeholder screens.
 - Every visible control must work. Do not show unfinished household actions.

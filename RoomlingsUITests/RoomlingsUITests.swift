@@ -11,7 +11,11 @@ final class RoomlingsUITests: XCTestCase {
     func testSharedKitchenLoadsOfflineAndItsControlsWork() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = "http://127.0.0.1:1"
+        app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.room-test.\(UUID().uuidString)"
         app.launch()
+        XCTAssertTrue(app.buttons["Not now"].waitForExistence(timeout: 15))
+        app.buttons["Not now"].tap()
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.waitForExistence(timeout: 30))
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: 45))

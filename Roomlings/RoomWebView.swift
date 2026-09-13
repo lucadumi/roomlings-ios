@@ -36,10 +36,11 @@ struct RoomBridgeMessage: Decodable {
 
 struct RoomWebView: UIViewRepresentable {
     let paused: Bool
+    var room = RoomVisualState.preview
     let onEvent: (RoomRenderEvent) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(paused: paused, onEvent: onEvent)
+        Coordinator(paused: paused, room: room, onEvent: onEvent)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -73,7 +74,7 @@ struct RoomWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onEvent = onEvent
-        context.coordinator.update(paused: paused)
+        context.coordinator.update(paused: paused, room: room)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -91,11 +92,13 @@ struct RoomWebView: UIViewRepresentable {
         var onEvent: (RoomRenderEvent) -> Void
         var evaluation: Task<Void, Never>?
         private var paused: Bool
+        private var room: RoomVisualState
         private var loaded = false
         private var active = true
 
-        init(paused: Bool, onEvent: @escaping (RoomRenderEvent) -> Void) {
+        init(paused: Bool, room: RoomVisualState = .preview, onEvent: @escaping (RoomRenderEvent) -> Void) {
             self.paused = paused
+            self.room = room
             self.onEvent = onEvent
         }
 
@@ -114,9 +117,10 @@ struct RoomWebView: UIViewRepresentable {
             return url.standardizedFileURL.resolvingSymlinksInPath() == index.standardizedFileURL.resolvingSymlinksInPath()
         }
 
-        func update(paused: Bool) {
-            guard self.paused != paused else { return }
+        func update(paused: Bool, room: RoomVisualState) {
+            guard self.paused != paused || self.room != room else { return }
             self.paused = paused
+            self.room = room
             sendState()
         }
 
@@ -124,12 +128,13 @@ struct RoomWebView: UIViewRepresentable {
             guard active, loaded, let webView else { return }
             evaluation?.cancel()
             let paused = paused
+            let room = room
             evaluation = Task { @MainActor [weak self, weak webView] in
                 guard let self, let webView else { return }
                 do {
                     _ = try await webView.callAsyncJavaScript(
                         "return window.RoomlingsRoom.receive(message);",
-                        arguments: ["message": ["version": 1, "type": "state", "paused": paused, "roomStyle": "original"]],
+                        arguments: ["message": try room.message(paused: paused)],
                         in: nil,
                         contentWorld: .page
                     )
