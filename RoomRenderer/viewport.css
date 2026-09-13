@@ -1,0 +1,12 @@
+html, body, #root { width: 100%; height: 100%; min-width: 0; overflow: hidden; }
+body { overscroll-behavior: none; }
+.native-room.game-home { --world-top: 0; --world-bottom: 0; display: block; height: 100%; }
+.native-room .kitchen-world { position: absolute; inset: 0; display: block; margin: 0; padding: 0; }
+.native-room button { touch-action: manipulation; }
+/* Keep WebKit taps on the button when its SVG icon changes. */
+.native-room button > * { pointer-events: none; }
+.native-room .world-camera-controls { --control-compact-height: max(44px, 2.75rem); max-height: calc(100% - 7rem); overflow-y: auto; }
+.native-room .world-quick-actions { position: absolute; inset: auto auto 1rem 1rem; max-width: calc(100% - 2rem); }
+.native-room .world-quick-actions button { min-height: 44px; }
+.native-room .world-interaction-hint { bottom: 4.75rem; }
+.native-room .scene-loading { inset: 0; justify-content: center; background: var(--room-backdrop-center); z-index: 4; }
