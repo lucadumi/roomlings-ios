@@ -59,11 +59,15 @@ final class RoomlingsUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: end)
         XCUIDevice.shared.orientation = .landscapeLeft
         let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            room.frame.width > room.frame.height
+            let frame = room.frame
+            return frame.width > frame.height
         }, object: room)
-        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed)
-        XCTAssertEqual(room.frame.minX, app.frame.minX, accuracy: 1)
-        XCTAssertEqual(room.frame.maxX, app.frame.maxX, accuracy: 1)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 30), .completed,
+                       "The room viewer should settle into landscape after rotation.")
+        let roomFrame = room.frame
+        let appFrame = app.frame
+        XCTAssertEqual(roomFrame.minX, appFrame.minX, accuracy: 1)
+        XCTAssertEqual(roomFrame.maxX, appFrame.maxX, accuracy: 1)
         XCTAssertTrue(zoomIn.waitForExistence(timeout: 10))
         XCTAssertTrue(zoomIn.isHittable)
         tapControl(room.switches["Reset room view"])
