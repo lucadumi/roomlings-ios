@@ -54,11 +54,20 @@ final class AccountUITests: XCTestCase {
     @MainActor
     private func fill(_ field: XCUIElement, _ value: String) throws {
         guard field.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(field.description) }
-        field.tap()
-        if let existing = field.value as? String, existing != field.placeholderValue, !existing.isEmpty {
-            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+        // A loaded simulator drops synthesized keystrokes while SwiftUI rebuilds the form, so
+        // confirm what actually landed rather than trusting a single typeText.
+        for _ in 1...3 {
+            field.tap()
+            if let existing = field.value as? String, existing != field.placeholderValue, !existing.isEmpty {
+                field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
+            }
+            field.typeText(value)
+            // Secure fields report bullets instead of the text, so there is nothing to compare.
+            if field.elementType == .secureTextField { return }
+            let landed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", value), object: field)
+            if XCTWaiter.wait(for: [landed], timeout: Wait.flip) == .completed { return }
         }
-        field.typeText(value)
+        throw FlowError.missingElement("\(field.description) kept \(field.value as? String ?? "nothing") instead of \(value)")
     }
 
     @MainActor
