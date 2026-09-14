@@ -9,12 +9,21 @@ final class RoomlingsUITests: XCTestCase {
 
     @MainActor
     func testSharedKitchenLoadsOfflineAndItsControlsWork() throws {
+        // Software-rendered simulators need time for the full gesture and orientation flow.
+        executionTimeAllowance = 360
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = "http://127.0.0.1:1"
+        app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.room-test.\(UUID().uuidString)"
         app.launch()
+        XCTAssertTrue(app.buttons["Not now"].waitForExistence(timeout: 15))
+        app.buttons["Not now"].tap()
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.waitForExistence(timeout: 30))
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: 45))
+        XCTAssertEqual(room.frame.minY, app.frame.minY, accuracy: 1)
+        XCTAssertEqual(room.frame.maxY, app.frame.maxY, accuracy: 1)
+        XCTAssertEqual(room.frame.width, app.frame.width, accuracy: 1)
         let zoomIn = room.buttons["Zoom in"]
         XCTAssertTrue(zoomIn.waitForExistence(timeout: 45))
         XCTAssertFalse(app.staticTexts["Room unavailable"].exists)
@@ -50,9 +59,15 @@ final class RoomlingsUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: end)
         XCUIDevice.shared.orientation = .landscapeLeft
         let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            room.frame.width > room.frame.height
+            let frame = room.frame
+            return frame.width > frame.height
         }, object: room)
-        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 30), .completed,
+                       "The room viewer should settle into landscape after rotation.")
+        let roomFrame = room.frame
+        let appFrame = app.frame
+        XCTAssertEqual(roomFrame.minX, appFrame.minX, accuracy: 1)
+        XCTAssertEqual(roomFrame.maxX, appFrame.maxX, accuracy: 1)
         XCTAssertTrue(zoomIn.waitForExistence(timeout: 10))
         XCTAssertTrue(zoomIn.isHittable)
         tapControl(room.switches["Reset room view"])

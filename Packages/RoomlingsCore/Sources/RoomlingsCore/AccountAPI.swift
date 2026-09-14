@@ -51,6 +51,39 @@ struct AccountAPI: Sendable {
         return response.state
     }
 
+    func createHousehold(
+        name: String, memberName: String, currency: HouseholdCurrency, budgetCents: Int64,
+        requestID: UUID, token: SessionToken?
+    ) async throws -> AccountState {
+        guard (1...100_000_000).contains(budgetCents) else { throw AccountError.invalidInput(.budgetCents) }
+        let payload = CreateHouseholdRequest(
+            name: try nameInput(name, field: .name),
+            memberName: try nameInput(memberName, field: .memberName),
+            currency: currency, budget: budgetCents, requestId: requestID.uuidString.lowercased()
+        )
+        let response: OrdinaryAccountResponse = try await request(
+            .createHousehold, body: JSONEncoder().encode(payload), token: token
+        )
+        return response.state
+    }
+
+    func acceptInvitation(code: String, memberName: String, token: SessionToken?) async throws -> AccountState {
+        let payload = AcceptInvitationRequest(
+            code: try invitationInput(code), memberName: try nameInput(memberName, field: .memberName)
+        )
+        let response: OrdinaryAccountResponse = try await request(
+            .acceptInvitation, body: JSONEncoder().encode(payload), token: token
+        )
+        return response.state
+    }
+
+    func selectHousehold(id: UUID, token: SessionToken?) async throws -> AccountState {
+        let response: OrdinaryAccountResponse = try await request(
+            .selectHousehold(id), body: Data("{}".utf8), token: token
+        )
+        return response.state
+    }
+
     private func request<Response: Decodable & Sendable>(
         _ endpoint: AccountEndpoint, body: Data? = nil, token: SessionToken? = nil
     ) async throws -> Response {
@@ -106,6 +139,33 @@ struct AccountAPI: Sendable {
         guard let name = AccountValidation.name(name) else { throw AccountError.invalidInput(field) }
         return name
     }
+
+    private func invitationInput(_ invitation: String) throws -> String {
+        var code = invitation.trimmingCharacters(in: .whitespacesAndNewlines)
+        if code.contains("://") {
+            guard !code.contains("\\"),
+                  code.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil,
+                  let link = URLComponents(string: code),
+                  ["https", "http"].contains(link.scheme?.lowercased() ?? ""),
+                  link.host?.isEmpty == false, link.url != nil,
+                  link.user == nil, link.password == nil,
+                  let fragment = link.percentEncodedFragment else {
+                throw AccountError.invalidInput(.invitationCode)
+            }
+            var parameters = URLComponents()
+            // Match URLSearchParams form decoding without opening the invitation's URL.
+            parameters.percentEncodedQuery = fragment.replacingOccurrences(of: "+", with: "%20")
+            let codes = parameters.queryItems?.filter { $0.name == "account-invite" } ?? []
+            guard codes.count == 1, let value = codes.first?.value else {
+                throw AccountError.invalidInput(.invitationCode)
+            }
+            code = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard AccountValidation.matches(code, #"^roomlings-invite-[A-Za-z0-9_-]{43}$"#) else {
+            throw AccountError.invalidInput(.invitationCode)
+        }
+        return code
+    }
 }
 
 struct NativeSignInResponse: Decodable, Sendable {
@@ -140,3 +200,11 @@ private struct EmailCodeRequest: Encodable { let email: String }
 private struct VerifyCodeRequest: Encodable { let email: String; let code: String; let name: String; let label: String }
 private struct RecoveryRequest: Encodable { let email: String; let code: String; let label: String }
 private struct LogoutRequest: Encodable { let all: Bool }
+private struct CreateHouseholdRequest: Encodable {
+    let name: String
+    let memberName: String
+    let currency: HouseholdCurrency
+    let budget: Int64
+    let requestId: String
+}
+private struct AcceptInvitationRequest: Encodable { let code: String; let memberName: String }

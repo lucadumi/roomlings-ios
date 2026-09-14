@@ -28,10 +28,15 @@ All operations are explicit, asynchronous and throwing:
 | `recover(email:recoveryCode:deviceLabel:)` | `POST /api/account/recover` |
 | `restore()` | `GET /api/account` |
 | `logout(allDevices:)` | `POST /api/account/logout` |
+| `createHousehold(name:memberName:currency:budgetCents:requestID:)` | `POST /api/account/households` |
+| `acceptInvitation(code:memberName:)` | `POST /api/account/invitations/accept` |
+| `selectHousehold(id:)` | `POST /api/account/households/<id>/select` |
 
-`state` is initially `nil`. Successful restore, verification, recovery and logout return a validated `AccountState` and update it. `selectedHousehold` exposes the selected server snapshot, if any. `isBusy` indicates an operation in progress. Access these actor properties with `await`; a later SwiftUI layer can own its presentation state.
+`state` starts as `nil`; successful state-returning operations validate and update it. Read `state`, `selectedHousehold` and `isBusy` with `await`.
 
-- Share one coordinator per Keychain entry. Overlapping operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Nothing automatically retries verification, recovery or logout.
+- Share one coordinator per Keychain entry. Overlapping operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Nothing automatically retries mutations.
+- Creation takes integer cents. Reuse the same `requestID` and details for an explicit retry.
+- Invitations accept raw account codes or web links containing `#account-invite=<encoded code>`. Links are parsed locally, never opened.
 - A replacement bearer is saved before a new signed-in state is published. Verification and recovery include the current bearer so only that device rotates.
 - Confirmed signed-out account responses and `401 ACCOUNT_SESSION_REQUIRED` clear the credential. The latter clears `state` to `nil` and still throws the server error. Network failures, invalid input/responses, other HTTP errors, reauthentication requirements and pending deletion do not erase the credential.
 - `deletionPending` states contain no household access. A `409` or `503 ACCOUNT_DELETION_PENDING` is a failure, not completed deletion. After such a failure, an explicit `restore()` obtains the server's deletion-only state. This initial package does not implement deletion.
