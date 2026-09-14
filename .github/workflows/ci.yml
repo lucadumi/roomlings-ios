@@ -60,16 +60,16 @@ jobs:
 
   native:
     name: Native (${{ matrix.name }})
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: iPhone
-            simulator: iPhone 16 Pro
+            simulator: iPhone 17 Pro
           - name: iPad
-            simulator: iPad Pro 11-inch (M4)
+            simulator: iPad Pro 11-inch (M5)
     steps:
       - uses: actions/checkout@v7
         with:
@@ -86,8 +86,10 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: roomlings/package-lock.json
-      - name: Select Xcode 16.4
-        run: sudo xcode-select --switch /Applications/Xcode_16.4.app/Contents/Developer
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - run: swift test --package-path Packages/RoomlingsCore
       - name: Build the release app
@@ -99,26 +101,27 @@ jobs:
             NODE_BINARY="$(command -v node)" \
             ROOMLINGS_WEB_ROOT="$GITHUB_WORKSPACE/roomlings" \
             CODE_SIGNING_ALLOWED=NO
-      - name: Boot the iOS 18.5 simulator
+      - name: Boot the iOS 26.5 simulator
         id: simulator
         env:
           SIMULATOR_NAME: ${{ matrix.simulator }}
         run: |
           device=$(xcrun simctl list devices available --json | jq -r --arg name "$SIMULATOR_NAME" '
-            .devices["com.apple.CoreSimulator.SimRuntime.iOS-18-5"][]
+            .devices["com.apple.CoreSimulator.SimRuntime.iOS-26-5"][]
             | select(.name == $name and .isAvailable)
             | .udid
           ')
           test -n "$device"
           xcrun simctl boot "$device"
           xcrun simctl bootstatus "$device" -b
-          echo "destination=platform=iOS Simulator,id=$device" >> "$GITHUB_OUTPUT"
+          echo "destination=platform=iOS Simulator,arch=$(uname -m),id=$device" >> "$GITHUB_OUTPUT"
       - name: Run native account and room flows
+        timeout-minutes: 20
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
         run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: ${{ !cancelled() && failure() }}
         with:
           name: native-failure-${{ matrix.name }}
           path: roomlings-ios/Build/*.xcresult

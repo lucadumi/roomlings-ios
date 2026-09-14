@@ -84,7 +84,14 @@ try {
     '-destination', destination, '-derivedDataPath', join(project, 'Build', 'DerivedData'),
     '-resultBundlePath', result, '-only-testing:RoomlingsTests', '-only-testing:RoomlingsUITests/AccountUITests',
     ...(values['include-room'] ? ['-only-testing:RoomlingsUITests/RoomlingsUITests'] : []),
-    '-parallel-testing-enabled', 'NO', '-quiet', 'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
+    '-parallel-testing-enabled', 'NO',
+    ...(process.env.CI ? [
+      '-destination-timeout', '60',
+      '-test-timeouts-enabled', 'YES',
+      '-default-test-execution-time-allowance', '180',
+      '-maximum-test-execution-time-allowance', '300',
+    ] : ['-quiet']),
+    'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
     `NODE_BINARY=${process.execPath}`, `ROOMLINGS_WEB_ROOT=${web}`,
   ], { stdio: 'inherit' })
   const [code, signal] = await once(child, 'exit')
