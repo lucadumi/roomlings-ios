@@ -75,6 +75,30 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Email sign-in code"], "123456")
         try fill(app.textFields["Display name"], "Ada")
         try tap(app.buttons["Verify and sign in"], in: app)
+        try waitForSignedIn(app)
+    }
+
+    @MainActor
+    private func waitForSignedIn(_ app: XCUIApplication) throws {
+        let signedIn = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Account"),
+            object: app.buttons["account-entry"]
+        )
+        guard XCTWaiter.wait(for: [signedIn], timeout: 15) == .completed else {
+            throw FlowError.missingElement("Signed-in account state")
+        }
+    }
+
+    @MainActor
+    private func openAccount(_ app: XCUIApplication) throws {
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.otherElements["account-sheet"]
+        )
+        guard XCTWaiter.wait(for: [dismissed], timeout: 15) == .completed else {
+            throw FlowError.missingElement("Dismissed account sheet")
+        }
+        try tap(app.buttons["account-entry"], in: app)
     }
 
     @MainActor
@@ -84,8 +108,7 @@ final class AccountUITests: XCTestCase {
         _ = try await fixture("_fixture/seed", body: ["email": email])
         let app = try launchApp()
         try signIn(app, email: email)
-        XCTAssertTrue(app.buttons["account-entry"].waitForExistence(timeout: 15))
-        app.buttons["account-entry"].tap()
+        try openAccount(app)
         try tap(app.buttons["Open Cedar House"], in: app)
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
         let room = app.webViews["room-renderer"]
@@ -95,11 +118,11 @@ final class AccountUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.textFields["Email address"].exists)
-        app.buttons["account-entry"].tap()
+        try openAccount(app)
         try tap(app.buttons["Open Willow House"], in: app)
         XCTAssertTrue(app.staticTexts["Willow House"].waitForExistence(timeout: 15))
         XCTAssertTrue(room.switches["Put the kettle on"].waitForExistence(timeout: 30))
-        app.buttons["account-entry"].tap()
+        try openAccount(app)
         try tap(app.buttons["Sign out"], in: app)
         guard app.staticTexts["Sign out on this device?"].waitForExistence(timeout: 10),
               let confirmation = app.buttons.matching(identifier: "Sign out").allElementsBoundByIndex.first(where: \.isHittable) else {
@@ -122,14 +145,14 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Household name"], "Our new home")
         try tap(app.buttons["Create household"], in: app)
         XCTAssertTrue(app.staticTexts["Our new home"].waitForExistence(timeout: 15))
-        app.buttons["account-entry"].tap()
+        try openAccount(app)
         try tap(app.buttons["Join a household"], in: app)
         try fill(app.textFields["Invitation link or code"],
              "http://localhost:5173/#account-invite=\(seeded.invitation)")
         try fill(app.textFields["Your name in this household"], "Ben")
         try tap(app.buttons["Join household"], in: app)
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
-        app.buttons["account-entry"].tap()
+        try openAccount(app)
         XCTAssertTrue(app.buttons["Open Our new home"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Open Cedar House"].exists)
     }
@@ -148,9 +171,9 @@ final class AccountUITests: XCTestCase {
         try tap(app.buttons["Use a recovery code"], in: app)
         try fill(app.secureTextFields["Account recovery code"], seeded.recoveryCode)
         try tap(app.buttons["Recover my account"], in: app)
-        XCTAssertTrue(app.buttons["account-entry"].waitForExistence(timeout: 15))
+        try waitForSignedIn(app)
+        try openAccount(app)
         XCTAssertFalse(app.secureTextFields["Account recovery code"].exists)
-        app.buttons["account-entry"].tap()
         XCTAssertTrue(app.buttons["Open Cedar House"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Open Willow House"].exists)
         _ = try await fixture("_fixture/delivery", body: ["fail": false])

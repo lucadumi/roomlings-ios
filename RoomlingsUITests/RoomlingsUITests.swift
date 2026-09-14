@@ -9,6 +9,8 @@ final class RoomlingsUITests: XCTestCase {
 
     @MainActor
     func testSharedKitchenLoadsOfflineAndItsControlsWork() throws {
+        // Software-rendered simulators need time for the full gesture and orientation flow.
+        executionTimeAllowance = 360
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = "http://127.0.0.1:1"
