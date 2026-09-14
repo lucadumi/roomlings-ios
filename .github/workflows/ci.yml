@@ -1,10 +1,11 @@
 name: iOS CI
 
+# A pull request run already checks main merged with the branch, so re-running the same
+# tree after merge only doubles the macOS bill. Keep "Require branches to be up to date"
+# on in branch protection so the run that passes is the tree that lands.
 on:
   pull_request:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -90,18 +91,7 @@ jobs:
         run: |
           sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -version
-      - run: npm --prefix ../roomlings ci --no-audit --no-fund
-      - run: swift test --package-path Packages/RoomlingsCore
-      - name: Build the release app
-        if: matrix.name == 'iPhone'
-        run: |
-          xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
-            -configuration Release -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath Build/Release -quiet build \
-            NODE_BINARY="$(command -v node)" \
-            ROOMLINGS_WEB_ROOT="$GITHUB_WORKSPACE/roomlings" \
-            CODE_SIGNING_ALLOWED=NO
-      - name: Boot the iOS 26.5 simulator
+      - name: Start the iOS 26.5 simulator
         id: simulator
         env:
           SIMULATOR_NAME: ${{ matrix.simulator }}
@@ -113,8 +103,23 @@ jobs:
           ')
           test -n "$device"
           xcrun simctl boot "$device"
-          xcrun simctl bootstatus "$device" -b
           echo "destination=platform=iOS Simulator,arch=$(uname -m),id=$device" >> "$GITHUB_OUTPUT"
+          echo "device=$device" >> "$GITHUB_OUTPUT"
+      - run: npm --prefix ../roomlings ci --no-audit --no-fund
+      - run: swift test --package-path Packages/RoomlingsCore
+      - name: Build the release app
+        if: matrix.name == 'iPhone'
+        run: |
+          xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
+            -configuration Release -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath Build/Release -quiet build \
+            NODE_BINARY="$(command -v node)" \
+            ROOMLINGS_WEB_ROOT="$GITHUB_WORKSPACE/roomlings" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Wait for the simulator
+        env:
+          DEVICE: ${{ steps.simulator.outputs.device }}
+        run: xcrun simctl bootstatus "$DEVICE" -b
       - name: Run native account and room flows
         timeout-minutes: 20
         env:
