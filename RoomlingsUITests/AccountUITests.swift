@@ -36,12 +36,12 @@ final class AccountUITests: XCTestCase {
         app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = try fixtureOrigin().absoluteString
         app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.account-test.\(UUID().uuidString)"
         app.launch()
-        guard app.textFields["Email address"].waitForExistence(timeout: 15) else {
+        guard app.textFields["Email address"].waitForExistence(timeout: Wait.control) else {
             throw FlowError.missingElement("Email address")
         }
         if UIDevice.current.userInterfaceIdiom == .pad {
             let sheet = app.otherElements["account-sheet"]
-            XCTAssertTrue(sheet.waitForExistence(timeout: 10))
+            XCTAssertTrue(sheet.waitForExistence(timeout: Wait.control))
             XCTAssertLessThan(sheet.frame.width, app.frame.width)
         }
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -53,7 +53,7 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     private func fill(_ field: XCUIElement, _ value: String) throws {
-        guard field.waitForExistence(timeout: 10) else { throw FlowError.missingElement(field.description) }
+        guard field.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(field.description) }
         field.tap()
         if let existing = field.value as? String, existing != field.placeholderValue, !existing.isEmpty {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
@@ -63,7 +63,7 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     private func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
-        guard button.waitForExistence(timeout: 10) else { throw FlowError.missingElement(button.description) }
+        guard button.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(button.description) }
         if !button.isHittable { app.swipeUp() }
         button.tap()
     }
@@ -84,7 +84,7 @@ final class AccountUITests: XCTestCase {
             predicate: NSPredicate(format: "label == %@", "Account"),
             object: app.buttons["account-entry"]
         )
-        guard XCTWaiter.wait(for: [signedIn], timeout: 15) == .completed else {
+        guard XCTWaiter.wait(for: [signedIn], timeout: Wait.control) == .completed else {
             throw FlowError.missingElement("Signed-in account state")
         }
     }
@@ -95,7 +95,7 @@ final class AccountUITests: XCTestCase {
             predicate: NSPredicate(format: "exists == false"),
             object: app.otherElements["account-sheet"]
         )
-        guard XCTWaiter.wait(for: [dismissed], timeout: 15) == .completed else {
+        guard XCTWaiter.wait(for: [dismissed], timeout: Wait.control) == .completed else {
             throw FlowError.missingElement("Dismissed account sheet")
         }
         try tap(app.buttons["account-entry"], in: app)
@@ -110,26 +110,26 @@ final class AccountUITests: XCTestCase {
         try signIn(app, email: email)
         try openAccount(app)
         try tap(app.buttons["Open Cedar House"], in: app)
-        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         let room = app.webViews["room-renderer"]
-        XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: 30))
+        XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
         XCTAssertFalse(room.switches["Put the kettle on"].exists)
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         XCTAssertFalse(app.textFields["Email address"].exists)
         try openAccount(app)
         try tap(app.buttons["Open Willow House"], in: app)
-        XCTAssertTrue(app.staticTexts["Willow House"].waitForExistence(timeout: 15))
-        XCTAssertTrue(room.switches["Put the kettle on"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["Willow House"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(room.switches["Put the kettle on"].waitForExistence(timeout: Wait.room))
         try openAccount(app)
         try tap(app.buttons["Sign out"], in: app)
-        guard app.staticTexts["Sign out on this device?"].waitForExistence(timeout: 10),
+        guard app.staticTexts["Sign out on this device?"].waitForExistence(timeout: Wait.control),
               let confirmation = app.buttons.matching(identifier: "Sign out").allElementsBoundByIndex.first(where: \.isHittable) else {
             throw FlowError.missingElement("Sign-out confirmation")
         }
         confirmation.tap()
-        XCTAssertTrue(app.textFields["Email address"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textFields["Email address"].waitForExistence(timeout: Wait.control))
         app.buttons["Not now"].tap()
         XCTAssertTrue(app.staticTexts["Kitchen preview"].exists)
     }
@@ -144,16 +144,16 @@ final class AccountUITests: XCTestCase {
         try tap(app.buttons["Create a household"], in: app)
         try fill(app.textFields["Household name"], "Our new home")
         try tap(app.buttons["Create household"], in: app)
-        XCTAssertTrue(app.staticTexts["Our new home"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Our new home"].waitForExistence(timeout: Wait.control))
         try openAccount(app)
         try tap(app.buttons["Join a household"], in: app)
         try fill(app.textFields["Invitation link or code"],
              "http://localhost:5173/#account-invite=\(seeded.invitation)")
         try fill(app.textFields["Your name in this household"], "Ben")
         try tap(app.buttons["Join household"], in: app)
-        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         try openAccount(app)
-        XCTAssertTrue(app.buttons["Open Our new home"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Open Our new home"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.buttons["Open Cedar House"].exists)
     }
 
@@ -166,7 +166,7 @@ final class AccountUITests: XCTestCase {
         let app = try launchApp()
         try fill(app.textFields["Email address"], email)
         try tap(app.buttons["Send sign-in code"], in: app)
-        XCTAssertTrue(app.staticTexts["account-error"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["account-error"].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(app.textFields["Email address"].value as? String, email)
         try tap(app.buttons["Use a recovery code"], in: app)
         try fill(app.secureTextFields["Account recovery code"], seeded.recoveryCode)
@@ -174,7 +174,7 @@ final class AccountUITests: XCTestCase {
         try waitForSignedIn(app)
         try openAccount(app)
         XCTAssertFalse(app.secureTextFields["Account recovery code"].exists)
-        XCTAssertTrue(app.buttons["Open Cedar House"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Open Cedar House"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.buttons["Open Willow House"].exists)
         _ = try await fixture("_fixture/delivery", body: ["fail": false])
     }

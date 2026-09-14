@@ -20,6 +20,7 @@
 		A0000000000000000000000B /* RoomTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* RoomTheme.swift */; };
 		A0000000000000000000000C /* WebThemeValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* WebThemeValues.swift */; };
 		A0000000000000000000000D /* Resources/Fonts in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* Resources/Fonts */; };
+		A0000000000000000000000E /* Wait.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* Wait.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +54,7 @@
 		B00000000000000000000012 /* WebThemeValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebThemeValues.swift; sourceTree = DERIVED_FILE_DIR; };
 		B00000000000000000000013 /* Resources/Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Fonts; sourceTree = "<group>"; };
 		B00000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000015 /* Wait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Wait.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +124,7 @@
 			children = (
 				B00000000000000000000006 /* RoomlingsUITests.swift */,
 				B00000000000000000000010 /* AccountUITests.swift */,
+				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
 			path = RoomlingsUITests;
@@ -297,6 +300,7 @@
 			files = (
 				A00000000000000000000006 /* RoomlingsUITests.swift in Sources */,
 				A0000000000000000000000A /* AccountUITests.swift in Sources */,
+				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
