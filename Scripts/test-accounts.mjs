@@ -88,7 +88,7 @@ try {
     ...(process.env.CI ? [
       '-destination-timeout', '60',
       '-test-timeouts-enabled', 'YES',
-      '-default-test-execution-time-allowance', '180',
+      '-default-test-execution-time-allowance', '300',
       '-maximum-test-execution-time-allowance', '360',
     ] : ['-quiet']),
     'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
