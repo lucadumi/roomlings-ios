@@ -73,7 +73,17 @@ final class AccountUITests: XCTestCase {
     @MainActor
     private func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
         guard button.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(button.description) }
-        if !button.isHittable { app.swipeUp() }
+        // A disabled SwiftUI button swallows a tap silently, which looks exactly like a screen
+        // that never changed, so wait for it to become usable instead of tapping into nothing.
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
+        guard XCTWaiter.wait(for: [enabled], timeout: Wait.control) == .completed else {
+            throw FlowError.missingElement("\(button.description) stayed disabled")
+        }
+        if !button.isHittable {
+            app.swipeUp()
+            let reachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: button)
+            _ = XCTWaiter.wait(for: [reachable], timeout: Wait.flip)
+        }
         button.tap()
     }
 
@@ -100,14 +110,19 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     private func openAccount(_ app: XCUIApplication) throws {
-        let dismissed = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: app.otherElements["account-sheet"]
-        )
+        let sheet = app.otherElements["account-sheet"]
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: sheet)
         guard XCTWaiter.wait(for: [dismissed], timeout: Wait.control) == .completed else {
             throw FlowError.missingElement("Dismissed account sheet")
         }
-        try tap(app.buttons["account-entry"], in: app)
+        // The room can swallow the first tap while it settles after a household change. The
+        // sheet still being closed proves it never opened, and the entry only ever opens it,
+        // so tapping again cannot toggle it back shut.
+        for _ in 1...3 {
+            try tap(app.buttons["account-entry"], in: app)
+            if sheet.waitForExistence(timeout: Wait.flip) { return }
+        }
+        throw FlowError.missingElement("Opened account sheet")
     }
 
     @MainActor
