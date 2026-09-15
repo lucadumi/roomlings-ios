@@ -73,7 +73,17 @@ final class AccountUITests: XCTestCase {
     @MainActor
     private func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
         guard button.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(button.description) }
-        if !button.isHittable { app.swipeUp() }
+        // A disabled SwiftUI button swallows a tap silently, which looks exactly like a screen
+        // that never changed, so wait for it to become usable instead of tapping into nothing.
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
+        guard XCTWaiter.wait(for: [enabled], timeout: Wait.control) == .completed else {
+            throw FlowError.missingElement("\(button.description) stayed disabled")
+        }
+        if !button.isHittable {
+            app.swipeUp()
+            let reachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: button)
+            _ = XCTWaiter.wait(for: [reachable], timeout: Wait.flip)
+        }
         button.tap()
     }
 
