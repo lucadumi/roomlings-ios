@@ -21,6 +21,11 @@
 		A0000000000000000000000C /* WebThemeValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* WebThemeValues.swift */; };
 		A0000000000000000000000D /* Resources/Fonts in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* Resources/Fonts */; };
 		A0000000000000000000000E /* Wait.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* Wait.swift */; };
+		A0000000000000000000000F /* ChoresSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* ChoresSheet.swift */; };
+		A00000000000000000000010 /* ChoreForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* ChoreForm.swift */; };
+		A00000000000000000000011 /* ChoreCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* ChoreCatalog.swift */; };
+		A00000000000000000000012 /* ChoreCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* ChoreCalendar.swift */; };
+		A00000000000000000000013 /* RoomControlStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* RoomControlStyles.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,6 +60,11 @@
 		B00000000000000000000013 /* Resources/Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Fonts; sourceTree = "<group>"; };
 		B00000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B00000000000000000000015 /* Wait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Wait.swift; sourceTree = "<group>"; };
+		B00000000000000000000016 /* ChoresSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoresSheet.swift; sourceTree = "<group>"; };
+		B00000000000000000000017 /* ChoreForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreForm.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* ChoreCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreCatalog.swift; sourceTree = "<group>"; };
+		B00000000000000000000019 /* ChoreCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreCalendar.swift; sourceTree = "<group>"; };
+		B0000000000000000000001A /* RoomControlStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomControlStyles.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -107,6 +117,11 @@
 				B00000000000000000000011 /* RoomTheme.swift */,
 				B00000000000000000000012 /* WebThemeValues.swift */,
 				B00000000000000000000013 /* Resources/Fonts */,
+				B00000000000000000000016 /* ChoresSheet.swift */,
+				B00000000000000000000017 /* ChoreForm.swift */,
+				B00000000000000000000018 /* ChoreCatalog.swift */,
+				B00000000000000000000019 /* ChoreCalendar.swift */,
+				B0000000000000000000001A /* RoomControlStyles.swift */,
 			);
 			path = Roomlings;
 			sourceTree = "<group>";
@@ -283,6 +298,11 @@
 				A00000000000000000000009 /* RoomVisualState.swift in Sources */,
 				A0000000000000000000000B /* RoomTheme.swift in Sources */,
 				A0000000000000000000000C /* WebThemeValues.swift in Sources */,
+				A0000000000000000000000F /* ChoresSheet.swift in Sources */,
+				A00000000000000000000010 /* ChoreForm.swift in Sources */,
+				A00000000000000000000011 /* ChoreCatalog.swift in Sources */,
+				A00000000000000000000012 /* ChoreCalendar.swift in Sources */,
+				A00000000000000000000013 /* RoomControlStyles.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -8,6 +8,7 @@ public actor AccountSession {
 
     private let api: AccountAPI
     private let tokenStore: any SessionTokenStore
+    private var stateToken: SessionToken?
 
     public init(
         configuration: APIConfiguration,
@@ -29,6 +30,7 @@ public actor AccountSession {
             // A native signed-in response without a stored bearer cannot establish a session.
             guard !response.isSignedIn || token != nil else { throw AccountError.invalidResponse }
             state = response
+            stateToken = response.isSignedIn ? token : nil
             return response
         } catch {
             try await handleConfirmedExpiry(error)
@@ -54,6 +56,7 @@ public actor AccountSession {
         )
         try await saveCredential(response.token)
         state = response.state
+        stateToken = response.token
         return response.state
     }
 
@@ -69,6 +72,7 @@ public actor AccountSession {
         )
         try await saveCredential(response.token)
         state = response.state
+        stateToken = response.token
         return response.state
     }
 
@@ -81,6 +85,7 @@ public actor AccountSession {
             let response = try await api.logout(allDevices: allDevices, token: token)
             try await clearCredential()
             state = response
+            stateToken = nil
             return response
         } catch {
             try await handleConfirmedExpiry(error)
@@ -114,6 +119,61 @@ public actor AccountSession {
         }
     }
 
+    @discardableResult
+    public func addChore(
+        _ draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateChores(householdID: householdID, version: version) { [api] token in
+            try await api.addChore(draft, version: version, mutationID: mutationID, token: token)
+        }
+    }
+
+    @discardableResult
+    public func completeChore(
+        id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateChores(householdID: householdID, version: version) { [api] token in
+            try await api.completeChore(
+                id: id, choreVersion: choreVersion, version: version, mutationID: mutationID, token: token
+            )
+        }
+    }
+
+    private func mutateChores(
+        householdID: UUID, version: Int64,
+        _ operation: @Sendable (SessionToken) async throws -> ChoreMutationResponse
+    ) async throws -> AccountState {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, original.isSignedIn, !original.deletionPending,
+              let selected = original.session else { throw AccountError.accountStateRequired }
+        guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
+        let storedToken = try await readCredential()
+        guard let token = storedToken, token == stateToken else { throw AccountError.accountStateRequired }
+        let chores = try HouseholdChores(household: selected.household)
+        guard chores.activeMembers.contains(where: { $0.id == selected.memberID }) else {
+            throw AccountError.accountStateRequired
+        }
+        do {
+            let response = try await operation(token)
+            try Task.checkCancellation()
+            guard state == original, stateToken == token,
+                  response.household.id == householdID,
+                  response.household.version >= selected.household.version,
+                  response.household.version > version,
+                  response.replayed || response.household.version == version + 1,
+                  response.chores.activeMembers.contains(where: { $0.id == selected.memberID }) else {
+                throw AccountError.invalidResponse
+            }
+            let updated = try original.replacingHousehold(response.household)
+            state = updated
+            return updated
+        } catch {
+            try await handleConfirmedExpiry(error)
+            throw error
+        }
+    }
+
     private func mutateHousehold(
         _ operation: @Sendable (SessionToken?) async throws -> AccountState
     ) async throws -> AccountState {
@@ -124,6 +184,7 @@ public actor AccountSession {
             let response = try await operation(token)
             guard token != nil, response.isSignedIn else { throw AccountError.invalidResponse }
             state = response
+            stateToken = token
             return response
         } catch {
             try await handleConfirmedExpiry(error)
@@ -142,6 +203,7 @@ public actor AccountSession {
               case .server(status: 401, code: .some(.accountSessionRequired)) = error else { return }
         try await clearCredential()
         state = nil
+        stateToken = nil
     }
 
     private func readCredential() async throws -> SessionToken? {

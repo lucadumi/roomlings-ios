@@ -23,6 +23,9 @@ enum RoomTheme {
     static let errorBorder = color(WebThemeValues.errorBorder)
     static let leaf = color(WebThemeValues.leaf)
     static let leafSoft = color(WebThemeValues.leafSoft)
+    static let sky = color(WebThemeValues.sky)
+    static let skySoft = color(WebThemeValues.skySoft)
+    static let surfaceMuted = color(WebThemeValues.surfaceMuted)
     static let radius = WebThemeValues.radius
 
     static func body(_ size: CGFloat = 16) -> Font {
@@ -129,5 +132,17 @@ struct AccountSection<Content: View, Footer: View>: View {
 extension AccountSection where Footer == EmptyView {
     init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
         self.init(title, content: content, footer: { EmptyView() })
+    }
+}
+
+struct RoomSheetPresentation: ViewModifier {
+    let idealHeight: CGFloat
+
+    func body(content: Content) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            content.frame(idealWidth: 560, idealHeight: idealHeight).presentationSizing(.fitted)
+        } else {
+            content.presentationDetents([.large]).presentationDragIndicator(.visible)
+        }
     }
 }

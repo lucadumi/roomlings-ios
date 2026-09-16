@@ -9,11 +9,19 @@ import { parseArgs } from 'node:util'
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
-const { values } = parseArgs({ options: { destination: { type: 'string' }, 'include-room': { type: 'boolean' } } })
+const { values } = parseArgs({ options: {
+  destination: { type: 'string' }, 'include-room': { type: 'boolean' }, 'chores-only': { type: 'boolean' },
+  'ui-test': { type: 'string', multiple: true },
+} })
+const selectedFlows = values['ui-test'] ? [...new Set(values['ui-test'])] : null
+if (selectedFlows?.some((flow) => !/^[A-Za-z_]\w*\/test\w+$/.test(flow))) {
+  throw new Error('Use --ui-test TestClass/testMethod for each native UI flow.')
+}
 const { createApp } = await import(pathToFileURL(join(web, 'server/app.ts')).href)
 const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
-const { getRoomComponents } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const { getRoomComponents, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const { billingDate, choreSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { accountEmailSchema } = await import(pathToFileURL(join(web, 'shared/accounts.ts')).href)
 const express = requireWeb('express')
 const { z } = requireWeb('zod')
@@ -21,6 +29,8 @@ const store = new Store(':memory:')
 const identities = new Map()
 const pendingCodes = new Set()
 let failDelivery = false
+let choreFailure = null
+const choreRequests = []
 const identity = (email) => {
   if (!identities.has(email)) identities.set(email, randomUUID())
   return { providerId: identities.get(email), email }
@@ -39,22 +49,71 @@ const provider = {
     for (const [email, id] of identities) if (id === providerId) identities.delete(email)
   },
 }
-const app = createApp(store, { provider, appOrigin: 'http://localhost:5173' })
+const app = express()
+app.use('/api/chores', express.json(), (request, response, next) => {
+  if (request.method !== 'POST') { next(); return }
+  choreRequests.push({
+    path: request.originalUrl, version: request.body.version,
+    mutationId: request.body.mutationId, mutationVersion: request.body.mutationVersion,
+    native: request.get('X-Roomlings-Client') === 'ios',
+    browserHeaders: ['origin', 'cookie', 'x-csrf-token', 'sec-fetch-site'].some((name) => request.get(name) !== undefined),
+  })
+  const failure = choreFailure
+  choreFailure = null
+  if (failure === 'unavailable') {
+    response.status(503).json({ error: 'Test chore save unavailable' })
+    return
+  }
+  if (failure === 'lost-response') {
+    const sendJSON = response.json
+    response.json = function (body) {
+      if (this.statusCode >= 200 && this.statusCode < 300) {
+        this.destroy()
+        return this
+      }
+      return sendJSON.call(this, body)
+    }
+  }
+  next()
+})
+app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
 app.post('/_fixture/seed', express.json(), async (request, response) => {
   const email = accountEmailSchema.parse(request.body.email)
   failDelivery = false
+  choreFailure = null
+  choreRequests.length = 0
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
-  for (const [name, style, kettle] of [['Cedar House', 'clay', false], ['Willow House', 'coastal', true]]) {
+  for (const [name, style, kettle, timeZone] of [
+    ['Cedar House', 'clay', false, 'us/eastern'], ['Willow House', 'coastal', true, '+01:00'],
+  ]) {
     const state = await store.accounts.createHousehold(issued.session, {
       name, memberName: 'Ada', currency: 'EUR', budget: 25000,
     })
     const household = state.session.household
     household.roomStyle = style
+    household.billingTimeZone = timeZone
     household.roomComponents = getRoomComponents(household).map((component) =>
       !kettle && component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
+    const now = new Date().toISOString()
+    const chore = {
+      title: 'Wipe the kitchen counters', notes: 'Use the gentle cleaner.',
+      roomId: 'kitchen', area: 'counters', componentId: null,
+      dueDate: billingDate(household.billingTimeZone), repeatDays: 7,
+      rotation: [state.session.memberId], turn: 0, createdBy: state.session.memberId,
+      createdAt: now, updatedAt: now, version: 0, occurrence: 0, archived: false,
+    }
+    household.chores.items.push(choreSchema.parse({ ...chore, id: randomUUID() }))
+    if (!kettle) {
+      const object = household.roomComponents.find((component) => component.slotId === 'kitchen-kettle')
+      if (!object) throw new Error('The chore fixture needs the saved kettle.')
+      household.chores.items.push(choreSchema.parse({
+        ...chore, id: randomUUID(), title: 'Clean the stored kettle', componentId: object.id,
+        componentName: object.name, area: componentChoreArea(object),
+      }))
+    }
     household.version++
     await store.save(household)
     if (!invitation) invitation = (await store.accounts.invite(issued.session, household.id, household.version, 7)).code
@@ -68,6 +127,26 @@ app.post('/_fixture/delivery', express.json(), (request, response) => {
   failDelivery = z.object({ fail: z.boolean() }).parse(request.body).fail
   response.json({ configured: true })
 })
+app.post('/_fixture/chores/failure', express.json(), (request, response) => {
+  choreFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
+app.post('/_fixture/chores/change', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  await store.transaction(async () => {
+    const household = await store.get(id)
+    if (!household) throw new Error('The chore fixture household is missing.')
+    household.version++
+    await store.save(household)
+  })
+  response.json({ changed: true })
+})
+app.post('/_fixture/chores/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const household = await store.get(id)
+  if (!household) throw new Error('The chore fixture household is missing.')
+  response.json({ version: household.version, ...household.chores, requests: choreRequests })
+})
 app.use((error, _request, response, _next) => {
   console.error('Account fixture failed:', error.message)
   response.status(500).json({ error: 'Account fixture failed' })
@@ -79,10 +158,17 @@ try {
   const destination = values.destination ?? 'platform=iOS Simulator,name=iPhone 17 Pro'
   const result = join(project, 'Build', `Account-flows-${Date.now()}.xcresult`)
   console.log(`Using an isolated account API at ${origin}.`)
+  const flows = selectedFlows ? selectedFlows.map((flow) => `RoomlingsUITests/${flow}`) : values['chores-only'] ? [
+    'RoomlingsUITests/AccountUITests/testChoreControlsCanReturnToSystemStyling',
+    'RoomlingsUITests/AccountUITests/testStyledControlsKeepBindingsAndDisabledStates',
+    'RoomlingsUITests/AccountUITests/testChoresCreateAndCompleteInTheSharedHousehold',
+    'RoomlingsUITests/AccountUITests/testChoresKeepFailedDraftsAndRequireConflictReview',
+    'RoomlingsUITests/AccountUITests/testChoresRetryLostResponsesWithoutDuplicatingTheSave',
+  ] : ['RoomlingsUITests/AccountUITests']
   const child = spawn('caffeinate', ['-i', 'xcodebuild',
     '-project', join(project, 'Roomlings.xcodeproj'), '-scheme', 'Roomlings',
     '-destination', destination, '-derivedDataPath', join(project, 'Build', 'DerivedData'),
-    '-resultBundlePath', result, '-only-testing:RoomlingsTests', '-only-testing:RoomlingsUITests/AccountUITests',
+    '-resultBundlePath', result, '-only-testing:RoomlingsTests', ...flows.map((flow) => `-only-testing:${flow}`),
     ...(values['include-room'] ? ['-only-testing:RoomlingsUITests/RoomlingsUITests'] : []),
     '-parallel-testing-enabled', 'NO',
     ...(process.env.CI ? [
@@ -100,7 +186,8 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = values['include-room'] ? 9 : 8
+    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 16)
+      + (values['include-room'] ? 1 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
     }

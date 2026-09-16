@@ -1,7 +1,7 @@
 html, body, #root { width: 100%; height: 100%; min-width: 0; overflow: hidden; }
 body { overscroll-behavior: none; }
-.native-room.game-home { --world-top: var(--native-top, 0px); --world-bottom: var(--native-bottom, 0px); display: block; height: 100%; }
-.native-room .kitchen-world { position: absolute; inset: var(--native-top, 0px) var(--native-right, 0px) var(--native-bottom, 0px) var(--native-left, 0px); display: block; margin: 0; padding: 0; }
+.native-room.game-home { --world-top: var(--native-top, 0px); --world-bottom: calc(var(--native-bottom, 0px) + var(--native-dock-space, 0px)); display: block; height: 100%; }
+.native-room .kitchen-world { position: absolute; inset: var(--native-top, 0px) var(--native-right, 0px) var(--world-bottom) var(--native-left, 0px); display: block; margin: 0; padding: 0; }
 .native-room button { touch-action: manipulation; }
 /* Keep WebKit taps on the button when its SVG icon changes. */
 .native-room button > * { pointer-events: none; }
@@ -10,3 +10,5 @@ body { overscroll-behavior: none; }
 .native-room .world-quick-actions button { min-height: 44px; }
 .native-room .world-interaction-hint { bottom: 4.75rem; }
 .native-room .scene-loading { inset: 0; justify-content: center; background: var(--room-backdrop-center); z-index: 4; }
+.native-room .native-chores-dock { position: absolute; left: 50%; bottom: calc(var(--native-bottom, 0px) + 1rem); transform: translateX(-50%); display: flex; width: max-content; max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); z-index: 2; }
+.native-room .native-chores-dock .dock-tool { min-width: max(44px, 4.6875rem); min-height: 44px; }

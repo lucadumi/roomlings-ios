@@ -10,6 +10,12 @@ final class AccountModel {
     private(set) var restored = false
     private(set) var room = RoomVisualState.preview
     private(set) var roomFailure: String?
+    private(set) var chores: HouseholdChores?
+    private(set) var choreCatalog: ChoreCatalog?
+    private(set) var choreObjects: [ChoreObject] = []
+    private(set) var choreCalendar: ChoreCalendar?
+    private(set) var choresFailure: String?
+    private(set) var choreSaveFailure = ChoreSaveFailure.none
     var message: String?
     var notice: String?
     let setupError: String?
@@ -21,6 +27,10 @@ final class AccountModel {
     var deletionPending: Bool { deletionBlocked || state?.deletionPending == true }
     var householdName: String? { deletionPending ? nil : state?.session?.household.name }
     var canUseAccount: Bool { signedIn && !deletionPending }
+
+    enum ChoreSaveFailure {
+        case none, retrySameChange, refreshRequired
+    }
 
     init(client: AccountSession) {
         self.client = client
@@ -107,6 +117,23 @@ final class AccountModel {
         await perform(.logout) { try await $0.logout() }
     }
 
+    func addChore(_ draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.addChore) {
+            try await $0.addChore(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Chore added." }
+        return saved
+    }
+
+    func completeChore(_ chore: Chore, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.completeChore) {
+            try await $0.completeChore(id: chore.id, choreVersion: chore.version,
+                                      householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Chore completed." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -126,10 +153,17 @@ final class AccountModel {
     private func perform(_ action: Action, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
         guard let client, begin() else { return false }
         defer { busy = false }
+        if action.isChore { choreSaveFailure = .none }
         do {
             let next = try await operation(client)
             deletionBlocked = next.deletionPending
-            return publish(next)
+            let published = publish(next)
+            if action.isChore, let choresFailure {
+                message = choresFailure
+                choreSaveFailure = .retrySameChange
+                return false
+            }
+            return published
         } catch {
             await failed(error, action: action, client: client)
             return false
@@ -139,9 +173,25 @@ final class AccountModel {
     private func publish(_ next: AccountState?) -> Bool {
         state = next
         roomFailure = nil
+        chores = nil
+        choreObjects = []
+        choreCalendar = nil
+        choresFailure = nil
         guard !deletionPending, let household = next?.session?.household else {
             room = .preview
             return true
+        }
+        do {
+            let catalog = try choreCatalog ?? ChoreCatalog.load()
+            let board = try HouseholdChores(household: household)
+            let objects = try catalog.objects(in: household)
+            let calendar = try ChoreCalendar(chores: board)
+            choreCatalog = catalog
+            chores = board
+            choreObjects = objects
+            choreCalendar = calendar
+        } catch {
+            choresFailure = "Your chores could not be displayed. Refresh chores. If this continues, rebuild the app with the shared web source."
         }
         do {
             room = try RoomVisualState(household: household)
@@ -161,14 +211,31 @@ final class AccountModel {
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
         _ = publish(latest)
+        if action.isChore {
+            switch error {
+            case AccountError.server(let status, _) where [403, 404, 409].contains(status):
+                choreSaveFailure = .refreshRequired
+            case AccountError.accountStateRequired, AccountError.householdSelectionChanged:
+                choreSaveFailure = .refreshRequired
+            case AccountError.server(let status, _) where status < 500 && status != 429:
+                choreSaveFailure = .none
+            case AccountError.invalidInput, AccountError.operationInProgress, AccountError.credentialStorage, is KeychainError:
+                choreSaveFailure = .none
+            default:
+                choreSaveFailure = .retrySameChange
+            }
+        }
         message = Self.message(for: error, action: action)
     }
 
     private enum Action {
-        case refresh, sendCode, verify, recover, create, join, select, logout
+        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore
+
+        var isChore: Bool { self == .addChore || self == .completeChore }
     }
 
     private static func message(for error: Error, action: Action) -> String {
+        if action.isChore { return choreMessage(for: error) }
         if error is CancellationError { return "The request stopped. Refresh your account before repeating it." }
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be updated securely. Unlock the device and try again."
@@ -202,6 +269,36 @@ final class AccountModel {
             return "Another account action is still running."
         default:
             return "The server response could not be used. Your saved access is unchanged."
+        }
+    }
+
+    private static func choreMessage(for error: Error) -> String {
+        if error is KeychainError || (error as? AccountError) == .credentialStorage {
+            return "Saved access could not be read securely. Unlock the device and try again."
+        }
+        switch error {
+        case AccountError.server(_, .some(.accountSessionRequired)):
+            return "Your session has expired. Sign in again."
+        case AccountError.server(_, .some(.accountDeletionPending)):
+            return "Account deletion is pending. Finish it on the web, or sign out here."
+        case AccountError.server(_, .some(.reauthenticationRequired)):
+            return "Sign in again before changing chores."
+        case AccountError.server(409, let code):
+            return code == .mutationTooOld
+                ? "This save is too old to confirm. Refresh chores and review the current list."
+                : "Chores changed elsewhere. Refresh chores and review the latest state before trying again."
+        case AccountError.server(let status, _) where status == 403 || status == 404:
+            return "This chore or household is no longer available. Refresh chores before trying again."
+        case AccountError.server(429, _):
+            return "Too many changes. Wait a moment before retrying this save."
+        case AccountError.invalidInput, AccountError.server(400, _):
+            return "Check the chore name, date, repeat interval, object and active roommates."
+        case AccountError.accountStateRequired, AccountError.householdSelectionChanged:
+            return "Your selected household changed. Refresh chores and review the current household before continuing."
+        case AccountError.operationInProgress:
+            return "Another Roomlings request is still running."
+        default:
+            return "Could not confirm the chore save. Retry the same change or refresh chores before trying anything else."
         }
     }
 }

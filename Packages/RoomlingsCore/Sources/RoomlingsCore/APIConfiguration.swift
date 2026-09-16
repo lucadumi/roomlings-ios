@@ -53,6 +53,7 @@ public struct APIConfiguration: Sendable, Equatable {
 enum AccountEndpoint: Equatable {
     case account, code, verify, recover, logout
     case createHousehold, acceptInvitation, selectHousehold(UUID)
+    case addChore, completeChore(UUID)
 
     var path: String {
         switch self {
@@ -64,6 +65,8 @@ enum AccountEndpoint: Equatable {
         case .createHousehold: "api/account/households"
         case .acceptInvitation: "api/account/invitations/accept"
         case .selectHousehold(let id): "api/account/households/\(id.uuidString.lowercased())/select"
+        case .addChore: "api/chores"
+        case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         }
     }
 }

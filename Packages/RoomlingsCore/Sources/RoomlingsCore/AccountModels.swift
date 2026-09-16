@@ -155,6 +155,11 @@ public struct AccountKitchenSession: Sendable, Codable, Equatable {
         case memberID = "memberId"
     }
 
+    fileprivate init(memberID: UUID, household: HouseholdSnapshot) {
+        self.memberID = memberID
+        self.household = household
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         guard container.contains(.token), try container.decodeNil(forKey: .token) else {
@@ -226,6 +231,27 @@ public struct AccountState: Sendable, Codable, Equatable,
                 throw AccountError.invalidResponse
             }
         }
+    }
+
+    func replacingHousehold(_ household: HouseholdSnapshot) throws -> AccountState {
+        guard isSignedIn, !deletionPending, let session,
+              session.household.id == household.id, household.memberIDs.contains(session.memberID),
+              memberships.contains(where: { $0.householdID == household.id && $0.memberID == session.memberID }) else {
+            throw AccountError.invalidResponse
+        }
+        return AccountState(
+            replacing: self, session: AccountKitchenSession(memberID: session.memberID, household: household)
+        )
+    }
+
+    private init(replacing original: AccountState, session: AccountKitchenSession) {
+        configured = original.configured
+        account = original.account
+        memberships = original.memberships
+        devices = original.devices
+        self.session = session
+        deletionPending = original.deletionPending
+        csrfToken = original.csrfToken
     }
 
     public func encode(to encoder: any Encoder) throws {

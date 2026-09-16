@@ -13,7 +13,22 @@ const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
 const { chromium, expect: baseExpect } = requireWeb('@playwright/test')
 const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 })
-const { defaultRoomComponents } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
+
+test('the native chore catalog is generated from the shared rooms and object definitions', async () => {
+  const catalog = JSON.parse(await readFile(join(project, 'Build/RoomRenderer/chores.json'), 'utf8'))
+  assert.equal(catalog.version, 1)
+  assert.deepEqual(catalog.rooms, roomIds.map((id) => ({ id, name: roomCatalog[id].name, areas: roomCatalog[id].areas })))
+  for (const kind of Object.keys(componentCatalog)) {
+    for (const roomId of roomIds) {
+      assert.equal(catalog.componentAreas[kind][roomId], componentChoreArea({ kind, roomId }))
+    }
+  }
+  assert.deepEqual(catalog.defaultComponents, defaultRoomComponents().map(({ id, name, kind, roomId, slotId, installed }) => ({
+    id, name, kind, roomId, slotId, installed,
+  })))
+})
 
 test('@room the bundled kitchen stays offline, uses the shared controls and validates the native bridge', async () => {
   const types = { '/': 'text/html', '/room.js': 'text/javascript', '/room.css': 'text/css' }
@@ -97,6 +112,9 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
       version: 2, type: 'state', paused: false, roomStyle: 'original',
     })))
+    await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original', choresEnabled: true,
+    })))
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.evaluate(() => window.RoomlingsRoom.receive({ version: 1, type: 'state', paused: true, roomStyle: 'clay' }))
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
@@ -111,18 +129,52 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     const householdId = randomUUID()
     const roomComponents = defaultRoomComponents().map((component) =>
       component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
-    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
-      version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents,
-    })
+    const householdState = {
+      version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents, choresEnabled: true,
+      viewportInsets: { top: 100, right: 12, bottom: 34, left: 12 },
+    }
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(page.locator('main')).toHaveAttribute('data-household-id', householdId)
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveCount(0)
+    const chores = page.getByRole('button', { name: 'Chores', exact: true })
+    const tools = page.getByRole('navigation', { name: 'Household tools' })
+    await expect(tools.getByRole('button')).toHaveCount(1)
+    await expect(chores).toBeEnabled()
+    await expect(page.locator('.world-hotspots')).toHaveCount(0)
+    for (const viewport of [{ width: 390, height: 750 }, { width: 1194, height: 834 }]) {
+      await page.setViewportSize(viewport)
+      await expect.poll(async () => {
+        const dock = await tools.boundingBox()
+        const quick = await page.locator('.world-quick-actions').boundingBox()
+        return dock !== null && quick !== null && dock.x >= 12 && dock.x + dock.width <= viewport.width - 12
+          && dock.y + dock.height <= viewport.height - 34 && quick.y + quick.height < dock.y
+      }).toBe(true)
+      await expect(page.locator('canvas')).toHaveCSS('width', `${viewport.width}px`)
+      await expect(page.locator('canvas')).toHaveCSS('height', `${viewport.height}px`)
+    }
+    await chores.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-chores', householdId,
+    })
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, paused: true })
+    await expect(chores).toBeDisabled()
+    await chores.evaluate((button) => button.click())
+    assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-chores').length, 1)
+    const nextHousehold = randomUUID()
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, householdId: nextHousehold })
+    await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+    await chores.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-chores', householdId: nextHousehold,
+    })
     await page.evaluate(() => window.RoomlingsRoom.receive({
       version: 1, type: 'state', paused: false, roomStyle: 'original',
     }))
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(page.locator('main')).toHaveAttribute('data-household-id', '')
+    await expect(chores).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
     await assert.rejects(page.evaluate(() => fetch('/api/account')))
     assert.ok(!requests.some((path) => path.startsWith('/api/')))

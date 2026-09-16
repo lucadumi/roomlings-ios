@@ -84,6 +84,49 @@ struct AccountAPI: Sendable {
         return response.state
     }
 
+    func addChore(
+        _ draft: ChoreDraft, version: Int64, mutationID: UUID, token: SessionToken
+    ) async throws -> ChoreMutationResponse {
+        try await choreMutation(
+            .addChore, fields: draft.requestFields, version: version, mutationID: mutationID, token: token
+        )
+    }
+
+    func completeChore(
+        id: UUID, choreVersion: Int64, version: Int64, mutationID: UUID, token: SessionToken
+    ) async throws -> ChoreMutationResponse {
+        guard (0..<ChoreValidation.maximumInteger).contains(choreVersion) else {
+            throw AccountError.invalidInput(.choreVersion)
+        }
+        let response = try await choreMutation(
+            .completeChore(id), fields: ["choreVersion": .integer(choreVersion)],
+            version: version, mutationID: mutationID, token: token
+        )
+        guard let chore = response.chores.items.first(where: { $0.id == id }),
+              chore.version > choreVersion,
+              response.replayed || chore.version == choreVersion + 1 else {
+            throw AccountError.invalidResponse
+        }
+        return response
+    }
+
+    private func choreMutation(
+        _ endpoint: AccountEndpoint, fields: [String: JSONValue],
+        version: Int64, mutationID: UUID, token: SessionToken
+    ) async throws -> ChoreMutationResponse {
+        guard (0..<ChoreValidation.maximumInteger).contains(version) else {
+            throw AccountError.invalidInput(.version)
+        }
+        var payload = fields
+        payload["version"] = .integer(version)
+        payload["mutationId"] = .string(mutationID.uuidString.lowercased())
+        // Replay lookup precedes version checking. Keep the caller's original version and payload.
+        payload["mutationVersion"] = .integer(version)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try await request(endpoint, body: encoder.encode(JSONValue.object(payload)), token: token)
+    }
+
     private func request<Response: Decodable & Sendable>(
         _ endpoint: AccountEndpoint, body: Data? = nil, token: SessionToken? = nil
     ) async throws -> Response {
@@ -179,6 +222,28 @@ struct NativeSignInResponse: Decodable, Sendable {
         guard state.isSignedIn else { throw AccountError.invalidResponse }
         let container = try decoder.container(keyedBy: CodingKeys.self)
         token = try SessionToken(container.decode(String.self, forKey: .accessToken))
+    }
+}
+
+struct ChoreMutationResponse: Decodable, Sendable {
+    let household: HouseholdSnapshot
+    let chores: HouseholdChores
+    let replayed: Bool
+
+    private enum CodingKeys: String, CodingKey { case household, replayed, accessToken }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard !container.contains(.accessToken) else { throw AccountError.invalidResponse }
+        household = try container.decode(HouseholdSnapshot.self, forKey: .household)
+        guard household.value["chores"] != nil else { throw AccountError.invalidResponse }
+        chores = try HouseholdChores(household: household)
+        if container.contains(.replayed) {
+            guard try container.decode(Bool.self, forKey: .replayed) else { throw AccountError.invalidResponse }
+            replayed = true
+        } else {
+            replayed = false
+        }
     }
 }
 
