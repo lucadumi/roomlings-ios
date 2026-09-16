@@ -100,39 +100,66 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     private func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
-        guard button.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(button.description) }
-        // A disabled SwiftUI button swallows a tap silently, which looks exactly like a screen
-        // that never changed, so wait for it to become usable instead of tapping into nothing.
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
-        guard XCTWaiter.wait(for: [enabled], timeout: Wait.control) == .completed else {
-            throw FlowError.missingElement("\(button.description) stayed disabled")
+        guard button.exists || button.waitForExistence(timeout: Wait.control) else {
+            throw FlowError.missingElement(button.description)
         }
-        // Menus can report hittable while partly outside the screen.
-        func isReachable() -> Bool {
-            button.isHittable && !button.frame.isEmpty && app.frame.contains(button.frame)
-        }
-        for _ in 0..<6 where !isReachable() {
-            let chores = app.otherElements["chores-sheet"]
-            let sheet = chores.exists ? chores : app.otherElements["account-sheet"]
-            let scroll = sheet.exists ? sheet.scrollViews.firstMatch : app.scrollViews.firstMatch
-            var area = (scroll.exists ? scroll.frame : app.frame).intersection(app.frame)
-            let keyboard = app.keyboards.firstMatch
-            if keyboard.exists && keyboard.frame.minY > area.minY + 44 {
-                area.size.height = min(area.height, keyboard.frame.minY - area.minY - 44)
+        if !button.isEnabled {
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
+            guard XCTWaiter.wait(for: [enabled], timeout: Wait.control) == .completed else {
+                throw FlowError.missingElement("\(button.description) stayed disabled")
             }
-            guard area.height > 44 else { throw FlowError.missingElement("A visible scroll area for \(button.description)") }
-            let down = button.frame.midY < area.midY
-            let origin = app.coordinate(withNormalizedOffset: .zero)
-            let start = origin.withOffset(CGVector(dx: area.midX - app.frame.minX,
-                                                   dy: area.minY - app.frame.minY + area.height * (down ? 0.25 : 0.75)))
-            let end = origin.withOffset(CGVector(dx: area.midX - app.frame.minX,
-                                                 dy: area.minY - app.frame.minY + area.height * (down ? 0.75 : 0.25)))
-            start.press(forDuration: 0.05, thenDragTo: end)
-            let reachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: button)
-            _ = XCTWaiter.wait(for: [reachable], timeout: Wait.flip)
         }
-        guard isReachable() else { throw FlowError.missingElement("\(button.description) could not be reached") }
-        button.tap()
+        let identifier = button.identifier
+        let name = identifier.isEmpty ? button.label : identifier
+        let scroll = app.scrollViews.containing(button.elementType, identifier: name).firstMatch
+        for attempt in 0...8 {
+            let appFrame = app.frame
+            let frame = button.frame
+            let canScroll = scroll.exists
+            var area = canScroll ? scroll.frame.intersection(appFrame) : appFrame
+            let keyboard = app.keyboards.firstMatch
+            if canScroll && keyboard.exists {
+                let keyboardFrame = keyboard.frame
+                if keyboardFrame.minY > area.minY + 44 && keyboardFrame.intersects(area) {
+                    area.size.height = min(area.height, keyboardFrame.minY - area.minY - 44)
+                }
+            }
+            // Asking XCTest for offscreen hit points can fail before scrolling ever starts.
+            if !frame.isEmpty && area.contains(frame) {
+                if !button.isHittable {
+                    let reachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: button)
+                    guard XCTWaiter.wait(for: [reachable], timeout: Wait.flip) == .completed else {
+                        throw FlowError.missingElement("\(button.description) is visible but blocked")
+                    }
+                }
+                button.tap()
+                return
+            }
+            guard canScroll, attempt < 8 else { throw FlowError.missingElement("\(button.description) could not be reached") }
+            guard area.height > 44 else { throw FlowError.missingElement("A visible scroll area for \(button.description)") }
+            let down = frame.midY < area.midY
+            // Use the sheet's gutter so dragging cannot focus a text field or open a menu.
+            let x = area.minX - appFrame.minX + 8
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: x, dy: area.minY - appFrame.minY + area.height * (down ? 0.2 : 0.8)))
+            let end = origin.withOffset(CGVector(dx: x, dy: area.minY - appFrame.minY + area.height * (down ? 0.8 : 0.2)))
+            start.press(forDuration: 0.01, thenDragTo: end)
+        }
+    }
+
+    @MainActor
+    private func setSwitch(_ control: XCUIElement, on: Bool, in app: XCUIApplication) throws {
+        guard control.exists || control.waitForExistence(timeout: Wait.control) else {
+            throw FlowError.missingElement(control.description)
+        }
+        let wanted = on ? "1" : "0"
+        for _ in 0..<3 {
+            if control.value as? String == wanted { return }
+            try tap(control, in: app)
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", wanted), object: control)
+            if XCTWaiter.wait(for: [changed], timeout: Wait.flip) == .completed { return }
+        }
+        throw FlowError.missingElement("\(control.description) did not change to \(wanted)")
     }
 
     @MainActor
@@ -394,10 +421,10 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Chore name"], "Sweep after dinner")
         try choose("Weekly", from: "Repeat", in: app)
         try choose("One-off", from: "Repeat", in: app)
-        try tap(app.switches["Ada"], in: app)
+        try setSwitch(app.switches["Ada"], on: false, in: app)
         XCTAssertFalse(app.buttons["Create chore"].isEnabled)
         XCTAssertFalse(picker("Next turn", in: app).isEnabled)
-        try tap(app.switches["Ada"], in: app)
+        try setSwitch(app.switches["Ada"], on: true, in: app)
         try tap(app.buttons["Create chore"], in: app)
         XCTAssertTrue(app.staticTexts["Chore added."].waitForExistence(timeout: Wait.control))
         let added = try await choreState(home.id)
