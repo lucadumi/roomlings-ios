@@ -3,6 +3,7 @@ import Foundation
 public enum AccountInputField: String, Sendable {
     case email, emailCode, name, deviceLabel, recoveryCode
     case memberName, budgetCents, invitationCode
+    case title, notes, roomID, area, componentID, dueDate, repeatDays, rotation, turn, version, choreVersion
 }
 
 public enum AccountServerCode: String, Sendable, Codable {
@@ -14,6 +15,9 @@ public enum AccountServerCode: String, Sendable, Codable {
     case authProviderUnavailable = "AUTH_PROVIDER_UNAVAILABLE"
     case clientUnsupported = "CLIENT_UNSUPPORTED"
     case nativeClientRequired = "NATIVE_CLIENT_REQUIRED"
+    case mutationIDConflict = "MUTATION_ID_CONFLICT"
+    case mutationPayloadChanged = "MUTATION_PAYLOAD_CHANGED"
+    case mutationTooOld = "MUTATION_TOO_OLD"
 }
 
 /// Server text, response bodies, request URLs and underlying errors are deliberately not retained.
@@ -28,6 +32,8 @@ public enum AccountError: Error, Sendable, Equatable, LocalizedError {
     case server(status: Int, code: AccountServerCode?)
     case operationInProgress
     case credentialStorage
+    case accountStateRequired
+    case householdSelectionChanged
 
     public var errorDescription: String? {
         switch self {
@@ -51,6 +57,10 @@ public enum AccountError: Error, Sendable, Equatable, LocalizedError {
             "Another account operation is still in progress."
         case .credentialStorage:
             "The account credential could not be read or saved securely."
+        case .accountStateRequired:
+            "Restore your native account and household before making this change."
+        case .householdSelectionChanged:
+            "The selected household changed. Review the current household before continuing."
         }
     }
 }

@@ -5,8 +5,13 @@ struct RoomPreviewScreen: View {
     @State private var generation = UUID()
     @State private var failure: String?
     @State private var accounts = AccountModel.live()
-    @State private var showingAccount = false
+    @State private var presentedSheet: Sheet?
     @State private var headerHeight: CGFloat = 88
+
+    private enum Sheet: String, Identifiable {
+        case account, chores
+        var id: String { rawValue }
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -17,7 +22,7 @@ struct RoomPreviewScreen: View {
                 left: Double(max(0, geometry.safeAreaInsets.leading))
             )
             ZStack(alignment: .top) {
-                RoomWebView(paused: scenePhase != .active || showingAccount, room: accounts.room, viewportInsets: insets) { event in
+                RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room, viewportInsets: insets) { event in
                     switch event {
                     case .status(.unavailable):
                         failure = "The shared room renderer could not start. Reload the room to try again."
@@ -25,6 +30,8 @@ struct RoomPreviewScreen: View {
                         failure = message
                     case .status:
                         break
+                    case .openChores(let householdID):
+                        openChores(householdID: householdID)
                     }
                 }
                 .id(generation)
@@ -34,19 +41,43 @@ struct RoomPreviewScreen: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             }
         }
-        .sheet(isPresented: $showingAccount) { AccountSheet(model: accounts) }
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .account: AccountSheet(model: accounts)
+            case .chores: ChoresSheet(model: accounts)
+            }
+        }
         .task {
             await accounts.start()
-            showingAccount = !accounts.signedIn || accounts.state?.session == nil || accounts.message != nil
+            if !accounts.signedIn || accounts.state?.session == nil || accounts.message != nil {
+                presentedSheet = .account
+            }
         }
-        .onChange(of: accounts.room.householdID) { failure = nil }
+        .onChange(of: accounts.room.householdID) { _, householdID in
+            failure = nil
+            if presentedSheet == .chores {
+                presentedSheet = householdID == nil ? .account : nil
+            }
+        }
         .onChange(of: accounts.signedIn) { previous, signedIn in
-            if previous && !signedIn { showingAccount = true }
+            if previous && !signedIn { presentedSheet = .account }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && accounts.restored && !accounts.busy {
                 Task { await accounts.refresh() }
             }
+        }
+    }
+
+    private func openChores(householdID: UUID) {
+        guard accounts.canUseAccount, accounts.state?.session?.household.id == householdID else {
+            accounts.message = "Open your current household before using its chores."
+            presentedSheet = .account
+            return
+        }
+        if presentedSheet == nil {
+            if !accounts.busy { accounts.clearFeedback() }
+            presentedSheet = .chores
         }
     }
 
@@ -58,7 +89,8 @@ struct RoomPreviewScreen: View {
                 .accessibilityIdentifier("household-title")
             Spacer(minLength: 12)
             Button {
-                showingAccount = true
+                accounts.clearFeedback()
+                presentedSheet = .account
             } label: {
                 Label(accounts.signedIn ? "Account" : "Sign in", systemImage: "person.crop.circle")
             }

@@ -18,6 +18,7 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 ## Usage
 
 - Sign in or recover access, create/join a household, and open its saved kitchen.
+- Open **Chores** from the room to view, add and complete shared tasks, with schedules and rotations saved on the server.
 - Shared web fonts, colours and graphics; sessions stay in the native Keychain.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
@@ -31,5 +32,7 @@ node Scripts/test-accounts.mjs
 ```
 
 Use **Product > Test** for room controls. Follow the [contributor rules](AGENTS.md); changes go through PRs.
+Use `node Scripts/test-accounts.mjs --chores-only` for the isolated native chores flows.
+Use `--ui-test TestClass/testMethod` to select individual UI flows.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.

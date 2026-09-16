@@ -40,6 +40,7 @@ const program = ts.createProgram([
     react: [`${typeRoot}/react/index.d.ts`],
     'react/*': [`${typeRoot}/react/*`],
     'react-dom/*': [`${typeRoot}/react-dom/*`],
+    'lucide-react': [dirname(requireWeb.resolve('lucide-react/package.json'))],
     zod: [dirname(requireWeb.resolve('zod/package.json'))],
   },
 })
@@ -52,7 +53,7 @@ if (diagnostics.length) {
   }))
   throw new Error('The shared room could not be type-checked. Use a compatible Roomlings web checkout.')
 }
-const aliases = ['react', 'react-dom', 'zod'].map((name) => ({
+const aliases = ['react', 'react-dom', 'zod', 'lucide-react'].map((name) => ({
   find: name,
   replacement: dirname(requireWeb.resolve(`${name}/package.json`)),
 }))
@@ -93,6 +94,18 @@ await build({
 })
 await mkdir(output, { recursive: true })
 await copyFile(join(project, 'RoomRenderer', 'index.html'), join(output, 'index.html'))
+const { roomIds, roomCatalog } = await import(pathToFileURL(join(source, 'shared/rooms.ts')).href)
+const { componentCatalog, componentChoreArea, defaultRoomComponents } = await import(pathToFileURL(join(source, 'shared/roomComponents.ts')).href)
+await writeFile(join(output, 'chores.json'), JSON.stringify({
+  version: 1,
+  rooms: roomIds.map((id) => ({ id, name: roomCatalog[id].name, areas: roomCatalog[id].areas })),
+  componentAreas: Object.fromEntries(Object.keys(componentCatalog).map((kind) => [
+    kind, Object.fromEntries(roomIds.map((roomId) => [roomId, componentChoreArea({ kind, roomId })])),
+  ])),
+  defaultComponents: defaultRoomComponents().map(({ id, name, kind, roomId, slotId, installed }) => ({
+    id, name, kind, roomId, slotId, installed,
+  })),
+}, null, 2) + '\n')
 await writeFile(join(output, 'source.json'), JSON.stringify({
   bridgeVersion: 1,
   webRevision: revision,

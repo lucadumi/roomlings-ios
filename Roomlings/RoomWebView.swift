@@ -5,28 +5,51 @@ enum RoomRenderStatus: String, Decodable {
     case loading, ready, unavailable
 }
 
-enum RoomRenderEvent {
+enum RoomRenderEvent: Equatable {
     case status(RoomRenderStatus)
+    case openChores(householdID: UUID)
     case failure(String)
 }
 
 struct RoomBridgeMessage: Decodable {
-    let version: Int
-    let type: String
-    let status: RoomRenderStatus
+    let event: RoomRenderEvent
+
+    private enum CodingKeys: String, CodingKey {
+        case version, type, status
+        case householdID = "householdId"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard try container.decode(Int.self, forKey: .version) == 1 else {
+            throw BridgeError.invalidMessage
+        }
+        switch try container.decode(String.self, forKey: .type) {
+        case "status":
+            event = .status(try container.decode(RoomRenderStatus.self, forKey: .status))
+        case "open-chores":
+            event = .openChores(householdID: try container.decode(UUID.self, forKey: .householdID))
+        default:
+            throw BridgeError.invalidMessage
+        }
+    }
 
     static func decode(_ body: Any) throws -> Self {
-        guard let fields = body as? [String: Any],
-              Set(fields.keys) == ["version", "type", "status"] else {
+        guard let fields = body as? [String: Any] else {
+            throw BridgeError.invalidMessage
+        }
+        let expected: Set<String>
+        switch fields["type"] as? String {
+        case "status": expected = ["version", "type", "status"]
+        case "open-chores": expected = ["version", "type", "householdId"]
+        default: throw BridgeError.invalidMessage
+        }
+        guard Set(fields.keys) == expected else {
             throw BridgeError.invalidMessage
         }
         let data = try JSONSerialization.data(withJSONObject: fields)
         guard data.count <= 1_024 else { throw BridgeError.invalidMessage }
-        let message = try JSONDecoder().decode(Self.self, from: data)
-        guard message.version == 1, message.type == "status" else {
-            throw BridgeError.invalidMessage
-        }
-        return message
+        return try JSONDecoder().decode(Self.self, from: data)
     }
 
     enum BridgeError: Error {
@@ -160,7 +183,7 @@ struct RoomWebView: UIViewRepresentable {
                 return
             }
             do {
-                report(.status(try RoomBridgeMessage.decode(message.body).status))
+                report(try RoomBridgeMessage.decode(message.body).event)
             } catch {
                 report(.failure("The room sent an invalid app message. Reload the room to try again."))
             }

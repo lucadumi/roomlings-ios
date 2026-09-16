@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AccountSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.roomControlAppearance) private var controlAppearance
     @Bindable var model: AccountModel
     @State private var page = Page.email
     @State private var email = ""
@@ -106,7 +107,7 @@ struct AccountSheet: View {
         .presentationBackground(RoomTheme.paper)
         .presentationCornerRadius(16)
         .interactiveDismissDisabled(model.busy)
-        .modifier(AccountPresentation(idealHeight: contentHeight + headerHeight + 1))
+        .modifier(RoomSheetPresentation(idealHeight: contentHeight + headerHeight + 1))
         .onAppear {
             if model.signedIn { page = .account }
             memberName = model.state?.account?.name ?? ""
@@ -304,8 +305,15 @@ struct AccountSheet: View {
         AccountSection {
             RoomField("Household name", text: $householdName)
             RoomField("Your name in this household", text: $memberName)
-            Picker("Currency", selection: $currency) {
-                ForEach(currencies, id: \.self) { value in Text(value.rawValue).tag(value) }
+            if controlAppearance == .roomlings {
+                RoomPickerField("Currency", selectedLabel: currency.rawValue, selection: $currency) {
+                    ForEach(currencies, id: \.self) { value in Text(value.rawValue).tag(value) }
+                }
+            } else {
+                Picker("Currency", selection: $currency) {
+                    ForEach(currencies, id: \.self) { value in Text(value.rawValue).tag(value) }
+                }
+                .accessibilityIdentifier("Currency")
             }
             RoomField("Monthly grocery budget", text: $budget)
                 .keyboardType(.decimalPad)
@@ -346,18 +354,6 @@ struct AccountSheet: View {
     private func finishEntry() {
         if model.state?.session != nil { dismiss() }
         else { page = .account }
-    }
-}
-
-private struct AccountPresentation: ViewModifier {
-    let idealHeight: CGFloat
-
-    func body(content: Content) -> some View {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            content.frame(idealWidth: 560, idealHeight: idealHeight).presentationSizing(.fitted)
-        } else {
-            content.presentationDetents([.large]).presentationDragIndicator(.visible)
-        }
     }
 }
 

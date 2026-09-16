@@ -146,6 +146,8 @@ actor MemoryTokenStore: SessionTokenStore {
     var clearFailure: (any Error)?
     let saveStarted: Signal?
     let finishSave: Signal?
+    let clearStarted: Signal?
+    let finishClear: Signal?
 
     init(
         token: SessionToken? = nil,
@@ -153,7 +155,9 @@ actor MemoryTokenStore: SessionTokenStore {
         saveFailure: (any Error)? = nil,
         clearFailure: (any Error)? = nil,
         saveStarted: Signal? = nil,
-        finishSave: Signal? = nil
+        finishSave: Signal? = nil,
+        clearStarted: Signal? = nil,
+        finishClear: Signal? = nil
     ) {
         self.token = token
         self.readFailure = readFailure
@@ -161,6 +165,8 @@ actor MemoryTokenStore: SessionTokenStore {
         self.clearFailure = clearFailure
         self.saveStarted = saveStarted
         self.finishSave = finishSave
+        self.clearStarted = clearStarted
+        self.finishClear = finishClear
     }
 
     func read() async throws -> SessionToken? {
@@ -179,7 +185,12 @@ actor MemoryTokenStore: SessionTokenStore {
 
     func clear() async throws {
         clearAttempts += 1
+        await clearStarted?.signal()
+        await finishClear?.wait()
         if let clearFailure { throw clearFailure }
         token = nil
     }
+
+    func setReadFailure(_ error: (any Error)?) { readFailure = error }
+    func replaceToken(_ token: SessionToken?) { self.token = token }
 }
