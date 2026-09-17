@@ -123,7 +123,7 @@ public actor AccountSession {
     public func addChore(
         _ draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
-        try await mutateChores(householdID: householdID, version: version) { [api] token in
+        try await mutateChores(householdID: householdID, version: version) { [api] token, _ in
             try await api.addChore(draft, version: version, mutationID: mutationID, token: token)
         }
     }
@@ -132,16 +132,27 @@ public actor AccountSession {
     public func completeChore(
         id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
-        try await mutateChores(householdID: householdID, version: version) { [api] token in
+        try await mutateChores(householdID: householdID, version: version) { [api] token, _ in
             try await api.completeChore(
                 id: id, choreVersion: choreVersion, version: version, mutationID: mutationID, token: token
             )
         }
     }
 
+    @discardableResult
+    public func undoChoreCompletion(
+        id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateChores(householdID: householdID, version: version) { [api] token, memberID in
+            try await api.undoChoreCompletion(
+                id: id, choreVersion: choreVersion, version: version, mutationID: mutationID, memberID: memberID, token: token
+            )
+        }
+    }
+
     private func mutateChores(
         householdID: UUID, version: Int64,
-        _ operation: @Sendable (SessionToken) async throws -> ChoreMutationResponse
+        _ operation: @Sendable (SessionToken, UUID) async throws -> ChoreMutationResponse
     ) async throws -> AccountState {
         try beginOperation()
         defer { isBusy = false }
@@ -155,7 +166,7 @@ public actor AccountSession {
             throw AccountError.accountStateRequired
         }
         do {
-            let response = try await operation(token)
+            let response = try await operation(token, selected.memberID)
             try Task.checkCancellation()
             guard state == original, stateToken == token,
                   response.household.id == householdID,

@@ -7,7 +7,7 @@ enum RoomRenderStatus: String, Decodable {
 
 enum RoomRenderEvent: Equatable {
     case status(RoomRenderStatus)
-    case openChores(householdID: UUID)
+    case openChores(householdID: UUID, componentID: String? = nil)
     case failure(String)
 }
 
@@ -17,6 +17,7 @@ struct RoomBridgeMessage: Decodable {
     private enum CodingKeys: String, CodingKey {
         case version, type, status
         case householdID = "householdId"
+        case componentID = "componentId"
     }
 
     init(from decoder: any Decoder) throws {
@@ -28,7 +29,15 @@ struct RoomBridgeMessage: Decodable {
         case "status":
             event = .status(try container.decode(RoomRenderStatus.self, forKey: .status))
         case "open-chores":
-            event = .openChores(householdID: try container.decode(UUID.self, forKey: .householdID))
+            let componentID: String?
+            if container.contains(.componentID) {
+                let value = try container.decode(String.self, forKey: .componentID)
+                guard (1...100).contains(value.utf16.count) else { throw BridgeError.invalidMessage }
+                componentID = value
+            } else {
+                componentID = nil
+            }
+            event = .openChores(householdID: try container.decode(UUID.self, forKey: .householdID), componentID: componentID)
         default:
             throw BridgeError.invalidMessage
         }
@@ -38,10 +47,12 @@ struct RoomBridgeMessage: Decodable {
         guard let fields = body as? [String: Any] else {
             throw BridgeError.invalidMessage
         }
-        let expected: Set<String>
+        var expected: Set<String>
         switch fields["type"] as? String {
         case "status": expected = ["version", "type", "status"]
-        case "open-chores": expected = ["version", "type", "householdId"]
+        case "open-chores":
+            expected = ["version", "type", "householdId"]
+            if fields.keys.contains("componentId") { expected.insert("componentId") }
         default: throw BridgeError.invalidMessage
         }
         guard Set(fields.keys) == expected else {
@@ -61,10 +72,11 @@ struct RoomWebView: UIViewRepresentable {
     let paused: Bool
     var room = RoomVisualState.preview
     var viewportInsets = RoomViewportInsets.zero
+    var roomZoom: Double = 1
     let onEvent: (RoomRenderEvent) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(paused: paused, room: room, viewportInsets: viewportInsets, onEvent: onEvent)
+        Coordinator(paused: paused, room: room, viewportInsets: viewportInsets, roomZoom: roomZoom, onEvent: onEvent)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -98,7 +110,7 @@ struct RoomWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onEvent = onEvent
-        context.coordinator.update(paused: paused, room: room, viewportInsets: viewportInsets)
+        context.coordinator.update(paused: paused, room: room, viewportInsets: viewportInsets, roomZoom: roomZoom)
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -118,14 +130,16 @@ struct RoomWebView: UIViewRepresentable {
         private var paused: Bool
         private var room: RoomVisualState
         private var viewportInsets: RoomViewportInsets
+        private var roomZoom: Double
         private var loaded = false
         private var active = true
 
         init(paused: Bool, room: RoomVisualState = .preview, viewportInsets: RoomViewportInsets = .zero,
-             onEvent: @escaping (RoomRenderEvent) -> Void) {
+             roomZoom: Double = 1, onEvent: @escaping (RoomRenderEvent) -> Void) {
             self.paused = paused
             self.room = room
             self.viewportInsets = viewportInsets
+            self.roomZoom = roomZoom
             self.onEvent = onEvent
         }
 
@@ -144,11 +158,13 @@ struct RoomWebView: UIViewRepresentable {
             return url.standardizedFileURL.resolvingSymlinksInPath() == index.standardizedFileURL.resolvingSymlinksInPath()
         }
 
-        func update(paused: Bool, room: RoomVisualState, viewportInsets: RoomViewportInsets) {
-            guard self.paused != paused || self.room != room || self.viewportInsets != viewportInsets else { return }
+        func update(paused: Bool, room: RoomVisualState, viewportInsets: RoomViewportInsets, roomZoom: Double) {
+            guard self.paused != paused || self.room != room || self.viewportInsets != viewportInsets
+                    || self.roomZoom != roomZoom else { return }
             self.paused = paused
             self.room = room
             self.viewportInsets = viewportInsets
+            self.roomZoom = roomZoom
             sendState()
         }
 
@@ -158,12 +174,13 @@ struct RoomWebView: UIViewRepresentable {
             let paused = paused
             let room = room
             let viewportInsets = viewportInsets
+            let roomZoom = roomZoom
             evaluation = Task { @MainActor [weak self, weak webView] in
                 guard let self, let webView else { return }
                 do {
                     _ = try await webView.callAsyncJavaScript(
                         "return window.RoomlingsRoom.receive(message);",
-                        arguments: ["message": try room.message(paused: paused, viewportInsets: viewportInsets)],
+                        arguments: ["message": try room.message(paused: paused, viewportInsets: viewportInsets, roomZoom: roomZoom)],
                         in: nil,
                         contentWorld: .page
                     )

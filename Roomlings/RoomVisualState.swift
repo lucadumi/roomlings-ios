@@ -39,7 +39,7 @@ struct RoomVisualState: Equatable, Sendable {
         self.components = components
     }
 
-    func message(paused: Bool, viewportInsets: RoomViewportInsets = .zero) throws -> [String: Any] {
+    func message(paused: Bool, viewportInsets: RoomViewportInsets = .zero, roomZoom: Double = 1) throws -> [String: Any] {
         struct Message: Encodable {
             let version = 1
             let type = "state"
@@ -47,11 +47,12 @@ struct RoomVisualState: Equatable, Sendable {
             let householdId: String?
             let choresEnabled: Bool
             let roomStyle: String
+            let roomZoom: Double
             let roomComponents: JSONValue?
             let viewportInsets: RoomViewportInsets
         }
         let message = Message(paused: paused, householdId: householdID, choresEnabled: householdID != nil, roomStyle: roomStyle,
-                              roomComponents: components, viewportInsets: viewportInsets)
+                              roomZoom: roomZoom, roomComponents: components, viewportInsets: viewportInsets)
         let data = try JSONEncoder().encode(message)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw AccountError.invalidResponse

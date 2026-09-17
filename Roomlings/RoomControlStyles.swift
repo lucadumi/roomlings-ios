@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 enum RoomControlAppearance: Sendable {
     case system, roomlings
@@ -150,7 +149,6 @@ struct RoomMenuPicker<Selection: Hashable, Options: View>: View {
 
 struct RoomSwitch: View {
     @Environment(\.roomControlAppearance) private var appearance
-    @Environment(\.isEnabled) private var enabled
     let label: String
     @Binding var isOn: Bool
 
@@ -161,65 +159,60 @@ struct RoomSwitch: View {
 
     var body: some View {
         if appearance == .roomlings {
-            HStack(spacing: 12) {
-                Text(label)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityHidden(true)
-                StyledRoomSwitch(label: label, isOn: $isOn)
-                    .fixedSize()
-            }
-            .frame(minHeight: 44)
-            .opacity(enabled ? 1 : 0.5)
+            StyledRoomSwitch(label: label, isOn: $isOn)
         } else {
             Toggle(label, isOn: $isOn)
         }
     }
 }
 
-private struct StyledRoomSwitch: UIViewRepresentable {
+private struct StyledRoomSwitch: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
+    @GestureState private var drag: CGFloat = 0
     let label: String
     @Binding var isOn: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator(isOn: $isOn) }
-
-    func makeUIView(context: Context) -> UISwitch {
-        let control = UISwitch()
-        control.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
-        control.setContentHuggingPriority(.required, for: .horizontal)
-        control.setContentCompressionResistancePriority(.required, for: .horizontal)
-        return control
-    }
-
-    func updateUIView(_ control: UISwitch, context: Context) {
-        context.coordinator.isOn = $isOn
-        control.accessibilityLabel = label
-        control.isEnabled = enabled
-        control.semanticContentAttribute = layoutDirection == .rightToLeft ? .forceRightToLeft : .forceLeftToRight
-        if control.isOn != isOn { control.setOn(isOn, animated: !reduceMotion) }
-        control.onTintColor = UIColor(RoomTheme.sage)
-        control.thumbTintColor = UIColor(isOn ? RoomTheme.paper : RoomTheme.muted)
-        control.tintColor = UIColor(RoomTheme.fieldBorder)
-        control.backgroundColor = UIColor(isOn ? RoomTheme.sage : RoomTheme.fieldSurface)
-        control.layer.cornerRadius = control.intrinsicContentSize.height / 2
-        control.layer.borderWidth = 1
-        control.layer.borderColor = UIColor(isOn ? RoomTheme.sage : RoomTheme.fieldBorder).cgColor
-        control.clipsToBounds = true
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISwitch, context: Context) -> CGSize? {
-        uiView.intrinsicContentSize
-    }
-
-    @MainActor
-    final class Coordinator: NSObject {
-        var isOn: Binding<Bool>
-
-        init(isOn: Binding<Bool>) { self.isOn = isOn }
-
-        @objc func changed(_ control: UISwitch) { isOn.wrappedValue = control.isOn }
+    var body: some View {
+        let direction: CGFloat = layoutDirection == .rightToLeft ? -1 : 1
+        let position = min(10, max(-10, (isOn ? 10 : -10) * direction + drag))
+        Button { isOn.toggle() } label: {
+            HStack(spacing: 12) {
+                Text(label).frame(maxWidth: .infinity, alignment: .leading)
+                ZStack {
+                    RoundedRectangle(cornerRadius: RoomTheme.radius)
+                        .fill(isOn ? RoomTheme.leafSoft : RoomTheme.fieldSurface)
+                    RoundedRectangle(cornerRadius: RoomTheme.radius)
+                        .stroke(isOn ? RoomTheme.sage : RoomTheme.fieldBorder)
+                    RoundedRectangle(cornerRadius: max(0, RoomTheme.radius - 3))
+                        .fill(isOn ? RoomTheme.sage : RoomTheme.muted)
+                        .frame(width: 26, height: 26)
+                        .offset(x: position)
+                }
+                .frame(width: 52, height: 32)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isOn)
+                .highPriorityGesture(DragGesture(minimumDistance: 6)
+                    .updating($drag) { value, offset, _ in
+                        if enabled && abs(value.translation.width) > abs(value.translation.height) {
+                            offset = value.translation.width
+                        }
+                    }
+                    .onEnded { value in
+                        guard enabled, abs(value.translation.width) > abs(value.translation.height) else { return }
+                        isOn = (isOn ? 10 : -10) + value.translation.width * direction > 0
+                    })
+            }
+            .font(RoomTheme.body())
+            .foregroundStyle(RoomTheme.ink)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.5)
+        .accessibilityLabel(label)
+        .accessibilityValue(isOn ? "On" : "Off")
+        .accessibilityAddTraits(.isToggle)
     }
 }
 
