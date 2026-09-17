@@ -31,7 +31,7 @@ public struct APIConfiguration: Sendable, Equatable {
         try self.init(origin: origin.absoluteString, requestTimeout: requestTimeout)
     }
 
-    func url(for endpoint: AccountEndpoint) -> URL {
+    func url(for endpoint: APIEndpoint) -> URL {
         origin.appendingPathComponent(endpoint.path)
     }
 
@@ -50,10 +50,20 @@ public struct APIConfiguration: Sendable, Equatable {
     }
 }
 
-enum AccountEndpoint: Equatable {
+enum APIEndpoint: Equatable {
     case account, code, verify, recover, logout
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
+    case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
+
+    var method: String {
+        switch self {
+        case .account: "GET"
+        case .editShoppingItem: "PATCH"
+        case .removeShoppingItem: "DELETE"
+        default: "POST"
+        }
+    }
 
     var path: String {
         switch self {
@@ -68,6 +78,10 @@ enum AccountEndpoint: Equatable {
         case .addChore: "api/chores"
         case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         case .undoChoreCompletion(let id): "api/chores/completions/\(id.uuidString.lowercased())/undo"
+        case .addShoppingItem: "api/shopping/items"
+        case .editShoppingItem(let id), .removeShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())"
+        case .claimShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/claim"
+        case .pickShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/pick"
         }
     }
 }

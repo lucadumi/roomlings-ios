@@ -7,6 +7,7 @@ public actor AccountSession {
     public var selectedHousehold: HouseholdSnapshot? { state?.session?.household }
 
     private let api: AccountAPI
+    private let shoppingAPI: ShoppingAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
 
@@ -15,7 +16,11 @@ public actor AccountSession {
         tokenStore: any SessionTokenStore,
         transport: (any HTTPTransport)? = nil
     ) {
-        api = AccountAPI(configuration: configuration, transport: transport ?? URLSessionTransport(configuration: configuration))
+        let client = NativeAPIClient(
+            configuration: configuration, transport: transport ?? URLSessionTransport(configuration: configuration)
+        )
+        api = AccountAPI(client: client)
+        shoppingAPI = ShoppingAPI(client: client)
         self.tokenStore = tokenStore
     }
 
@@ -123,7 +128,7 @@ public actor AccountSession {
     public func addChore(
         _ draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
-        try await mutateChores(householdID: householdID, version: version) { [api] token, _ in
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, _, _ in
             try await api.addChore(draft, version: version, mutationID: mutationID, token: token)
         }
     }
@@ -132,7 +137,7 @@ public actor AccountSession {
     public func completeChore(
         id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
-        try await mutateChores(householdID: householdID, version: version) { [api] token, _ in
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, _, _ in
             try await api.completeChore(
                 id: id, choreVersion: choreVersion, version: version, mutationID: mutationID, token: token
             )
@@ -143,16 +148,67 @@ public actor AccountSession {
     public func undoChoreCompletion(
         id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
-        try await mutateChores(householdID: householdID, version: version) { [api] token, memberID in
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, _ in
             try await api.undoChoreCompletion(
                 id: id, choreVersion: choreVersion, version: version, mutationID: mutationID, memberID: memberID, token: token
             )
         }
     }
 
-    private func mutateChores(
+    @discardableResult
+    public func addShoppingItem(
+        _ draft: ShoppingDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(.add(draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func editShoppingItem(
+        id: UUID, draft: ShoppingDraft, itemVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(
+            .edit(id, draft, itemVersion), householdID: householdID, version: version, mutationID: mutationID
+        )
+    }
+
+    @discardableResult
+    public func removeShoppingItem(
+        id: UUID, itemVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(.remove(id, itemVersion), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func claimShoppingItem(
+        id: UUID, claim: Bool, itemVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(
+            .claim(id, claim, itemVersion), householdID: householdID, version: version, mutationID: mutationID
+        )
+    }
+
+    @discardableResult
+    public func pickShoppingItem(
+        id: UUID, pickedUp: Bool, itemVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(
+            .pick(id, pickedUp, itemVersion), householdID: householdID, version: version, mutationID: mutationID
+        )
+    }
+
+    private func mutateShopping(
+        _ change: ShoppingChange, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [shoppingAPI] token, memberID, shopping in
+            try await shoppingAPI.mutate(
+                change, version: version, mutationID: mutationID, memberID: memberID, shopping: shopping, token: token
+            )
+        }
+    }
+
+    private func mutateSelectedHousehold<Projection: HouseholdProjection>(
         householdID: UUID, version: Int64,
-        _ operation: @Sendable (SessionToken, UUID) async throws -> ChoreMutationResponse
+        _ operation: @Sendable (SessionToken, UUID, Projection) async throws -> HouseholdMutationResponse<Projection>
     ) async throws -> AccountState {
         try beginOperation()
         defer { isBusy = false }
@@ -160,20 +216,21 @@ public actor AccountSession {
               let selected = original.session else { throw AccountError.accountStateRequired }
         guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
         let storedToken = try await readCredential()
+        try Task.checkCancellation()
         guard let token = storedToken, token == stateToken else { throw AccountError.accountStateRequired }
-        let chores = try HouseholdChores(household: selected.household)
-        guard chores.activeMembers.contains(where: { $0.id == selected.memberID }) else {
+        let projection = try Projection(household: selected.household)
+        guard projection.activeMembers.contains(where: { $0.id == selected.memberID }) else {
             throw AccountError.accountStateRequired
         }
         do {
-            let response = try await operation(token, selected.memberID)
+            let response = try await operation(token, selected.memberID, projection)
             try Task.checkCancellation()
             guard state == original, stateToken == token,
                   response.household.id == householdID,
                   response.household.version >= selected.household.version,
                   response.household.version > version,
                   response.replayed || response.household.version == version + 1,
-                  response.chores.activeMembers.contains(where: { $0.id == selected.memberID }) else {
+                  response.projection.activeMembers.contains(where: { $0.id == selected.memberID }) else {
                 throw AccountError.invalidResponse
             }
             let updated = try original.replacingHousehold(response.household)

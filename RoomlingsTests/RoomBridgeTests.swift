@@ -7,6 +7,11 @@ final class RoomBridgeTests: XCTestCase {
     func testTheWebFontFamiliesAreRegisteredNatively() {
         XCTAssertNotNil(UIFont(name: "DMSans-9ptRegular_Regular", size: 16))
         XCTAssertNotNil(UIFont(name: "Baloo2-SemiBold", size: 26))
+        let logo = Bundle.main.url(forResource: "roomlings-loader", withExtension: "png", subdirectory: "RoomRenderer")
+            .flatMap { UIImage(contentsOfFile: $0.path) }
+        XCTAssertNotNil(logo)
+        XCTAssertEqual(logo?.size.width, 256)
+        XCTAssertEqual(logo?.size.height, 256)
     }
 
     func testBudgetInputKeepsExactIntegerCents() {
@@ -34,12 +39,13 @@ final class RoomBridgeTests: XCTestCase {
         let visual = try RoomVisualState(household: household)
         let insets = RoomViewportInsets(top: 150, right: 12, bottom: 34, left: 12)
         let message = try visual.message(paused: true, viewportInsets: insets, roomZoom: 1.35)
-        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
+        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
         XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["top"], 150)
         XCTAssertEqual(message["householdId"] as? String, householdID)
         XCTAssertEqual(message["roomStyle"] as? String, "clay")
         XCTAssertEqual(message["paused"] as? Bool, true)
         XCTAssertEqual(message["choresEnabled"] as? Bool, true)
+        XCTAssertEqual(message["shoppingEnabled"] as? Bool, true)
         XCTAssertEqual(message["roomZoom"] as? Double, 1.35)
         let encoded = String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
         for privateValue in ["private-invitation", "Ada", memberID, "budget", "expenses", "accessToken", "csrfToken"] {
@@ -49,6 +55,7 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertNil(preview["householdId"])
         XCTAssertNil(preview["roomComponents"])
         XCTAssertEqual(preview["choresEnabled"] as? Bool, false)
+        XCTAssertEqual(preview["shoppingEnabled"] as? Bool, false)
         XCTAssertEqual(preview["roomZoom"] as? Double, 1)
     }
 
@@ -74,13 +81,22 @@ final class RoomBridgeTests: XCTestCase {
             "componentId": "default-kitchen-sink",
         ])
         XCTAssertEqual(object.event, .openChores(householdID: householdID, componentID: "default-kitchen-sink"))
+        let shopping = try RoomBridgeMessage.decode([
+            "version": 1, "type": "open-shopping", "householdId": householdID.uuidString,
+        ])
+        XCTAssertEqual(shopping.event, .openShopping(householdID: householdID))
         let invalidMessages: [[String: Any]] = [
             ["version": 2, "type": "open-chores", "householdId": householdID.uuidString],
             ["version": true, "type": "open-chores", "householdId": householdID.uuidString],
             ["version": 1, "type": "open-chores", "householdId": "another-household"],
             ["version": 1, "type": "open-chores", "householdId": NSNull()],
             ["version": 1, "type": "open-chores"],
-            ["version": 1, "type": "open-shopping", "householdId": householdID.uuidString],
+            ["version": 1, "type": "open-checkout", "householdId": householdID.uuidString],
+            ["version": 1, "type": "open-shopping", "householdId": "unknown"],
+            ["version": 1, "type": "open-shopping", "householdId": householdID.uuidString, "componentId": "default-kitchen-fridge"],
+            ["version": 1, "type": "open-shopping", "householdId": householdID.uuidString, "accessToken": "not-allowed"],
+            ["version": 1, "type": "open-shopping"],
+            ["version": true, "type": "open-shopping", "householdId": householdID.uuidString],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "url": "https://example.com"],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": ""],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": NSNull()],

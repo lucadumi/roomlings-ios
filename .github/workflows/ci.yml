@@ -62,7 +62,7 @@ jobs:
   native:
     name: Native (${{ matrix.name }})
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -121,7 +121,7 @@ jobs:
           DEVICE: ${{ steps.simulator.outputs.device }}
         run: xcrun simctl bootstatus "$DEVICE" -b
       - name: Run native account and room flows
-        timeout-minutes: 20
+        timeout-minutes: 40
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
         run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room

@@ -31,6 +31,16 @@ const pendingCodes = new Set()
 let failDelivery = false
 let choreFailure = null
 const choreRequests = []
+let shoppingFailure = null
+const shoppingRequests = []
+const shoppingActors = new Map()
+let nextAccountLoad = null
+let activeAccountLoad = null
+function releaseAccountLoad() {
+  nextAccountLoad?.release()
+  activeAccountLoad?.release()
+  nextAccountLoad = null
+}
 const identity = (email) => {
   if (!identities.has(email)) identities.set(email, randomUUID())
   return { providerId: identities.get(email), email }
@@ -50,39 +60,75 @@ const provider = {
   },
 }
 const app = express()
-app.use('/api/chores', express.json(), (request, response, next) => {
-  if (request.method !== 'POST') { next(); return }
-  choreRequests.push({
-    path: request.originalUrl, version: request.body.version,
-    mutationId: request.body.mutationId, mutationVersion: request.body.mutationVersion,
-    native: request.get('X-Roomlings-Client') === 'ios',
-    browserHeaders: ['origin', 'cookie', 'x-csrf-token', 'sec-fetch-site'].some((name) => request.get(name) !== undefined),
+app.use('/api/account', async (request, response, next) => {
+  if (request.method !== 'GET' || request.path !== '/' || !nextAccountLoad) { next(); return }
+  const load = nextAccountLoad
+  nextAccountLoad = null
+  activeAccountLoad = load
+  await load.wait
+  activeAccountLoad = null
+  if (load.fail) { response.status(503).json({ error: 'Test account load unavailable' }); return }
+  next()
+})
+function observeMutations(path, requests, consumeFailure) {
+  app.use(path, express.json(), (request, response, next) => {
+    if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) { next(); return }
+    requests.push({
+      path: request.originalUrl, method: request.method, version: request.body.version, itemVersion: request.body.itemVersion,
+      mutationId: request.body.mutationId, mutationVersion: request.body.mutationVersion,
+      native: request.get('X-Roomlings-Client') === 'ios',
+      browserHeaders: ['origin', 'cookie', 'x-csrf-token', 'sec-fetch-site'].some((name) => request.get(name) !== undefined),
+    })
+    const failure = consumeFailure()
+    if (failure === 'unavailable') {
+      response.status(503).json({ error: 'Test household save unavailable' })
+      return
+    }
+    if (failure === 'lost-response') {
+      const sendJSON = response.json
+      response.json = function (body) {
+        if (this.statusCode >= 200 && this.statusCode < 300) {
+          this.destroy()
+          return this
+        }
+        return sendJSON.call(this, body)
+      }
+    }
+    next()
   })
+}
+observeMutations('/api/chores', choreRequests, () => {
   const failure = choreFailure
   choreFailure = null
-  if (failure === 'unavailable') {
-    response.status(503).json({ error: 'Test chore save unavailable' })
-    return
-  }
-  if (failure === 'lost-response') {
-    const sendJSON = response.json
-    response.json = function (body) {
-      if (this.statusCode >= 200 && this.statusCode < 300) {
-        this.destroy()
-        return this
-      }
-      return sendJSON.call(this, body)
-    }
-  }
-  next()
+  return failure
+})
+observeMutations('/api/shopping/items', shoppingRequests, () => {
+  const failure = shoppingFailure
+  shoppingFailure = null
+  return failure
 })
 app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
+app.post('/_fixture/loading', express.json(), (request, response) => {
+  const input = z.object({ hold: z.boolean(), fail: z.boolean().default(false) }).parse(request.body)
+  if (input.hold) {
+    if (nextAccountLoad || activeAccountLoad) throw new Error('A fixture account load is already held.')
+    let release
+    const wait = new Promise((resolve) => { release = resolve })
+    nextAccountLoad = { wait, release, fail: input.fail }
+  } else {
+    releaseAccountLoad()
+  }
+  response.json({ configured: true })
+})
 app.post('/_fixture/seed', express.json(), async (request, response) => {
   const email = accountEmailSchema.parse(request.body.email)
+  releaseAccountLoad()
   failDelivery = false
   choreFailure = null
   choreRequests.length = 0
+  shoppingFailure = null
+  shoppingRequests.length = 0
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
@@ -149,6 +195,80 @@ app.post('/_fixture/chores/state', express.json(), async (request, response) => 
   if (!household) throw new Error('The chore fixture household is missing.')
   response.json({ version: household.version, ...household.chores, requests: choreRequests })
 })
+async function shoppingRequest(householdId, path, fields, method = 'POST') {
+  const actor = shoppingActors.get(householdId)
+  const household = await store.get(householdId)
+  if (!actor || !household) throw new Error('The shopping fixture household or roommate is missing.')
+  const result = await fetch(`http://127.0.0.1:${server.address().port}/api/${path}`, {
+    method,
+    headers: { 'X-Roomlings-Client': 'ios', Authorization: `Bearer ${actor.token}`, 'Content-Type': 'application/json' },
+    ...(method === 'GET' ? {} : { body: JSON.stringify({
+      ...fields, version: household.version, mutationVersion: household.version, mutationId: randomUUID(),
+    }) }),
+  })
+  if (!result.ok) throw new Error(`Shopping fixture request failed (${result.status}).`)
+  return result.json()
+}
+app.post('/_fixture/shopping/seed', express.json(), async (request, response) => {
+  const input = z.object({ householdId: z.string().uuid(), invitation: z.string() }).parse(request.body)
+  const issued = await store.accounts.signIn(identity(`shopper-${input.householdId}@example.test`), 'Sam', 'Shopping fixture')
+  const joined = await store.accounts.accept(issued.session, input.invitation, 'Sam')
+  if (joined.session?.household.id !== input.householdId) throw new Error('The fixture invitation selected a different household.')
+  shoppingActors.set(input.householdId, { token: issued.token, memberID: joined.session.memberId })
+  const fridge = getRoomComponents(joined.session.household).find((component) => component.slotId === 'kitchen-fridge')
+  const supply = fridge?.supplies[0]
+  if (!fridge || !supply) throw new Error('The shopping fixture needs a configured fridge supply.')
+  await shoppingRequest(input.householdId, 'shopping/items', {
+    name: 'Milk', quantity: '2 cartons', notes: 'Unsweetened',
+    componentSource: { componentId: fridge.id, supplyId: supply.id },
+  })
+  const added = await shoppingRequest(input.householdId, 'shopping/items', { name: 'Oats', quantity: '1 bag', notes: '' })
+  const item = added.household.shopping.items.find((item) => item.name === 'Oats')
+  if (!item) throw new Error('The shopping fixture item was not added.')
+  await shoppingRequest(input.householdId, `shopping/items/${item.id}/claim`, { itemVersion: item.version, claimed: true })
+  shoppingRequests.length = 0
+  response.json({ memberID: joined.session.memberId })
+})
+app.post('/_fixture/shopping/failure', express.json(), (request, response) => {
+  shoppingFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
+app.post('/_fixture/shopping/remote', express.json(), async (request, response) => {
+  const input = z.object({
+    householdId: z.string().uuid(), action: z.enum(['read', 'add', 'edit', 'claim', 'release', 'pick']), itemId: z.string().uuid().optional(),
+  }).parse(request.body)
+  if (input.action === 'read') {
+    const state = await shoppingRequest(input.householdId, 'account', undefined, 'GET')
+    if (state.session?.household.id !== input.householdId) throw new Error('The shopping roommate selected a different household.')
+    response.json(state.session.household.shopping)
+    return
+  }
+  if (input.action === 'add') {
+    await shoppingRequest(input.householdId, 'shopping/items', { name: 'Bread', quantity: '1 loaf', notes: 'Added on another device' })
+  } else {
+    const household = await store.get(input.householdId)
+    const item = household?.shopping.items.find((item) => item.id === input.itemId)
+    if (!item) throw new Error('The shopping fixture item is missing.')
+    if (input.action === 'edit') {
+      await shoppingRequest(input.householdId, `shopping/items/${item.id}`,
+        { itemVersion: item.version, name: item.name, quantity: '3 cartons', notes: 'Changed on another device' }, 'PATCH')
+    } else {
+      const picking = input.action === 'pick'
+      await shoppingRequest(input.householdId, `shopping/items/${item.id}/${picking ? 'pick' : 'claim'}`,
+        { itemVersion: item.version, ...(picking ? { pickedUp: true } : { claimed: input.action === 'claim' }) })
+    }
+  }
+  response.json({ changed: true })
+})
+app.post('/_fixture/shopping/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const household = await store.get(id)
+  if (!household) throw new Error('The shopping fixture household is missing.')
+  response.json({
+    version: household.version, items: household.shopping.items, requests: shoppingRequests,
+    ledger: JSON.stringify({ budget: household.budget, expenses: household.expenses, settlements: household.settlements, runs: household.shopping.runs }),
+  })
+})
 app.use((error, _request, response, _next) => {
   console.error('Account fixture failed:', error.message)
   response.status(500).json({ error: 'Account fixture failed' })
@@ -188,13 +308,14 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 16)
+    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 20)
       + (values['include-room'] ? 1 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
     }
   }
 } finally {
+  releaseAccountLoad()
   const closed = once(server, 'close')
   server.close()
   await closed

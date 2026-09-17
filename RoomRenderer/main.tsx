@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ListChecks } from 'lucide-react'
+import { ListChecks, ShoppingBasket } from 'lucide-react'
 import { z } from 'zod'
 import { KitchenPreview } from '@roomlings-web/src/KitchenWorld.tsx'
 import { SceneLoading } from '@roomlings-web/src/Branding.tsx'
@@ -24,18 +24,20 @@ const stateSchema = z.object({
   roomZoom: z.number().min(1).max(1.5).default(1),
   householdId: z.string().uuid().nullable().default(null),
   choresEnabled: z.boolean().default(false),
+  shoppingEnabled: z.boolean().default(false),
   roomComponents: z.array(roomComponentSchema).max(roomComponentLimit).optional(),
   viewportInsets: z.object({ top: inset, right: inset, bottom: inset, left: inset }).strict()
     .default({ top: 0, right: 0, bottom: 0, left: 0 }),
-}).strict().refine((value) => !value.choresEnabled || value.householdId !== null, {
-  message: 'Chores require a selected household.',
-  path: ['choresEnabled'],
+}).strict().refine((value) => (!value.choresEnabled && !value.shoppingEnabled) || value.householdId !== null, {
+  message: 'Household tools require a selected household.',
+  path: ['householdId'],
 })
 
 type RoomState = z.infer<typeof stateSchema>
 type Status = 'loading' | 'ready' | 'unavailable'
 type NativeMessage = { version: 1; type: 'status'; status: Status }
   | { version: 1; type: 'open-chores'; householdId: string; componentId?: string }
+  | { version: 1; type: 'open-shopping'; householdId: string }
 
 declare global {
   interface Window {
@@ -85,12 +87,22 @@ function openChores(componentId?: string) {
   }
 }
 
+function openShopping() {
+  if (state.shoppingEnabled && state.householdId && !state.paused && status === 'ready') {
+    window.webkit?.messageHandlers?.roomlings?.postMessage({
+      version: 1, type: 'open-shopping', householdId: state.householdId,
+    })
+  }
+}
+
 function Room() {
   const current = useSyncExternalStore(subscribe, () => state)
   const currentStatus = useSyncExternalStore(subscribe, () => status)
   const dock = useRef<HTMLElement>(null)
   const [dockSpace, setDockSpace] = useState(0)
   const hasChores = current.choresEnabled && current.householdId !== null
+  const hasShopping = current.shoppingEnabled && current.householdId !== null
+  const hasTools = hasChores || hasShopping
   useLayoutEffect(() => {
     const element = dock.current
     if (!element) { setDockSpace(0); return }
@@ -99,13 +111,13 @@ function Room() {
     observer.observe(element)
     measure()
     return () => observer.disconnect()
-  }, [hasChores])
+  }, [hasTools])
   const viewportStyle: CSSProperties & Record<`--native-${'top' | 'right' | 'bottom' | 'left' | 'dock-space'}`, string> = {
     '--native-top': `${current.viewportInsets.top}px`,
     '--native-right': `${current.viewportInsets.right}px`,
     '--native-bottom': `${current.viewportInsets.bottom}px`,
     '--native-left': `${current.viewportInsets.left}px`,
-    '--native-dock-space': `${hasChores ? dockSpace : 0}px`,
+    '--native-dock-space': `${hasTools ? dockSpace : 0}px`,
   }
   return <main className="game-home native-room" aria-label={current.householdId ? 'Shared household kitchen' : 'Roomlings kitchen preview'}
     data-household-id={current.householdId ?? ''} style={viewportStyle}>
@@ -116,11 +128,15 @@ function Room() {
     </PreviewBoundary>
     {currentStatus === 'loading' && <SceneLoading label="Opening the kitchen..." />}
     {currentStatus === 'ready' && <span className="sr-only" role="status">Kitchen ready</span>}
-    {hasChores && <nav className="game-dock native-chores-dock" aria-label="Household tools" ref={dock}>
-      <button type="button" className="dock-tool" data-tool="chores" aria-label="Chores" title="Chores"
+    {hasTools && <nav className="game-dock native-tools-dock" aria-label="Household tools" ref={dock}>
+      {hasChores && <button type="button" className="dock-tool" data-tool="chores" aria-label="Chores" title="Chores"
         aria-haspopup="dialog" disabled={current.paused || currentStatus !== 'ready'} onClick={() => openChores()}>
         <ListChecks size="1.3125rem" /><span>Chores</span>
-      </button>
+      </button>}
+      {hasShopping && <button type="button" className="dock-tool" data-tool="stock" aria-label="Shopping" title="Shopping"
+        aria-haspopup="dialog" disabled={current.paused || currentStatus !== 'ready'} onClick={openShopping}>
+        <ShoppingBasket size="1.3125rem" /><span>Shopping</span>
+      </button>}
     </nav>}
   </main>
 }

@@ -43,6 +43,7 @@ final class RoomlingsUITests: XCTestCase {
         XCTAssertFalse(room.buttons["Hide object labels"].exists)
         XCTAssertFalse(room.buttons["Room chores"].exists)
         XCTAssertFalse(room.descendants(matching: .any).matching(identifier: "Chores").firstMatch.exists)
+        XCTAssertFalse(room.descendants(matching: .any).matching(identifier: "Shopping").firstMatch.exists)
         let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "Kitchen portrait"
         portrait.lifetime = .keepAlways
