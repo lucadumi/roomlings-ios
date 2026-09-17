@@ -297,7 +297,7 @@ try {
       '-destination-timeout', '60',
       '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '300',
-      '-maximum-test-execution-time-allowance', '360',
+      '-maximum-test-execution-time-allowance', '600',
     ] : ['-quiet']),
     'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
     `NODE_BINARY=${process.execPath}`, `ROOMLINGS_WEB_ROOT=${web}`,

@@ -442,7 +442,10 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     func testChoresCreateAndCompleteInTheSharedHousehold() async throws {
-        executionTimeAllowance = 300
+        // Signing in, styling the controls, creating a chore, completing it, undoing it and
+        // relaunching is the longest flow here, and an iPad runner takes about half again as
+        // long as an iPhone one. This budget only catches a hang, it is not a speed target.
+        executionTimeAllowance = 600
         continueAfterFailure = false
         let (app, home) = try await launchChores()
         try exerciseChoreControls(app, screenshotName: "Roomlings control styling trial")
