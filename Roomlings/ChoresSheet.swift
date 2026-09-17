@@ -14,10 +14,19 @@ struct ChoresSheet: View {
     @State private var draft = ChoreFormValues()
     @State private var hasDraft = false
     @State private var confirming: Chore?
+    @State private var undoing: ChoreCompletion?
+    @State private var lastCompletionID: UUID?
     @State private var pending: Save?
     @State private var reviewRequired = false
     @State private var contentHeight: CGFloat = 480
     @State private var headerHeight: CGFloat = 64
+
+    init(model: AccountModel, object: ChoreObject? = nil) {
+        self.model = model
+        _roomFilter = State(initialValue: object?.roomID ?? "kitchen")
+        _areaFilter = State(initialValue: object?.area ?? "")
+        _objectFilter = State(initialValue: object?.id ?? "")
+    }
 
     private enum Section: String, CaseIterable, Identifiable {
         case chores = "Chores", history = "History", archived = "Archived"
@@ -25,7 +34,7 @@ struct ChoresSheet: View {
     }
 
     private enum Change {
-        case add(ChoreDraft), complete(Chore)
+        case add(ChoreDraft), complete(Chore), undo(ChoreCompletion)
     }
 
     private struct Save {
@@ -37,16 +46,23 @@ struct ChoresSheet: View {
 
     private var changesBlocked: Bool { model.busy || pending != nil || reviewRequired }
     private var title: String {
-        adding ? "Add a household chore." : confirming != nil ? "Mark this chore done?" : "Household chores"
+        adding ? "Add a household chore." : undoing != nil ? "Undo this chore completion?"
+            : confirming != nil ? "Mark this chore done?" : "Household chores"
+    }
+    private var pageID: String {
+        if adding { return "add" }
+        if let undoing { return "undo-\(undoing.id.uuidString)" }
+        return confirming?.id.uuidString ?? "board"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                if adding || confirming != nil {
+                if adding || confirming != nil || undoing != nil {
                     Button("Back") {
                         adding = false
                         confirming = nil
+                        undoing = nil
                         if pending == nil { model.clearFeedback() }
                     }
                     .disabled(model.busy)
@@ -69,6 +85,8 @@ struct ChoresSheet: View {
                             if adding {
                                 ChoreForm(values: $draft, chores: chores, catalog: catalog, objects: model.choreObjects,
                                           calendar: calendar, disabled: changesBlocked) { start(.add($0)) }
+                            } else if let undoing {
+                                undoConfirmation(undoing, chores: chores, catalog: catalog, calendar: calendar)
                             } else if let confirming {
                                 confirmation(confirming, chores: chores, catalog: catalog, calendar: calendar)
                             } else {
@@ -85,7 +103,7 @@ struct ChoresSheet: View {
                     .padding(24)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
-                .id(adding ? "add" : confirming?.id.uuidString ?? "board")
+                .id(pageID)
                 .scrollDismissesKeyboard(.interactively)
                 .disabled(model.busy)
                 .onChange(of: model.message) { _, message in
@@ -130,6 +148,12 @@ struct ChoresSheet: View {
         if let notice = model.notice {
             Text(notice).foregroundStyle(RoomTheme.leaf).accessibilityIdentifier("chores-notice")
         }
+        if undoing == nil, section != .history, let id = lastCompletionID, let chores = model.chores,
+           let completion = chores.history.first(where: { $0.id == id }), chores.canUndo(completion) {
+            Button("Undo completion") { openUndo(completion) }
+                .buttonStyle(RoomButtonStyle(kind: .text))
+                .disabled(changesBlocked)
+        }
         if let pending, !model.busy {
             Text("This save is not confirmed. Retrying sends the same change, not a new one.")
                 .font(RoomTheme.body(14))
@@ -146,6 +170,7 @@ struct ChoresSheet: View {
                         reviewRequired = false
                         adding = false
                         confirming = nil
+                        undoing = nil
                         model.notice = "Chores refreshed. Review the current list before starting another change."
                     }
                 }
@@ -331,6 +356,11 @@ struct ChoresSheet: View {
             Text("Scheduled for \(ChoreCalendar.title(completion.dueDate, today: today)).")
             if let assignee = completion.assignedTo { Text("Assigned to \(memberName(assignee, chores: chores)).") }
             if let undoneBy = completion.undoneBy { Text("Undone by \(memberName(undoneBy, chores: chores)).") }
+            if chores.canUndo(completion) {
+                Button("Undo completion") { openUndo(completion) }
+                    .buttonStyle(RoomButtonStyle(kind: .text))
+                    .disabled(changesBlocked)
+            }
         }
         .font(RoomTheme.body(14))
         .foregroundStyle(RoomTheme.muted)
@@ -362,6 +392,28 @@ struct ChoresSheet: View {
                 .buttonStyle(RoomButtonStyle(kind: .primary))
                 .disabled(changesBlocked || !allowed)
             Button("Cancel") { confirming = nil; model.clearFeedback() }.disabled(model.busy)
+        }
+    }
+
+    private func undoConfirmation(_ completion: ChoreCompletion, chores: HouseholdChores,
+                                  catalog: ChoreCatalog, calendar: ChoreCalendar) -> some View {
+        let allowed = chores.canUndo(completion)
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Restore the previous due date and turn. A later edit or completion cannot be overwritten.")
+                .foregroundStyle(RoomTheme.muted)
+            Text(completion.title).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+            Text(catalog.location(roomID: completion.roomID, area: completion.area,
+                                  componentName: completion.componentName))
+            Text("Scheduled for \(ChoreCalendar.title(completion.dueDate, today: calendar.day())).")
+            if !allowed {
+                Text("Chore changed. This completion can no longer be undone.")
+                    .foregroundStyle(RoomTheme.error)
+            }
+            Button("Keep completion") { undoing = nil; model.clearFeedback() }
+                .disabled(model.busy)
+            Button("Undo completion") { start(.undo(completion)) }
+                .buttonStyle(RoomButtonStyle(kind: .primary))
+                .disabled(changesBlocked || !allowed)
         }
     }
 
@@ -407,6 +459,13 @@ struct ChoresSheet: View {
         chores.members.first(where: { $0.id == id })?.name ?? "Former roommate"
     }
 
+    private func openUndo(_ completion: ChoreCompletion) {
+        model.clearFeedback()
+        adding = false
+        confirming = nil
+        undoing = completion
+    }
+
     private func openForm() {
         guard let memberID = model.state?.session?.memberID else {
             model.message = "Open your household before adding a chore."
@@ -430,6 +489,11 @@ struct ChoresSheet: View {
             model.message = "Refresh chores and finish the current save before starting another change."
             return
         }
+        if case .undo(let completion) = change, model.chores?.canUndo(completion) != true {
+            model.message = "This completion changed. Refresh chores and review the latest history."
+            reviewRequired = true
+            return
+        }
         let save = Save(householdID: household.id, version: household.version, change: change)
         pending = save
         Task { await send(save) }
@@ -442,14 +506,30 @@ struct ChoresSheet: View {
             saved = await model.addChore(draft, householdID: save.householdID, version: save.version, mutationID: save.mutationID)
         case .complete(let chore):
             saved = await model.completeChore(chore, householdID: save.householdID, version: save.version, mutationID: save.mutationID)
+        case .undo(let completion):
+            saved = await model.undoChoreCompletion(completion, householdID: save.householdID,
+                                                   version: save.version, mutationID: save.mutationID)
         }
         if saved {
             pending = nil
             reviewRequired = false
             adding = false
             confirming = nil
+            undoing = nil
             section = .chores
-            if case .add = save.change { draft = ChoreFormValues(); hasDraft = false }
+            switch save.change {
+            case .add:
+                draft = ChoreFormValues()
+                hasDraft = false
+                lastCompletionID = nil
+            case .complete(let chore):
+                lastCompletionID = model.chores?.history.first {
+                    $0.choreID == chore.id && $0.occurrence == chore.occurrence
+                        && $0.resultVersion == chore.version + 1 && $0.undoneAt == nil
+                }?.id
+            case .undo:
+                lastCompletionID = nil
+            }
         } else {
             switch model.choreSaveFailure {
             case .retrySameChange: pending = save

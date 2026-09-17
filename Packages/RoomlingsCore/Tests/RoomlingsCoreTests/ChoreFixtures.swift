@@ -9,6 +9,8 @@ enum ChoreFixtures {
     static let choreID = UUID(uuidString: "aabbccdd-aabb-4ccd-8abb-aabbccddeeff")!
     static let addedID = UUID(uuidString: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")!
     static let completionID = UUID(uuidString: "cccccccc-cccc-4ccc-8ccc-cccccccccccc")!
+    static let latestCompletionID = UUID(uuidString: "dddddddd-dddd-4ddd-8ddd-dddddddddddd")!
+    static let undoMutationID = UUID(uuidString: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")!
     static let mutationID = UUID(uuidString: "ddeeffaa-ddee-4ffa-8dde-aabbccddeeff")!
 
     static func id(_ id: UUID) -> JSONValue { .string(id.uuidString.lowercased()) }
@@ -80,11 +82,32 @@ enum ChoreFixtures {
             "dueDate": .string("2026-09-22"), "updatedAt": .string("2026-09-15T12:00:00.000Z")
         ])
         let finished = replacing(completion, with: [
-            "id": .string("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+            "id": id(latestCompletionID),
             "occurrence": .integer(1), "resultVersion": .integer(5), "dueDate": .string("2026-09-15"),
             "completedAt": .string("2026-09-15T12:00:00.000Z")
         ])
         return withReceipt(household(items: [updated], history: [finished, completion], version: 18))
+    }
+
+    static var undoneHousehold: JSONValue {
+        guard let finished = completedHousehold["chores"]?["history"]?.arrayValue?.first,
+              let receipts = completedHousehold["mutationReceipts"]?.arrayValue else {
+            preconditionFailure("The undo fixture needs a recorded completion.")
+        }
+        let restored = replacing(chore, with: [
+            "version": .integer(6), "updatedAt": .string("2026-09-15T12:01:00.000Z")
+        ])
+        let undone = replacing(finished, with: [
+            "undoneAt": .string("2026-09-15T12:01:00.000Z"), "undoneBy": id(memberID)
+        ])
+        return replacing(completedHousehold, with: [
+            "version": .integer(19),
+            "chores": .object(["items": .array([restored]), "history": .array([undone, completion])]),
+            "mutationReceipts": .array(receipts + [.object([
+                "id": id(undoMutationID), "memberId": id(memberID), "version": .integer(19),
+                "fingerprint": .string(String(repeating: "2", count: 64))
+            ])])
+        ])
     }
 
     static func withReceipt(_ household: JSONValue) -> JSONValue {

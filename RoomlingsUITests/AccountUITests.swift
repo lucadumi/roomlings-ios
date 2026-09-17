@@ -16,11 +16,14 @@ final class AccountUITests: XCTestCase {
             let dueDate: String?
             let repeatDays: Int?
             let occurrence: Int
+            let componentId: String?
+            let componentName: String?
         }
         struct Completion: Decodable {
             let id: String
             let choreId: String
             let title: String
+            let undoneAt: String?
         }
         struct Request: Decodable {
             let path: String
@@ -148,15 +151,24 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
+    private func switchIsOn(_ control: XCUIElement) throws -> Bool {
+        switch control.value as? String {
+        case "1", "On": true
+        case "0", "Off": false
+        default: throw FlowError.missingElement("\(control.description) has no valid switch state")
+        }
+    }
+
+    @MainActor
     private func setSwitch(_ control: XCUIElement, on: Bool, in app: XCUIApplication) throws {
         guard control.exists || control.waitForExistence(timeout: Wait.control) else {
             throw FlowError.missingElement(control.description)
         }
-        let wanted = on ? "1" : "0"
+        let wanted = on ? ["1", "On"] : ["0", "Off"]
         for _ in 0..<3 {
-            if control.value as? String == wanted { return }
+            if try switchIsOn(control) == on { return }
             try tap(control, in: app)
-            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", wanted), object: control)
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value IN %@", wanted), object: control)
             if XCTWaiter.wait(for: [changed], timeout: Wait.flip) == .completed { return }
         }
         throw FlowError.missingElement("\(control.description) did not change to \(wanted)")
@@ -281,11 +293,12 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func openChores(_ app: XCUIApplication) throws {
+    private func openChores(_ app: XCUIApplication, objectName: String? = nil) throws {
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
         let sheet = app.otherElements["chores-sheet"]
-        let control = room.descendants(matching: .any).matching(identifier: "Chores").firstMatch
+        let label = objectName.map { "Chores for \($0)" } ?? "Chores"
+        let control = room.descendants(matching: .any).matching(identifier: label).firstMatch
         guard control.waitForExistence(timeout: Wait.control) else {
             let hierarchy = XCTAttachment(string: app.debugDescription)
             hierarchy.name = "Room chores accessibility"
@@ -316,7 +329,7 @@ final class AccountUITests: XCTestCase {
         try tap(app.buttons["Open Cedar House"], in: app)
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         try openChores(app)
-        XCTAssertTrue(app.staticTexts["Wipe the kitchen counters"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.staticTexts["Wipe the fridge shelves"].waitForExistence(timeout: Wait.control))
         return (app, home)
     }
 
@@ -343,13 +356,13 @@ final class AccountUITests: XCTestCase {
         try choose("Kitchen", from: "Chore room", in: app)
         let mine = app.switches["My turn only"]
         try tap(mine, in: app)
-        XCTAssertEqual(mine.value as? String, "1")
+        XCTAssertTrue(try switchIsOn(mine))
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = screenshotName
         screenshot.lifetime = .keepAlways
         add(screenshot)
         try tap(mine, in: app)
-        XCTAssertEqual(mine.value as? String, "0")
+        XCTAssertFalse(try switchIsOn(mine))
         try tap(app.segmentedControls["chore-sections"].buttons["Archived"], in: app)
         XCTAssertTrue(app.staticTexts["No archived chores."].waitForExistence(timeout: Wait.control))
         try tap(app.segmentedControls["chore-sections"].buttons["Chores"], in: app)
@@ -380,20 +393,39 @@ final class AccountUITests: XCTestCase {
         XCTAssertEqual(value.label, "Kitchen|off|Chores")
         try choose("Bathroom", from: "Room", in: app)
         XCTAssertEqual(value.label, "Bathroom|off|Chores")
+        let offScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        offScreenshot.name = systemControls ? "Original switch off" : "Themed switch off"
+        offScreenshot.lifetime = .keepAlways
+        add(offScreenshot)
         let mine = app.switches["My turn only"]
         XCTAssertTrue(mine.waitForExistence(timeout: Wait.control))
         let nativeSwitch = mine.switches.firstMatch.exists ? mine.switches.firstMatch : mine
+        XCTAssertTrue(nativeSwitch.isHittable, nativeSwitch.debugDescription)
+        if !systemControls { XCTAssertEqual(app.switches.count, 2) }
         try tap(nativeSwitch, in: app)
         XCTAssertEqual(value.label, "Bathroom|on|Chores")
+        let onScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        onScreenshot.name = systemControls ? "Original switch on" : "Themed switch on"
+        onScreenshot.lifetime = .keepAlways
+        add(onScreenshot)
         try tap(nativeSwitch, in: app)
         XCTAssertEqual(value.label, "Bathroom|off|Chores")
+        if !systemControls {
+            let edge = nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5))
+            let off = edge.withOffset(CGVector(dx: -39, dy: 0))
+            let on = edge.withOffset(CGVector(dx: -13, dy: 0))
+            off.press(forDuration: 0.05, thenDragTo: on)
+            XCTAssertEqual(value.label, "Bathroom|on|Chores")
+            on.press(forDuration: 0.05, thenDragTo: off)
+            XCTAssertEqual(value.label, "Bathroom|off|Chores")
+        }
         let segments = app.segmentedControls["fixture-segments"]
         try tap(segments.buttons["History"], in: app)
         XCTAssertEqual(value.label, "Bathroom|off|History")
         let enable = app.switches["Enable controls"]
         let nativeEnable = enable.switches.firstMatch.exists ? enable.switches.firstMatch : enable
         try tap(nativeEnable, in: app)
-        XCTAssertEqual(enable.value as? String, "0")
+        XCTAssertFalse(try switchIsOn(enable))
         XCTAssertFalse(picker("Room", in: app).isEnabled)
         XCTAssertFalse(mine.isEnabled)
         XCTAssertFalse(segments.buttons["Archived"].isEnabled)
@@ -417,6 +449,13 @@ final class AccountUITests: XCTestCase {
         let initial = try await choreState(home.id)
         let paused = try XCTUnwrap(initial.items.first { $0.title == "Clean the stored kettle" })
         XCTAssertFalse(app.otherElements["chore-\(paused.id)"].buttons["Mark done"].isEnabled)
+        let objectChore = try XCTUnwrap(initial.items.first { $0.title == "Wipe the fridge shelves" })
+        let objectName = try XCTUnwrap(objectChore.componentName)
+        try tap(app.buttons["Done"], in: app)
+        try openChores(app, objectName: objectName)
+        XCTAssertEqual(picker("Chore object", in: app).value as? String, objectName)
+        XCTAssertTrue(app.staticTexts["Wipe the fridge shelves"].waitForExistence(timeout: Wait.control))
+        XCTAssertFalse(app.otherElements["chore-\(paused.id)"].exists)
         try tap(app.buttons["Add chore"], in: app)
         try fill(app.textFields["Chore name"], "Sweep after dinner")
         try choose("Weekly", from: "Repeat", in: app)
@@ -431,6 +470,7 @@ final class AccountUITests: XCTestCase {
         let chore = try XCTUnwrap(added.items.first { $0.title == "Sweep after dinner" })
         XCTAssertNotNil(chore.dueDate)
         XCTAssertNil(chore.repeatDays)
+        XCTAssertEqual(chore.componentId, objectChore.componentId)
         try tap(app.otherElements["chore-\(chore.id)"].buttons["Mark done"], in: app)
         try tap(app.buttons["Record completion"], in: app)
         XCTAssertTrue(app.staticTexts["Chore completed."].waitForExistence(timeout: Wait.control))
@@ -439,10 +479,20 @@ final class AccountUITests: XCTestCase {
         XCTAssertEqual(completed.items.first { $0.id == chore.id }?.occurrence, 1)
         XCTAssertEqual(completed.history.filter { $0.choreId == chore.id }.count, 1)
         XCTAssertTrue(completed.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
+        XCTAssertTrue(app.buttons["Undo completion"].waitForExistence(timeout: Wait.control))
         try tap(app.segmentedControls["chore-sections"].buttons["History"], in: app)
         XCTAssertTrue(app.staticTexts["Sweep after dinner"].waitForExistence(timeout: Wait.control))
+        let completion = try XCTUnwrap(completed.history.first { $0.choreId == chore.id })
+        try tap(app.otherElements["completion-\(completion.id)"].buttons["Undo completion"], in: app)
+        XCTAssertTrue(app.staticTexts["Undo this chore completion?"].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["Undo completion"], in: app)
+        XCTAssertTrue(app.staticTexts["Chore completion undone."].waitForExistence(timeout: Wait.control))
+        let undone = try await choreState(home.id)
+        XCTAssertEqual(undone.items.first { $0.id == chore.id }?.dueDate, chore.dueDate)
+        XCTAssertEqual(undone.items.first { $0.id == chore.id }?.occurrence, 0)
+        XCTAssertNotNil(undone.history.first { $0.id == completion.id }?.undoneAt)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "Native shared chores history"
+        screenshot.name = "Native object chores and undo"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         app.terminate()
@@ -451,6 +501,8 @@ final class AccountUITests: XCTestCase {
         try openChores(app)
         try tap(app.segmentedControls["chore-sections"].buttons["History"], in: app)
         XCTAssertTrue(app.staticTexts["Sweep after dinner"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.staticTexts["Undone"].waitForExistence(timeout: Wait.control))
+        XCTAssertFalse(app.otherElements["completion-\(completion.id)"].buttons["Undo completion"].exists)
     }
 
     @MainActor
@@ -484,6 +536,21 @@ final class AccountUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Chore completed."].waitForExistence(timeout: Wait.control))
         let completed = try await choreState(home.id)
         XCTAssertEqual(completed.history.filter { $0.choreId == chore.id }.count, 1)
+        try tap(app.buttons["Undo completion"], in: app)
+        _ = try await fixture("_fixture/chores/change", body: ["householdId": home.id])
+        try tap(app.buttons["Undo completion"], in: app)
+        XCTAssertTrue(app.staticTexts["chores-error"].waitForExistence(timeout: Wait.control))
+        XCTAssertFalse(app.buttons["Undo completion"].isEnabled)
+        XCTAssertFalse(app.staticTexts["Chore completion undone."].exists)
+        let undoConflict = try await choreState(home.id)
+        XCTAssertNil(undoConflict.history.first { $0.choreId == chore.id }?.undoneAt)
+        try tap(app.buttons["Review latest chores"], in: app)
+        try tap(app.buttons["Undo completion"], in: app)
+        try tap(app.buttons["Undo completion"], in: app)
+        XCTAssertTrue(app.staticTexts["Chore completion undone."].waitForExistence(timeout: Wait.control))
+        let undone = try await choreState(home.id)
+        XCTAssertNotNil(undone.history.first { $0.choreId == chore.id }?.undoneAt)
+        XCTAssertEqual(undone.items.first { $0.id == chore.id }?.dueDate, chore.dueDate)
     }
 
     @MainActor
@@ -510,5 +577,30 @@ final class AccountUITests: XCTestCase {
         XCTAssertEqual(confirmed.requests.first?.mutationId, confirmed.requests.last?.mutationId)
         XCTAssertEqual(confirmed.requests.first?.mutationVersion, confirmed.requests.last?.mutationVersion)
         XCTAssertEqual(confirmed.requests.first?.version, confirmed.requests.last?.version)
+        let chore = try XCTUnwrap(confirmed.items.first { $0.title == "Clean the sink" })
+        try tap(app.otherElements["chore-\(chore.id)"].buttons["Mark done"], in: app)
+        try tap(app.buttons["Record completion"], in: app)
+        XCTAssertTrue(app.staticTexts["Chore completed."].waitForExistence(timeout: Wait.control))
+        let completed = try await choreState(home.id)
+        try tap(app.buttons["Undo completion"], in: app)
+        _ = try await fixture("_fixture/chores/failure", body: ["mode": "lost-response"])
+        try tap(app.buttons["Undo completion"], in: app)
+        XCTAssertTrue(app.staticTexts["chores-error"].waitForExistence(timeout: Wait.control))
+        XCTAssertFalse(app.staticTexts["Chore completion undone."].exists)
+        let unconfirmedUndo = try await choreState(home.id)
+        XCTAssertNotNil(unconfirmedUndo.history.first { $0.choreId == chore.id }?.undoneAt)
+        XCTAssertEqual(unconfirmedUndo.version, completed.version + 1)
+        try tap(app.buttons["Retry save"], in: app)
+        XCTAssertTrue(app.staticTexts["Chore completion undone."].waitForExistence(timeout: Wait.control))
+        let confirmedUndo = try await choreState(home.id)
+        XCTAssertEqual(confirmedUndo.version, unconfirmedUndo.version)
+        XCTAssertEqual(confirmedUndo.items.first { $0.id == chore.id }?.dueDate, chore.dueDate)
+        XCTAssertEqual(confirmedUndo.history.filter { $0.choreId == chore.id }.count, 1)
+        let attempts = Array(confirmedUndo.requests.suffix(2))
+        XCTAssertEqual(attempts.count, 2)
+        XCTAssertNotNil(attempts.first?.mutationId)
+        XCTAssertEqual(attempts.first?.mutationId, attempts.last?.mutationId)
+        XCTAssertEqual(attempts.first?.mutationVersion, attempts.last?.mutationVersion)
+        XCTAssertEqual(attempts.first?.version, attempts.last?.version)
     }
 }

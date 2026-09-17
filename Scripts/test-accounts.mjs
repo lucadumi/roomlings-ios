@@ -97,10 +97,12 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
     household.billingTimeZone = timeZone
     household.roomComponents = getRoomComponents(household).map((component) =>
       !kettle && component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
+    const fridge = household.roomComponents.find((component) => component.slotId === 'kitchen-fridge')
+    if (!fridge) throw new Error('The chore fixture needs the saved fridge.')
     const now = new Date().toISOString()
     const chore = {
-      title: 'Wipe the kitchen counters', notes: 'Use the gentle cleaner.',
-      roomId: 'kitchen', area: 'counters', componentId: null,
+      title: 'Wipe the fridge shelves', notes: 'Use the gentle cleaner.',
+      roomId: 'kitchen', area: componentChoreArea(fridge), componentId: fridge.id, componentName: fridge.name,
       dueDate: billingDate(household.billingTimeZone), repeatDays: 7,
       rotation: [state.session.memberId], turn: 0, createdBy: state.session.memberId,
       createdAt: now, updatedAt: now, version: 0, occurrence: 0, archived: false,

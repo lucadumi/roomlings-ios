@@ -6,6 +6,7 @@ struct RoomPreviewScreen: View {
     @State private var failure: String?
     @State private var accounts = AccountModel.live()
     @State private var presentedSheet: Sheet?
+    @State private var choreObject: ChoreObject?
     @State private var headerHeight: CGFloat = 88
 
     private enum Sheet: String, Identifiable {
@@ -22,7 +23,8 @@ struct RoomPreviewScreen: View {
                 left: Double(max(0, geometry.safeAreaInsets.leading))
             )
             ZStack(alignment: .top) {
-                RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room, viewportInsets: insets) { event in
+                RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room, viewportInsets: insets,
+                            roomZoom: UIDevice.current.userInterfaceIdiom == .phone && geometry.size.height > geometry.size.width ? 1.35 : 1) { event in
                     switch event {
                     case .status(.unavailable):
                         failure = "The shared room renderer could not start. Reload the room to try again."
@@ -30,8 +32,8 @@ struct RoomPreviewScreen: View {
                         failure = message
                     case .status:
                         break
-                    case .openChores(let householdID):
-                        openChores(householdID: householdID)
+                    case .openChores(let householdID, let componentID):
+                        openChores(householdID: householdID, componentID: componentID)
                     }
                 }
                 .id(generation)
@@ -44,7 +46,7 @@ struct RoomPreviewScreen: View {
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
-            case .chores: ChoresSheet(model: accounts)
+            case .chores: ChoresSheet(model: accounts, object: choreObject)
             }
         }
         .task {
@@ -55,6 +57,7 @@ struct RoomPreviewScreen: View {
         }
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
+            choreObject = nil
             if presentedSheet == .chores {
                 presentedSheet = householdID == nil ? .account : nil
             }
@@ -69,14 +72,23 @@ struct RoomPreviewScreen: View {
         }
     }
 
-    private func openChores(householdID: UUID) {
+    private func openChores(householdID: UUID, componentID: String?) {
         guard accounts.canUseAccount, accounts.state?.session?.household.id == householdID else {
             accounts.message = "Open your current household before using its chores."
             presentedSheet = .account
             return
         }
+        let object = componentID.flatMap { id in
+            accounts.choreObjects.first { $0.id == id && $0.installed && $0.roomID == "kitchen" }
+        }
+        guard componentID == nil || object != nil else {
+            accounts.message = "That object is no longer available in this room. Refresh your account."
+            presentedSheet = .account
+            return
+        }
         if presentedSheet == nil {
             if !accounts.busy { accounts.clearFeedback() }
+            choreObject = object
             presentedSheet = .chores
         }
     }

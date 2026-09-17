@@ -261,6 +261,13 @@ public struct HouseholdChores: Sendable, Equatable {
         guard !chore.archived, let id = chore.componentID else { return false }
         return components[id]?.installed == false
     }
+
+    public func canUndo(_ completion: ChoreCompletion) -> Bool {
+        guard completion.undoneAt == nil, history.contains(completion),
+              let chore = items.first(where: { $0.id == completion.choreID }) else { return false }
+        return !chore.archived && chore.version == completion.resultVersion
+            && chore.occurrence == completion.occurrence + 1
+    }
 }
 
 enum ChoreValidation {

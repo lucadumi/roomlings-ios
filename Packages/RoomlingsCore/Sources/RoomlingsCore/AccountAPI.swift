@@ -110,6 +110,29 @@ struct AccountAPI: Sendable {
         return response
     }
 
+    func undoChoreCompletion(
+        id: UUID, choreVersion: Int64, version: Int64, mutationID: UUID, memberID: UUID, token: SessionToken
+    ) async throws -> ChoreMutationResponse {
+        guard (0..<ChoreValidation.maximumInteger).contains(choreVersion) else {
+            throw AccountError.invalidInput(.choreVersion)
+        }
+        let response = try await choreMutation(
+            .undoChoreCompletion(id), fields: ["choreVersion": .integer(choreVersion)],
+            version: version, mutationID: mutationID, token: token
+        )
+        guard let completion = response.chores.history.first(where: { $0.id == id }),
+              completion.resultVersion == choreVersion, completion.undoneAt != nil,
+              completion.undoneBy == memberID,
+              let chore = response.chores.items.first(where: { $0.id == completion.choreID }),
+              chore.version > choreVersion,
+              response.replayed || (chore.version == choreVersion + 1 && !chore.archived
+                && chore.occurrence == completion.occurrence && chore.dueDate == completion.dueDate
+                && chore.turn == completion.turn && chore.updatedAt == completion.undoneAt) else {
+            throw AccountError.invalidResponse
+        }
+        return response
+    }
+
     private func choreMutation(
         _ endpoint: AccountEndpoint, fields: [String: JSONValue],
         version: Int64, mutationID: UUID, token: SessionToken

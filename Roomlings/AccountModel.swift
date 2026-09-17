@@ -134,6 +134,15 @@ final class AccountModel {
         return saved
     }
 
+    func undoChoreCompletion(_ completion: ChoreCompletion, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.undoChore) {
+            try await $0.undoChoreCompletion(id: completion.id, choreVersion: completion.resultVersion,
+                                            householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Chore completion undone." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -229,9 +238,9 @@ final class AccountModel {
     }
 
     private enum Action {
-        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore
+        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore, undoChore
 
-        var isChore: Bool { self == .addChore || self == .completeChore }
+        var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
     }
 
     private static func message(for error: Error, action: Action) -> String {
