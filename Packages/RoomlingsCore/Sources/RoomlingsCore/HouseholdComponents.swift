@@ -1,7 +1,7 @@
 import Foundation
 
-/// Only the shared object identity/availability needed to validate chores, never renderer assets.
-struct ChoreComponent: Sendable, Equatable {
+/// Shared object identity and availability for chores and shopping sources, never renderer assets.
+struct HouseholdComponent: Sendable, Equatable {
     let id: String
     let kind: String
     let roomID: String
@@ -22,20 +22,20 @@ struct ChoreComponent: Sendable, Equatable {
         }
     }
 
-    static func projection(household: JSONValue) throws -> [String: ChoreComponent] {
-        let components: [ChoreComponent]
+    static func projection(household: JSONValue) throws -> [String: HouseholdComponent] {
+        let components: [HouseholdComponent]
         if let raw = household["roomComponents"] {
             guard let values = raw.arrayValue, values.count <= 160 else { throw AccountError.invalidResponse }
             var parsed = try values.map { value in
-                let fields = try ChoreFields(value)
+                let fields = try HouseholdFields(value)
                 let id = try fields.string("id")
                 let kind = try fields.string("kind")
                 let roomID = try fields.string("roomId")
                 let installed = try fields.bool("installed")
-                guard ChoreValidation.componentID(id), kinds.contains(kind),
+                guard HouseholdValidation.componentID(id), kinds.contains(kind),
                       ChoreValidation.areas[roomID] != nil else { throw AccountError.invalidResponse }
                 // getRoomComponents retires these placements into Storage without changing identities.
-                return ChoreComponent(
+                return HouseholdComponent(
                     id: id, kind: kind, roomID: roomID,
                     installed: installed && kind != "bread-box" && !(kind == "bins" && roomID == "living-room")
                 )
@@ -48,7 +48,7 @@ struct ChoreComponent: Sendable, Equatable {
             components = defaults
         }
         guard components.count <= 160 else { throw AccountError.invalidResponse }
-        var byID: [String: ChoreComponent] = [:]
+        var byID: [String: HouseholdComponent] = [:]
         for component in components {
             guard byID.updateValue(component, forKey: component.id) == nil else { throw AccountError.invalidResponse }
         }
@@ -56,7 +56,7 @@ struct ChoreComponent: Sendable, Equatable {
     }
 
     // shared/roomComponents.ts defaultRoomComponents and the legacy living-room migration.
-    private static let defaults: [ChoreComponent] = {
+    private static let defaults: [HouseholdComponent] = {
         let rooms: [(String, [(String, String)])] = [
             ("kitchen", [
                 ("fridge", "fridge"), ("sink", "sink"), ("counters", "counters"), ("hob", "hob"),
@@ -80,7 +80,7 @@ struct ChoreComponent: Sendable, Equatable {
         ]
         return rooms.flatMap { roomID, entries in
             entries.map { slot, kind in
-                ChoreComponent(id: "default-\(roomID)-\(slot)", kind: kind, roomID: roomID, installed: true)
+                HouseholdComponent(id: "default-\(roomID)-\(slot)", kind: kind, roomID: roomID, installed: true)
             }
         }
     }()

@@ -8,6 +8,7 @@ enum RoomRenderStatus: String, Decodable {
 enum RoomRenderEvent: Equatable {
     case status(RoomRenderStatus)
     case openChores(householdID: UUID, componentID: String? = nil)
+    case openShopping(householdID: UUID)
     case failure(String)
 }
 
@@ -38,6 +39,8 @@ struct RoomBridgeMessage: Decodable {
                 componentID = nil
             }
             event = .openChores(householdID: try container.decode(UUID.self, forKey: .householdID), componentID: componentID)
+        case "open-shopping":
+            event = .openShopping(householdID: try container.decode(UUID.self, forKey: .householdID))
         default:
             throw BridgeError.invalidMessage
         }
@@ -53,6 +56,8 @@ struct RoomBridgeMessage: Decodable {
         case "open-chores":
             expected = ["version", "type", "householdId"]
             if fields.keys.contains("componentId") { expected.insert("componentId") }
+        case "open-shopping":
+            expected = ["version", "type", "householdId"]
         default: throw BridgeError.invalidMessage
         }
         guard Set(fields.keys) == expected else {

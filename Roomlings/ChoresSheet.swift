@@ -58,15 +58,6 @@ struct ChoresSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                if adding || confirming != nil || undoing != nil {
-                    Button("Back") {
-                        adding = false
-                        confirming = nil
-                        undoing = nil
-                        if pending == nil { model.clearFeedback() }
-                    }
-                    .disabled(model.busy)
-                }
                 Text(title).font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
                 Button("Done") { dismiss() }.disabled(model.busy)
@@ -113,6 +104,7 @@ struct ChoresSheet: View {
                     if notice != nil { proxy.scrollTo("chores-feedback", anchor: .top) }
                 }
             }
+            .modifier(RoomSheetLoading(model: model, label: "Loading chores..."))
         }
         .font(RoomTheme.body())
         .foregroundStyle(RoomTheme.ink)
@@ -126,13 +118,12 @@ struct ChoresSheet: View {
         .presentationCornerRadius(16)
         .interactiveDismissDisabled(model.busy)
         .modifier(RoomSheetPresentation(idealHeight: contentHeight + headerHeight + 1))
-        .task { await model.refresh() }
     }
 
     @ViewBuilder private var feedback: some View {
         if model.busy {
             HStack {
-                ProgressView()
+                RoomLoadingIcon()
                 Text(pending == nil ? "Refreshing chores..." : "Saving chores...")
             }
             .accessibilityIdentifier("chores-progress")
@@ -385,7 +376,7 @@ struct ChoresSheet: View {
                 Text("Completion will be recorded by \(memberName(memberID, chores: chores)).")
             }
             if !allowed {
-                Text("Chore changed or its object is unavailable. Go back and review the latest chores.")
+                Text("Chore changed or its object is unavailable. Close this sheet and review the latest chores.")
                     .foregroundStyle(RoomTheme.error)
             }
             Button("Record completion") { start(.complete(chore)) }

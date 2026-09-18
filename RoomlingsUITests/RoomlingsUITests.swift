@@ -3,20 +3,27 @@ import XCTest
 final class RoomlingsUITests: XCTestCase {
     @MainActor
     private func tapControl(_ control: XCUIElement) {
-        XCTAssertTrue(control.isHittable)
+        if !control.isHittable {
+            let reachable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: control)
+            XCTAssertEqual(XCTWaiter.wait(for: [reachable], timeout: Wait.flip), .completed, control.debugDescription)
+        }
         control.tap()
     }
 
     /// Taps a room control until the renderer proves it reacted. A busy web renderer can
-    /// swallow one synthesized touch, and the room still reporting `previous` is proof that
-    /// nothing moved, so the extra tap cannot overshoot the wanted state.
+    /// swallow a synthesized touch, and the room still reporting `previous` is proof that
+    /// nothing moved, so another tap cannot overshoot the wanted state.
     @MainActor
     private func tapRoom(_ control: XCUIElement, until wanted: XCUIElement,
                          while previous: XCUIElement, _ message: String) {
         XCTAssertTrue(control.waitForExistence(timeout: Wait.room), message)
-        tapControl(control)
-        if wanted.waitForExistence(timeout: Wait.flip) { return }
-        if previous.exists { tapControl(control) }
+        for _ in 1...4 {
+            tapControl(control)
+            if wanted.waitForExistence(timeout: Wait.flip) { return }
+            // Anything other than the old state means the tap landed, so stop tapping and
+            // give the renderer the long budget to finish settling.
+            if !previous.exists { break }
+        }
         XCTAssertTrue(wanted.waitForExistence(timeout: Wait.room), message)
     }
 
@@ -43,6 +50,7 @@ final class RoomlingsUITests: XCTestCase {
         XCTAssertFalse(room.buttons["Hide object labels"].exists)
         XCTAssertFalse(room.buttons["Room chores"].exists)
         XCTAssertFalse(room.descendants(matching: .any).matching(identifier: "Chores").firstMatch.exists)
+        XCTAssertFalse(room.descendants(matching: .any).matching(identifier: "Shopping").firstMatch.exists)
         let portrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         portrait.name = "Kitchen portrait"
         portrait.lifetime = .keepAlways

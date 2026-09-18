@@ -27,14 +27,6 @@ struct AccountSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                if page == .create || page == .join || (!model.signedIn && page != .email) {
-                    Button("Back") {
-                        model.clearFeedback()
-                        page = model.signedIn ? .account : .email
-                    }
-                    .buttonStyle(RoomButtonStyle(kind: .text))
-                    .disabled(model.busy)
-                }
                 Text(title)
                     .font(RoomTheme.heading())
                     .accessibilityAddTraits(.isHeader)
@@ -79,6 +71,7 @@ struct AccountSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .disabled(model.busy)
+            .modifier(RoomSheetLoading(model: model, label: "Loading your account...", refreshOnOpen: model.message == nil))
             .confirmationDialog("Sign out on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) {
                     Task {
@@ -142,7 +135,7 @@ struct AccountSheet: View {
         if model.busy {
             AccountSection {
                 HStack {
-                    ProgressView()
+                    RoomLoadingIcon()
                     Text("Contacting Roomlings...")
                 }
                 .accessibilityIdentifier("account-progress")

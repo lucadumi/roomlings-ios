@@ -94,6 +94,7 @@ await build({
 })
 await mkdir(output, { recursive: true })
 await copyFile(join(project, 'RoomRenderer', 'index.html'), join(output, 'index.html'))
+await copyFile(join(source, 'public/brand/roomlings-icon-flat-256.png'), join(output, 'roomlings-loader.png'))
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(source, 'shared/rooms.ts')).href)
 const { componentCatalog, componentChoreArea, defaultRoomComponents } = await import(pathToFileURL(join(source, 'shared/roomComponents.ts')).href)
 await writeFile(join(output, 'chores.json'), JSON.stringify({

@@ -7,6 +7,7 @@ import RoomlingsCore
 final class AccountModel {
     private(set) var state: AccountState?
     private(set) var busy = false
+    private(set) var refreshing = false
     private(set) var restored = false
     private(set) var room = RoomVisualState.preview
     private(set) var roomFailure: String?
@@ -15,7 +16,10 @@ final class AccountModel {
     private(set) var choreObjects: [ChoreObject] = []
     private(set) var choreCalendar: ChoreCalendar?
     private(set) var choresFailure: String?
-    private(set) var choreSaveFailure = ChoreSaveFailure.none
+    private(set) var choreSaveFailure = HouseholdSaveFailure.none
+    private(set) var shopping: HouseholdShopping?
+    private(set) var shoppingFailure: String?
+    private(set) var shoppingSaveFailure = HouseholdSaveFailure.none
     var message: String?
     var notice: String?
     let setupError: String?
@@ -28,7 +32,7 @@ final class AccountModel {
     var householdName: String? { deletionPending ? nil : state?.session?.household.name }
     var canUseAccount: Bool { signedIn && !deletionPending }
 
-    enum ChoreSaveFailure {
+    enum HouseholdSaveFailure {
         case none, retrySameChange, refreshRequired
     }
 
@@ -71,7 +75,10 @@ final class AccountModel {
 
     @discardableResult
     func refresh() async -> Bool {
-        await perform(.refresh) { try await $0.restore() }
+        guard !busy else { return false }
+        refreshing = true
+        defer { refreshing = false }
+        return await perform(.refresh) { try await $0.restore() }
     }
 
     func sendCode(email: String) async -> Bool {
@@ -143,6 +150,49 @@ final class AccountModel {
         return saved
     }
 
+    func addShoppingItem(_ draft: ShoppingDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveShopping("Shopping item added.") {
+            try await $0.addShoppingItem(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func editShoppingItem(_ item: ShoppingItem, draft: ShoppingDraft, householdID: UUID,
+                          version: Int64, mutationID: UUID) async -> Bool {
+        await saveShopping("Shopping item updated.") {
+            try await $0.editShoppingItem(id: item.id, draft: draft, itemVersion: item.version,
+                                         householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func removeShoppingItem(_ item: ShoppingItem, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveShopping("Shopping item removed.") {
+            try await $0.removeShoppingItem(id: item.id, itemVersion: item.version,
+                                           householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func claimShoppingItem(_ item: ShoppingItem, claim: Bool, householdID: UUID,
+                           version: Int64, mutationID: UUID) async -> Bool {
+        await saveShopping(claim ? "Shopping item claimed." : "Shopping claim released.") {
+            try await $0.claimShoppingItem(id: item.id, claim: claim, itemVersion: item.version,
+                                          householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func pickShoppingItem(_ item: ShoppingItem, pickedUp: Bool, householdID: UUID,
+                          version: Int64, mutationID: UUID) async -> Bool {
+        await saveShopping(pickedUp ? "Item picked up. No expense was created." : "Item returned to the list.") {
+            try await $0.pickShoppingItem(id: item.id, pickedUp: pickedUp, itemVersion: item.version,
+                                         householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    private func saveShopping(_ notice: String, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
+        let saved = await perform(.shopping, operation: operation)
+        if saved { self.notice = notice }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -163,6 +213,7 @@ final class AccountModel {
         guard let client, begin() else { return false }
         defer { busy = false }
         if action.isChore { choreSaveFailure = .none }
+        if action == .shopping { shoppingSaveFailure = .none }
         do {
             let next = try await operation(client)
             deletionBlocked = next.deletionPending
@@ -170,6 +221,11 @@ final class AccountModel {
             if action.isChore, let choresFailure {
                 message = choresFailure
                 choreSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .shopping, let shoppingFailure {
+                message = shoppingFailure
+                shoppingSaveFailure = .retrySameChange
                 return false
             }
             return published
@@ -186,16 +242,23 @@ final class AccountModel {
         choreObjects = []
         choreCalendar = nil
         choresFailure = nil
+        shopping = nil
+        shoppingFailure = nil
         guard !deletionPending, let household = next?.session?.household else {
             room = .preview
             return true
         }
         do {
+            shopping = try HouseholdShopping(household: household)
+        } catch {
+            shoppingFailure = "Your shopping list could not be displayed. Refresh shopping before making changes."
+        }
+        do {
             let catalog = try choreCatalog ?? ChoreCatalog.load()
+            choreCatalog = catalog
             let board = try HouseholdChores(household: household)
             let objects = try catalog.objects(in: household)
             let calendar = try ChoreCalendar(chores: board)
-            choreCatalog = catalog
             chores = board
             choreObjects = objects
             choreCalendar = calendar
@@ -220,31 +283,34 @@ final class AccountModel {
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
         _ = publish(latest)
-        if action.isChore {
+        if action.isChore || action == .shopping {
+            let failure: HouseholdSaveFailure
             switch error {
             case AccountError.server(let status, _) where [403, 404, 409].contains(status):
-                choreSaveFailure = .refreshRequired
+                failure = .refreshRequired
             case AccountError.accountStateRequired, AccountError.householdSelectionChanged:
-                choreSaveFailure = .refreshRequired
+                failure = .refreshRequired
             case AccountError.server(let status, _) where status < 500 && status != 429:
-                choreSaveFailure = .none
+                failure = .none
             case AccountError.invalidInput, AccountError.operationInProgress, AccountError.credentialStorage, is KeychainError:
-                choreSaveFailure = .none
+                failure = .none
             default:
-                choreSaveFailure = .retrySameChange
+                failure = .retrySameChange
             }
+            if action.isChore { choreSaveFailure = failure }
+            else { shoppingSaveFailure = failure }
         }
         message = Self.message(for: error, action: action)
     }
 
     private enum Action {
-        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore, undoChore
+        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore, undoChore, shopping
 
         var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
     }
 
     private static func message(for error: Error, action: Action) -> String {
-        if action.isChore { return choreMessage(for: error) }
+        if action.isChore || action == .shopping { return mutationMessage(for: error, shopping: action == .shopping) }
         if error is CancellationError { return "The request stopped. Refresh your account before repeating it." }
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be updated securely. Unlock the device and try again."
@@ -281,7 +347,8 @@ final class AccountModel {
         }
     }
 
-    private static func choreMessage(for error: Error) -> String {
+    private static func mutationMessage(for error: Error, shopping: Bool) -> String {
+        let resource = shopping ? "shopping" : "chores"
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be read securely. Unlock the device and try again."
         }
@@ -291,23 +358,24 @@ final class AccountModel {
         case AccountError.server(_, .some(.accountDeletionPending)):
             return "Account deletion is pending. Finish it on the web, or sign out here."
         case AccountError.server(_, .some(.reauthenticationRequired)):
-            return "Sign in again before changing chores."
+            return "Sign in again before changing \(resource)."
         case AccountError.server(409, let code):
             return code == .mutationTooOld
-                ? "This save is too old to confirm. Refresh chores and review the current list."
-                : "Chores changed elsewhere. Refresh chores and review the latest state before trying again."
+                ? "This save is too old to confirm. Refresh \(resource) and review the current list."
+                : "\(shopping ? "Shopping" : "Chores") changed elsewhere. Refresh \(resource) and review the latest state before trying again."
         case AccountError.server(let status, _) where status == 403 || status == 404:
-            return "This chore or household is no longer available. Refresh chores before trying again."
+            return "This \(shopping ? "item" : "chore") or household is no longer available. Refresh \(resource) before trying again."
         case AccountError.server(429, _):
             return "Too many changes. Wait a moment before retrying this save."
         case AccountError.invalidInput, AccountError.server(400, _):
-            return "Check the chore name, date, repeat interval, object and active roommates."
+            return shopping ? "Check the item name, quantity and notes, then review its current claim."
+                : "Check the chore name, date, repeat interval, object and active roommates."
         case AccountError.accountStateRequired, AccountError.householdSelectionChanged:
-            return "Your selected household changed. Refresh chores and review the current household before continuing."
+            return "Your selected household changed. Refresh \(resource) and review the current household before continuing."
         case AccountError.operationInProgress:
             return "Another Roomlings request is still running."
         default:
-            return "Could not confirm the chore save. Retry the same change or refresh chores before trying anything else."
+            return "Could not confirm the \(shopping ? "shopping" : "chore") save. Retry the same change or refresh \(resource) before trying anything else."
         }
     }
 }

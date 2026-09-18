@@ -26,6 +26,9 @@
 		A00000000000000000000011 /* ChoreCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* ChoreCatalog.swift */; };
 		A00000000000000000000012 /* ChoreCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* ChoreCalendar.swift */; };
 		A00000000000000000000013 /* RoomControlStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* RoomControlStyles.swift */; };
+		A00000000000000000000014 /* ShoppingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001B /* ShoppingSheet.swift */; };
+		A00000000000000000000015 /* ShoppingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001C /* ShoppingUITests.swift */; };
+		A00000000000000000000016 /* RoomSheetLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001D /* RoomSheetLoading.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +68,9 @@
 		B00000000000000000000018 /* ChoreCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreCatalog.swift; sourceTree = "<group>"; };
 		B00000000000000000000019 /* ChoreCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreCalendar.swift; sourceTree = "<group>"; };
 		B0000000000000000000001A /* RoomControlStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomControlStyles.swift; sourceTree = "<group>"; };
+		B0000000000000000000001B /* ShoppingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingSheet.swift; sourceTree = "<group>"; };
+		B0000000000000000000001C /* ShoppingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingUITests.swift; sourceTree = "<group>"; };
+		B0000000000000000000001D /* RoomSheetLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSheetLoading.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +128,8 @@
 				B00000000000000000000018 /* ChoreCatalog.swift */,
 				B00000000000000000000019 /* ChoreCalendar.swift */,
 				B0000000000000000000001A /* RoomControlStyles.swift */,
+				B0000000000000000000001B /* ShoppingSheet.swift */,
+				B0000000000000000000001D /* RoomSheetLoading.swift */,
 			);
 			path = Roomlings;
 			sourceTree = "<group>";
@@ -139,6 +147,7 @@
 			children = (
 				B00000000000000000000006 /* RoomlingsUITests.swift */,
 				B00000000000000000000010 /* AccountUITests.swift */,
+				B0000000000000000000001C /* ShoppingUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
@@ -303,6 +312,8 @@
 				A00000000000000000000011 /* ChoreCatalog.swift in Sources */,
 				A00000000000000000000012 /* ChoreCalendar.swift in Sources */,
 				A00000000000000000000013 /* RoomControlStyles.swift in Sources */,
+				A00000000000000000000014 /* ShoppingSheet.swift in Sources */,
+				A00000000000000000000016 /* RoomSheetLoading.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -320,6 +331,7 @@
 			files = (
 				A00000000000000000000006 /* RoomlingsUITests.swift in Sources */,
 				A0000000000000000000000A /* AccountUITests.swift in Sources */,
+				A00000000000000000000015 /* ShoppingUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

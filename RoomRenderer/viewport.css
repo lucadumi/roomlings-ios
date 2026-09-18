@@ -10,5 +10,5 @@ body { overscroll-behavior: none; }
 .native-room .world-quick-actions button { min-height: 44px; }
 .native-room .world-interaction-hint { bottom: 4.75rem; }
 .native-room .scene-loading { inset: 0; justify-content: center; background: var(--room-backdrop-center); z-index: 4; }
-.native-room .native-chores-dock { position: absolute; left: 50%; bottom: calc(var(--native-bottom, 0px) + 1rem); transform: translateX(-50%); display: flex; width: max-content; max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); z-index: 2; }
-.native-room .native-chores-dock .dock-tool { min-width: max(44px, 4.6875rem); min-height: 44px; }
+.native-room .native-tools-dock { position: absolute; left: 50%; bottom: calc(var(--native-bottom, 0px) + 1rem); transform: translateX(-50%); display: flex; width: max-content; max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); z-index: 2; }
+.native-room .native-tools-dock .dock-tool { min-width: max(44px, 4.6875rem); min-height: 44px; }

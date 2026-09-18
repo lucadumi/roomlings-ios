@@ -29,6 +29,8 @@ test('the native chore catalog is generated from the shared rooms and object def
   assert.deepEqual(catalog.defaultComponents, defaultRoomComponents().map(({ id, name, kind, roomId, slotId, installed }) => ({
     id, name, kind, roomId, slotId, installed,
   })))
+  assert.deepEqual(await readFile(join(project, 'Build/RoomRenderer/roomlings-loader.png')),
+    await readFile(join(web, 'public/brand/roomlings-icon-flat-256.png')))
 })
 
 test('@room the bundled kitchen stays offline, uses the shared controls and validates the native bridge', async () => {
@@ -116,6 +118,9 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
       version: 1, type: 'state', paused: false, roomStyle: 'original', choresEnabled: true,
     })))
+    await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original', shoppingEnabled: true,
+    })))
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.evaluate(() => window.RoomlingsRoom.receive({ version: 1, type: 'state', paused: true, roomStyle: 'clay' }))
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
@@ -131,7 +136,8 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     const roomComponents = defaultRoomComponents().map((component) =>
       component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
     const householdState = {
-      version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents, choresEnabled: true,
+      version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents,
+      choresEnabled: true, shoppingEnabled: true,
       viewportInsets: { top: 100, right: 12, bottom: 34, left: 12 },
     }
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
@@ -140,9 +146,11 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveCount(0)
     const chores = page.getByRole('button', { name: 'Chores', exact: true })
+    const shopping = page.getByRole('button', { name: 'Shopping', exact: true })
     const tools = page.getByRole('navigation', { name: 'Household tools' })
-    await expect(tools.getByRole('button')).toHaveCount(1)
+    await expect(tools.getByRole('button')).toHaveCount(2)
     await expect(chores).toBeEnabled()
+    await expect(shopping).toBeEnabled()
     await expect(page.locator('.world-hotspots')).toHaveCount(1)
     const object = roomComponents.find((component) => component.slotId === 'kitchen-fridge')
     assert.ok(object)
@@ -154,16 +162,24 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     const markerIDs = await page.locator('.world-hotspot').evaluateAll((buttons) => buttons.map((button) => button.dataset.componentId))
     assert.ok(markerIDs.every((id) => roomComponents.some((component) =>
       component.id === id && component.installed && component.roomId === 'kitchen')))
-    for (const viewport of [{ width: 390, height: 750 }, { width: 1194, height: 834 }]) {
+    for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 750 }, { width: 1194, height: 834 }]) {
       await page.setViewportSize(viewport)
-      await expect.poll(async () => {
-        const dock = await tools.boundingBox()
-        const quick = await page.locator('.world-quick-actions').boundingBox()
-        return dock !== null && quick !== null && dock.x >= 12 && dock.x + dock.width <= viewport.width - 12
-          && dock.y + dock.height <= viewport.height - 34 && quick.y + quick.height < dock.y
-      }).toBe(true)
+      // Measuring both boxes in one evaluate keeps them in the same layout pass. Two separate
+      // round trips can straddle a dock resize and compare a stale dock against a fresh row.
+      await expect.poll(async () => page.evaluate(({ width, height }) => {
+        const dock = document.querySelector('.native-tools-dock')?.getBoundingClientRect()
+        const quick = document.querySelector('.world-quick-actions')?.getBoundingClientRect()
+        if (!dock || !quick) return 'a laid out dock and quick action row'
+        const complaints = []
+        if (dock.x < 12) complaints.push(`dock left ${dock.x.toFixed(1)} past the 12px inset`)
+        if (dock.right > width - 12) complaints.push(`dock right ${dock.right.toFixed(1)} past ${width - 12}`)
+        if (dock.bottom > height - 34) complaints.push(`dock bottom ${dock.bottom.toFixed(1)} past ${height - 34}`)
+        if (quick.bottom >= dock.y) complaints.push(`quick actions end at ${quick.bottom.toFixed(1)}, dock starts at ${dock.y.toFixed(1)}`)
+        return complaints.join(' and ') || 'inside the safe area'
+      }, viewport)).toBe('inside the safe area')
       await expect(page.locator('canvas')).toHaveCSS('width', `${viewport.width}px`)
       await expect(page.locator('canvas')).toHaveCSS('height', `${viewport.height}px`)
+      await expect(shopping).toBeInViewport()
     }
     await page.setViewportSize({ width: 390, height: 750 })
     const world = page.locator('.kitchen-world')
@@ -244,13 +260,20 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
       version: 1, type: 'open-chores', householdId,
     })
+    await shopping.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-shopping', householdId,
+    })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...portraitState, paused: true })
     await expect(chores).toBeDisabled()
+    await expect(shopping).toBeDisabled()
     await expect(marker).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Hide object labels', exact: true })).toBeDisabled()
     await chores.evaluate((button) => button.click())
+    await shopping.evaluate((button) => button.click())
     await marker.evaluate((button) => button.click())
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-chores').length, 3)
+    assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-shopping').length, 1)
     await page.setViewportSize({ width: 1194, height: 834 })
     await expect(camera).toHaveAttribute('width', '2388')
     const nextHousehold = randomUUID()
@@ -258,6 +281,10 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(world).toHaveAttribute('data-component-focus', 'false')
     await expect(camera).toHaveAttribute('data-camera-zoom', '1.00000')
+    await shopping.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-shopping', householdId: nextHousehold,
+    })
     await chores.click()
     assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
       version: 1, type: 'open-chores', householdId: nextHousehold,
@@ -270,16 +297,24 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       ...householdState, householdId: nextHousehold, choresEnabled: false,
     })
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
+    await expect(tools.getByRole('button')).toHaveCount(1)
+    await expect(shopping).toBeEnabled()
     await expect(world).toHaveAttribute('data-component-focus', 'false')
     await expect(page.getByRole('button', { name: 'Hide object labels', exact: true })).toHaveCount(0)
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, householdId: nextHousehold })
     await expect(marker).toBeVisible()
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, householdId: nextHousehold, shoppingEnabled: false,
+    })
+    await expect(shopping).toHaveCount(0)
+    await expect(chores).toBeEnabled()
     await page.evaluate(() => window.RoomlingsRoom.receive({
       version: 1, type: 'state', paused: false, roomStyle: 'original',
     }))
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(page.locator('main')).toHaveAttribute('data-household-id', '')
     await expect(chores).toHaveCount(0)
+    await expect(shopping).toHaveCount(0)
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
     await assert.rejects(page.evaluate(() => fetch('/api/account')))

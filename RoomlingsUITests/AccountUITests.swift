@@ -50,7 +50,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func fixture(_ path: String, body: [String: Any]) async throws -> Data {
+    func fixture(_ path: String, body: [String: Any]) async throws -> Data {
         var request = URLRequest(url: try fixtureOrigin().appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -61,7 +61,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchApp(systemControls: Bool = false) throws -> XCUIApplication {
+    func launchApp(systemControls: Bool = false) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = systemControls ? ["-roomlings-system-controls"] : []
         app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = try fixtureOrigin().absoluteString
@@ -83,7 +83,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func fill(_ field: XCUIElement, _ value: String) throws {
+    func fill(_ field: XCUIElement, _ value: String) throws {
         guard field.waitForExistence(timeout: Wait.control) else { throw FlowError.missingElement(field.description) }
         // A loaded simulator drops synthesized keystrokes while SwiftUI rebuilds the form, so
         // confirm what actually landed rather than trusting a single typeText.
@@ -102,7 +102,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
+    func tap(_ button: XCUIElement, in app: XCUIApplication) throws {
         guard button.exists || button.waitForExistence(timeout: Wait.control) else {
             throw FlowError.missingElement(button.description)
         }
@@ -160,7 +160,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func setSwitch(_ control: XCUIElement, on: Bool, in app: XCUIApplication) throws {
+    func setSwitch(_ control: XCUIElement, on: Bool, in app: XCUIApplication) throws {
         guard control.exists || control.waitForExistence(timeout: Wait.control) else {
             throw FlowError.missingElement(control.description)
         }
@@ -175,7 +175,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func signIn(_ app: XCUIApplication, email: String) throws {
+    func signIn(_ app: XCUIApplication, email: String) throws {
         try fill(app.textFields["Email address"], email)
         try tap(app.buttons["Send sign-in code"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
@@ -196,7 +196,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func openAccount(_ app: XCUIApplication) throws {
+    func openAccount(_ app: XCUIApplication) throws {
         let sheet = app.otherElements["account-sheet"]
         let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: sheet)
         guard XCTWaiter.wait(for: [dismissed], timeout: Wait.control) == .completed else {
@@ -293,7 +293,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func openChores(_ app: XCUIApplication, objectName: String? = nil) throws {
+    func openChores(_ app: XCUIApplication, objectName: String? = nil) throws {
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
         let sheet = app.otherElements["chores-sheet"]
@@ -442,7 +442,10 @@ final class AccountUITests: XCTestCase {
 
     @MainActor
     func testChoresCreateAndCompleteInTheSharedHousehold() async throws {
-        executionTimeAllowance = 300
+        // Signing in, styling the controls, creating a chore, completing it, undoing it and
+        // relaunching is the longest flow here, and an iPad runner takes about half again as
+        // long as an iPhone one. This budget only catches a hang, it is not a speed target.
+        executionTimeAllowance = 600
         continueAfterFailure = false
         let (app, home) = try await launchChores()
         try exerciseChoreControls(app, screenshotName: "Roomlings control styling trial")
