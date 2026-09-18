@@ -14,6 +14,10 @@ extension HouseholdShopping: HouseholdProjection {
     static let collectionKey = "shopping"
 }
 
+extension HouseholdLedger: HouseholdProjection {
+    static let collectionKey = "expenses"
+}
+
 struct HouseholdMutationResponse<Projection: HouseholdProjection>: Decodable, Sendable {
     let household: HouseholdSnapshot
     let projection: Projection
@@ -38,3 +42,4 @@ struct HouseholdMutationResponse<Projection: HouseholdProjection>: Decodable, Se
 
 typealias ChoreMutationResponse = HouseholdMutationResponse<HouseholdChores>
 typealias ShoppingMutationResponse = HouseholdMutationResponse<HouseholdShopping>
+typealias LedgerMutationResponse = HouseholdMutationResponse<HouseholdLedger>

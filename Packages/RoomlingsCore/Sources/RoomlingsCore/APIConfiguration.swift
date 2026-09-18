@@ -55,12 +55,13 @@ enum APIEndpoint: Equatable {
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
+    case recordExpense, removeExpense(UUID), checkoutShopping
 
     var method: String {
         switch self {
         case .account: "GET"
         case .editShoppingItem: "PATCH"
-        case .removeShoppingItem: "DELETE"
+        case .removeShoppingItem, .removeExpense: "DELETE"
         default: "POST"
         }
     }
@@ -82,6 +83,9 @@ enum APIEndpoint: Equatable {
         case .editShoppingItem(let id), .removeShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())"
         case .claimShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/claim"
         case .pickShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/pick"
+        case .recordExpense: "api/expenses"
+        case .removeExpense(let id): "api/expenses/\(id.uuidString.lowercased())"
+        case .checkoutShopping: "api/shopping/checkout"
         }
     }
 }

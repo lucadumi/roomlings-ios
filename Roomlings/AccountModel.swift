@@ -20,6 +20,9 @@ final class AccountModel {
     private(set) var shopping: HouseholdShopping?
     private(set) var shoppingFailure: String?
     private(set) var shoppingSaveFailure = HouseholdSaveFailure.none
+    private(set) var ledger: HouseholdLedger?
+    private(set) var ledgerFailure: String?
+    private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
     var message: String?
     var notice: String?
     let setupError: String?
@@ -193,6 +196,32 @@ final class AccountModel {
         return saved
     }
 
+    func recordExpense(_ draft: ExpenseDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Receipt recorded.") {
+            try await $0.recordExpense(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func checkoutShopping(_ draft: ExpenseDraft, checkoutID: UUID, selection: [ShoppingSelection],
+                          householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Receipt recorded and the basket cleared.") {
+            try await $0.checkoutShopping(draft, checkoutID: checkoutID, selection: selection,
+                                          householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func removeExpense(_ expense: HouseholdExpense, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Receipt removed from the ledger.") {
+            try await $0.removeExpense(id: expense.id, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    private func saveLedger(_ notice: String, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
+        let saved = await perform(.ledger, operation: operation)
+        if saved { self.notice = notice }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -214,6 +243,7 @@ final class AccountModel {
         defer { busy = false }
         if action.isChore { choreSaveFailure = .none }
         if action == .shopping { shoppingSaveFailure = .none }
+        if action == .ledger { ledgerSaveFailure = .none }
         do {
             let next = try await operation(client)
             deletionBlocked = next.deletionPending
@@ -226,6 +256,11 @@ final class AccountModel {
             if action == .shopping, let shoppingFailure {
                 message = shoppingFailure
                 shoppingSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .ledger, let ledgerFailure {
+                message = ledgerFailure
+                ledgerSaveFailure = .retrySameChange
                 return false
             }
             return published
@@ -244,6 +279,8 @@ final class AccountModel {
         choresFailure = nil
         shopping = nil
         shoppingFailure = nil
+        ledger = nil
+        ledgerFailure = nil
         guard !deletionPending, let household = next?.session?.household else {
             room = .preview
             return true
@@ -252,6 +289,11 @@ final class AccountModel {
             shopping = try HouseholdShopping(household: household)
         } catch {
             shoppingFailure = "Your shopping list could not be displayed. Refresh shopping before making changes."
+        }
+        do {
+            ledger = try HouseholdLedger(household: household)
+        } catch {
+            ledgerFailure = "Your recorded receipts could not be displayed. Refresh shopping before recording another."
         }
         do {
             let catalog = try choreCatalog ?? ChoreCatalog.load()
@@ -283,7 +325,7 @@ final class AccountModel {
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
         _ = publish(latest)
-        if action.isChore || action == .shopping {
+        if action.isChore || action == .shopping || action == .ledger {
             let failure: HouseholdSaveFailure
             switch error {
             case AccountError.server(let status, _) where [403, 404, 409].contains(status):
@@ -298,19 +340,72 @@ final class AccountModel {
                 failure = .retrySameChange
             }
             if action.isChore { choreSaveFailure = failure }
-            else { shoppingSaveFailure = failure }
+            else if action == .shopping { shoppingSaveFailure = failure }
+            else { ledgerSaveFailure = failure }
         }
         message = Self.message(for: error, action: action)
     }
 
     private enum Action {
-        case refresh, sendCode, verify, recover, create, join, select, logout, addChore, completeChore, undoChore, shopping
+        case refresh, sendCode, verify, recover, create, join, select, logout
+        case addChore, completeChore, undoChore, shopping, ledger
 
         var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
+
+        var resource: Resource? {
+            if isChore { return .chores }
+            if self == .shopping { return .shopping }
+            return self == .ledger ? .ledger : nil
+        }
+    }
+
+    /// Wording for the household collection a failed mutation touched.
+    private enum Resource {
+        case chores, shopping, ledger
+
+        var name: String {
+            switch self {
+            case .chores: "chores"
+            case .shopping: "shopping"
+            case .ledger: "receipts"
+            }
+        }
+
+        var subject: String {
+            switch self {
+            case .chores: "Chores"
+            case .shopping: "Shopping"
+            case .ledger: "Receipts"
+            }
+        }
+
+        var item: String {
+            switch self {
+            case .chores: "chore"
+            case .shopping: "item"
+            case .ledger: "receipt"
+            }
+        }
+
+        var save: String {
+            switch self {
+            case .chores: "chore"
+            case .shopping: "shopping"
+            case .ledger: "receipt"
+            }
+        }
+
+        var advice: String {
+            switch self {
+            case .chores: "Check the chore name, date, repeat interval, object and active roommates."
+            case .shopping: "Check the item name, quantity and notes, then review its current claim."
+            case .ledger: "Check the description, amount, who paid, the split and the date."
+            }
+        }
     }
 
     private static func message(for error: Error, action: Action) -> String {
-        if action.isChore || action == .shopping { return mutationMessage(for: error, shopping: action == .shopping) }
+        if let resource = action.resource { return mutationMessage(for: error, resource: resource) }
         if error is CancellationError { return "The request stopped. Refresh your account before repeating it." }
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be updated securely. Unlock the device and try again."
@@ -347,8 +442,8 @@ final class AccountModel {
         }
     }
 
-    private static func mutationMessage(for error: Error, shopping: Bool) -> String {
-        let resource = shopping ? "shopping" : "chores"
+    private static func mutationMessage(for error: Error, resource: Resource) -> String {
+        let name = resource.name
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be read securely. Unlock the device and try again."
         }
@@ -358,24 +453,23 @@ final class AccountModel {
         case AccountError.server(_, .some(.accountDeletionPending)):
             return "Account deletion is pending. Finish it on the web, or sign out here."
         case AccountError.server(_, .some(.reauthenticationRequired)):
-            return "Sign in again before changing \(resource)."
+            return "Sign in again before changing \(name)."
         case AccountError.server(409, let code):
             return code == .mutationTooOld
-                ? "This save is too old to confirm. Refresh \(resource) and review the current list."
-                : "\(shopping ? "Shopping" : "Chores") changed elsewhere. Refresh \(resource) and review the latest state before trying again."
+                ? "This save is too old to confirm. Refresh \(name) and review the current list."
+                : "\(resource.subject) changed elsewhere. Refresh \(name) and review the latest state before trying again."
         case AccountError.server(let status, _) where status == 403 || status == 404:
-            return "This \(shopping ? "item" : "chore") or household is no longer available. Refresh \(resource) before trying again."
+            return "This \(resource.item) or household is no longer available. Refresh \(name) before trying again."
         case AccountError.server(429, _):
             return "Too many changes. Wait a moment before retrying this save."
         case AccountError.invalidInput, AccountError.server(400, _):
-            return shopping ? "Check the item name, quantity and notes, then review its current claim."
-                : "Check the chore name, date, repeat interval, object and active roommates."
+            return resource.advice
         case AccountError.accountStateRequired, AccountError.householdSelectionChanged:
-            return "Your selected household changed. Refresh \(resource) and review the current household before continuing."
+            return "Your selected household changed. Refresh \(name) and review the current household before continuing."
         case AccountError.operationInProgress:
             return "Another Roomlings request is still running."
         default:
-            return "Could not confirm the \(shopping ? "shopping" : "chore") save. Retry the same change or refresh \(resource) before trying anything else."
+            return "Could not confirm the \(resource.save) save. Retry the same change or refresh \(name) before trying anything else."
         }
     }
 }
