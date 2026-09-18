@@ -164,12 +164,19 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       component.id === id && component.installed && component.roomId === 'kitchen')))
     for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 750 }, { width: 1194, height: 834 }]) {
       await page.setViewportSize(viewport)
-      await expect.poll(async () => {
-        const dock = await tools.boundingBox()
-        const quick = await page.locator('.world-quick-actions').boundingBox()
-        return dock !== null && quick !== null && dock.x >= 12 && dock.x + dock.width <= viewport.width - 12
-          && dock.y + dock.height <= viewport.height - 34 && quick.y + quick.height < dock.y
-      }).toBe(true)
+      // Measuring both boxes in one evaluate keeps them in the same layout pass. Two separate
+      // round trips can straddle a dock resize and compare a stale dock against a fresh row.
+      await expect.poll(async () => page.evaluate(({ width, height }) => {
+        const dock = document.querySelector('.native-tools-dock')?.getBoundingClientRect()
+        const quick = document.querySelector('.world-quick-actions')?.getBoundingClientRect()
+        if (!dock || !quick) return 'a laid out dock and quick action row'
+        const complaints = []
+        if (dock.x < 12) complaints.push(`dock left ${dock.x.toFixed(1)} past the 12px inset`)
+        if (dock.right > width - 12) complaints.push(`dock right ${dock.right.toFixed(1)} past ${width - 12}`)
+        if (dock.bottom > height - 34) complaints.push(`dock bottom ${dock.bottom.toFixed(1)} past ${height - 34}`)
+        if (quick.bottom >= dock.y) complaints.push(`quick actions end at ${quick.bottom.toFixed(1)}, dock starts at ${dock.y.toFixed(1)}`)
+        return complaints.join(' and ') || 'inside the safe area'
+      }, viewport)).toBe('inside the safe area')
       await expect(page.locator('canvas')).toHaveCSS('width', `${viewport.width}px`)
       await expect(page.locator('canvas')).toHaveCSS('height', `${viewport.height}px`)
       await expect(shopping).toBeInViewport()
