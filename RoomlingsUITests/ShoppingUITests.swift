@@ -356,35 +356,19 @@ extension AccountUITests {
         try JSONDecoder().decode(LedgerState.self, from: await fixture("_fixture/ledger/state", body: ["householdId": home.id]))
     }
 
-    /// Submits the receipt form. Dismissing the decimal keyboard can swallow the first tap, and
-    /// the form still being shown with no error is proof the save never started, so tapping
-    /// again cannot record a second receipt.
+    /// Submits the receipt form. The long form puts its primary action below the fold, and
+    /// dismissing the decimal keyboard can swallow the first tap. The form still being shown
+    /// with no error is proof the save never started, so tapping again cannot record twice.
     @MainActor
-    private func submitReceipt(_ app: XCUIApplication, expecting notice: String) throws {
+    private func submitReceipt(_ app: XCUIApplication, expecting text: String) throws {
         let submit = app.buttons["record-receipt"]
         for _ in 0..<3 {
-            reveal(submit, in: app)
             try tap(submit, in: app)
-            if app.staticTexts[notice].waitForExistence(timeout: Wait.flip) { return }
+            if app.staticTexts[text].waitForExistence(timeout: Wait.flip) { return }
             guard submit.exists, !app.staticTexts["shopping-error"].exists,
                   !app.staticTexts["receipt-form-error"].exists else { break }
         }
-        expectNotice(notice, in: app)
-    }
-
-    /// The receipt form is long, so on a fitted iPad sheet its primary action starts below the
-    /// fold. Scroll it into view the way a person would before tapping it.
-    @MainActor
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        guard element.waitForExistence(timeout: Wait.control) else {
-            XCTFail("\(element.description) never appeared to scroll to.")
-            return
-        }
-        for _ in 0..<6 {
-            if element.isHittable { return }
-            app.scrollViews.firstMatch.swipeUp()
-        }
-        XCTAssertTrue(element.isHittable, "\(element.description) never scrolled into view.")
+        expectNotice(text, in: app)
     }
 
     /// Reports whatever the sheet is showing instead, so a failed save names its own reason.
