@@ -106,4 +106,35 @@ enum LedgerFixtures {
         }
         return ShoppingFixtures.withReceipt(household(expenses: expenses, version: 18))
     }
+
+    static let settlementID = UUID(uuidString: "16161616-1616-4161-8161-161616161616")!
+    static let owingMember = ShoppingFixtures.roommateID
+    static let owedMember = ShoppingFixtures.memberID
+
+    /// One expense the payer split with a roommate, so exactly one repayment is outstanding.
+    static func owingHousehold(version: Int64 = 17) -> JSONValue {
+        ShoppingFixtures.replacing(household(items: [], expenses: [plainExpense], version: version), with: [
+            "shopping": .object(["items": .array([]), "runs": .array([])]),
+        ])
+    }
+
+    static func settled(amount: Int64, version: Int64 = 18) -> JSONValue {
+        ShoppingFixtures.withReceipt(ShoppingFixtures.replacing(owingHousehold(version: version), with: [
+            "settlements": .array([.object([
+                "id": id(settlementID), "from": id(owingMember), "to": id(owedMember),
+                "amount": .integer(amount), "createdAt": .string(createdAt),
+                "futureSettlementData": .integer(Int64.max)
+            ])])
+        ]))
+    }
+
+    /// The household returned after undoing that repayment.
+    static func undone() -> JSONValue {
+        ShoppingFixtures.replacing(owingHousehold(version: 19), with: [
+            "mutationReceipts": .array([.object([
+                "id": id(ShoppingFixtures.undoMutationID), "memberId": id(ShoppingFixtures.memberID),
+                "version": .integer(19), "fingerprint": .string(String(repeating: "2", count: 64))
+            ])])
+        ])
+    }
 }

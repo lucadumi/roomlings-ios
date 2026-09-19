@@ -232,6 +232,22 @@ public actor AccountSession {
         try await mutateLedger(.remove(id), householdID: householdID, version: version, mutationID: mutationID)
     }
 
+    @discardableResult
+    public func recordSettlement(
+        from: UUID, to: UUID, amount: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(
+            .settle(from: from, to: to, amount: amount), householdID: householdID, version: version, mutationID: mutationID
+        )
+    }
+
+    @discardableResult
+    public func removeSettlement(
+        id: UUID, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(.removeSettlement(id), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
     private func mutateLedger(
         _ change: LedgerChange, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {

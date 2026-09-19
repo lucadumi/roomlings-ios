@@ -126,12 +126,50 @@ public struct HouseholdExpense: Sendable, Equatable, Identifiable {
     }
 }
 
+public struct HouseholdSettlement: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let from: UUID
+    public let to: UUID
+    public let amount: Int64
+    public let createdAt: String
+
+    init(_ value: JSONValue) throws {
+        let fields = try HouseholdFields(value)
+        id = try fields.uuid("id")
+        from = try fields.uuid("from")
+        to = try fields.uuid("to")
+        amount = try fields.integer("amount", range: 1...HouseholdValidation.maximumInteger)
+        createdAt = try fields.timestamp("createdAt")
+        guard from != to else { throw AccountError.invalidResponse }
+    }
+}
+
+/// One member's position in the shared ledger. Positive means the household owes them.
+public struct MemberBalance: Sendable, Equatable, Identifiable {
+    public let member: HouseholdMember
+    public let amount: Int64
+
+    public var id: UUID { member.id }
+    public var isOwed: Bool { amount > 0 }
+    public var owes: Bool { amount < 0 }
+}
+
+/// A proposed repayment. `from` owes and pays `to`, who is owed.
+public struct SuggestedTransfer: Sendable, Equatable, Identifiable {
+    public let from: UUID
+    public let to: UUID
+    public let amount: Int64
+
+    public var id: String { "\(from.uuidString)-\(to.uuidString)" }
+}
+
 /// A validated native projection of the shared ledger. The server stays authoritative for
 /// balances; this only reads back what was recorded.
 public struct HouseholdLedger: Sendable, Equatable {
     public static let expenseLimit = 20_000
 
     public let expenses: [HouseholdExpense]
+    public let settlements: [HouseholdSettlement]
     public let members: [HouseholdMember]
     public var activeMembers: [HouseholdMember] { members.filter { !$0.inactive } }
 
@@ -156,6 +194,14 @@ public struct HouseholdLedger: Sendable, Equatable {
                 throw AccountError.invalidResponse
             }
         }
+        let rawSettlements = try fields.array("settlements")
+        guard rawSettlements.count <= Self.expenseLimit else { throw AccountError.invalidResponse }
+        settlements = try rawSettlements.map(HouseholdSettlement.init)
+        var settlementIDs = Set<UUID>()
+        for settlement in settlements {
+            guard settlementIDs.insert(settlement.id).inserted, memberIDs.contains(settlement.from),
+                  memberIDs.contains(settlement.to) else { throw AccountError.invalidResponse }
+        }
         if let shopping = household.value["shopping"] {
             let shoppingFields = try HouseholdFields(shopping)
             shoppingItemIDs = try shoppingFields.array("items").map { value in
@@ -172,6 +218,61 @@ public struct HouseholdLedger: Sendable, Equatable {
     }
 
     public func member(_ id: UUID) -> HouseholdMember? { members.first { $0.id == id } }
+
+    /// Mirrors `balances` in the web project's `shared/domain.ts`, so the app can never show a
+    /// figure the server would contradict. A payer is credited the whole amount, every
+    /// participant is debited their whole-cent share, and a repayment credits the member who
+    /// paid it back. Positive means the household owes that member.
+    public var balances: [MemberBalance] {
+        var totals = Dictionary(uniqueKeysWithValues: members.map { ($0.id, Int64(0)) })
+        for expense in expenses {
+            totals[expense.paidBy, default: 0] += expense.amount
+            for (participant, share) in expense.shares {
+                totals[participant, default: 0] -= share
+            }
+        }
+        for settlement in settlements {
+            totals[settlement.from, default: 0] += settlement.amount
+            totals[settlement.to, default: 0] -= settlement.amount
+        }
+        return members.map { MemberBalance(member: $0, amount: totals[$0.id] ?? 0) }
+    }
+
+    /// Mirrors `suggestedTransfers`: the largest debtor pays the largest creditor until one of
+    /// them is square, with member ID breaking ties exactly as the shared sort does.
+    public var suggestedTransfers: [SuggestedTransfer] {
+        let current = balances
+        let order: (_ a: (id: UUID, amount: Int64), _ b: (id: UUID, amount: Int64)) -> Bool = { a, b in
+            a.amount == b.amount
+                ? a.id.uuidString.lowercased() < b.id.uuidString.lowercased()
+                : a.amount > b.amount
+        }
+        var creditors = current.filter { $0.amount > 0 }.map { (id: $0.member.id, amount: $0.amount) }.sorted(by: order)
+        var debtors = current.filter { $0.amount < 0 }.map { (id: $0.member.id, amount: -$0.amount) }.sorted(by: order)
+        var transfers: [SuggestedTransfer] = []
+        var creditor = 0
+        var debtor = 0
+        while creditor < creditors.count && debtor < debtors.count {
+            let amount = min(creditors[creditor].amount, debtors[debtor].amount)
+            transfers.append(SuggestedTransfer(from: debtors[debtor].id, to: creditors[creditor].id, amount: amount))
+            creditors[creditor].amount -= amount
+            debtors[debtor].amount -= amount
+            if creditors[creditor].amount == 0 { creditor += 1 }
+            if debtors[debtor].amount == 0 { debtor += 1 }
+        }
+        return transfers
+    }
+
+    /// The same guard rails the server applies before it records a repayment, so the app only
+    /// offers repayments the ledger will accept.
+    public func canSettle(from: UUID, to: UUID, amount: Int64) -> Bool {
+        guard from != to, amount > 0 else { return false }
+        let current = balances
+        guard let owing = current.first(where: { $0.member.id == from })?.amount,
+              let owed = current.first(where: { $0.member.id == to })?.amount,
+              owing < 0, owed > 0 else { return false }
+        return amount <= -owing && amount <= owed
+    }
 
     /// Bill payments and shopping receipts are owned by their originating flow, so only a
     /// plain expense can be removed from here.

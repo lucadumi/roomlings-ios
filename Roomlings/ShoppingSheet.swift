@@ -17,12 +17,12 @@ struct ShoppingSheet: View {
     @State private var headerHeight: CGFloat = 64
 
     private enum Section: String, CaseIterable {
-        case list = "List", basket = "Basket", receipts = "Receipts"
+        case list = "List", basket = "Basket"
     }
 
     private enum Page {
         case board, form(ShoppingItem?), remove(ShoppingItem), release(ShoppingItem)
-        case receipt(fromBasket: Bool), removeReceipt(HouseholdExpense)
+        case receipt
 
         var id: String {
             switch self {
@@ -30,8 +30,7 @@ struct ShoppingSheet: View {
             case .form(let item): "form-\(item?.id.uuidString ?? "new")"
             case .remove(let item): "remove-\(item.id)"
             case .release(let item): "release-\(item.id)"
-            case .receipt(let fromBasket): "receipt-\(fromBasket ? "basket" : "expense")"
-            case .removeReceipt(let expense): "remove-receipt-\(expense.id)"
+            case .receipt: "receipt-basket"
             }
         }
 
@@ -41,8 +40,7 @@ struct ShoppingSheet: View {
             case .form(let item): item == nil ? "Add to the shared list." : "Edit a shopping item."
             case .remove: "Remove this shopping item?"
             case .release: "Release this shopping claim?"
-            case .receipt(let fromBasket): fromBasket ? "Record your basket." : "Record a paid receipt."
-            case .removeReceipt: "Remove this receipt?"
+            case .receipt: "Record your basket."
             }
         }
 
@@ -51,15 +49,12 @@ struct ShoppingSheet: View {
     private enum Change {
         case add(ShoppingDraft), edit(ShoppingItem, ShoppingDraft), remove(ShoppingItem)
         case claim(ShoppingItem, Bool), pick(ShoppingItem, Bool)
-        case record(ExpenseDraft), checkout(ExpenseDraft, UUID, [ShoppingSelection])
-        case removeReceipt(HouseholdExpense)
+        case checkout(ExpenseDraft, UUID, [ShoppingSelection])
 
-        /// Ledger changes report their outcome through the ledger projection, not the list.
+        /// A checkout reports its outcome through the ledger projection, not the list.
         var isLedger: Bool {
-            switch self {
-            case .record, .checkout, .removeReceipt: true
-            default: false
-            }
+            if case .checkout = self { return true }
+            return false
         }
     }
 
@@ -95,8 +90,7 @@ struct ShoppingSheet: View {
                             case .form(let item): form(item, shopping: shopping, memberID: session.memberID)
                             case .remove(let item): confirmation(item, releasing: false, shopping: shopping, memberID: session.memberID)
                             case .release(let item): confirmation(item, releasing: true, shopping: shopping, memberID: session.memberID)
-                            case .receipt(let fromBasket): receiptForm(fromBasket: fromBasket, shopping: shopping, memberID: session.memberID)
-                            case .removeReceipt(let expense): receiptRemoval(expense, memberID: session.memberID)
+                            case .receipt: receiptForm(shopping: shopping, memberID: session.memberID)
                             }
                         } else {
                             Text(model.shoppingFailure ?? "Open a household to use its shopping list.")
@@ -190,115 +184,42 @@ struct ShoppingSheet: View {
         return VStack(alignment: .leading, spacing: 16) {
             RoomSegmentedPicker("Shopping sections", selection: $section, options: Section.allCases) { $0.rawValue }
                 .accessibilityIdentifier("shopping-sections")
-            if section == .receipts {
-                receipts(memberID: memberID)
-            } else {
-                Text("Claim what you will buy, then tick it into your basket. Ticking items never creates a debt.")
-                    .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                HStack {
-                    Text("\(items.count) \(items.count == 1 ? "item" : "items")")
-                        .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                    Spacer()
-                    if section == .list {
-                        Button("Add item") { openForm(nil) }
-                            .buttonStyle(RoomButtonStyle(kind: .primary))
-                            .fixedSize(horizontal: true, vertical: false)
-                            .disabled(changesBlocked || shopping.items.count >= HouseholdShopping.itemLimit)
-                    }
-                }
-                if items.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(section == .basket ? "Your basket is empty." : "What does home need?")
-                            .font(RoomTheme.heading(20))
-                        Text(section == .basket ? "Pick up items from the shared list first." : "Add groceries, quantities and any useful notes.")
-                            .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                    }
-                    .padding(.vertical, 16)
-                }
-                ForEach(items) { item in itemCard(item, shopping: shopping, memberID: memberID) }
-                if section == .basket, !basket.isEmpty {
-                    Text("Recording a receipt splits it in the shared ledger and takes these items off the list.")
-                        .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                    Button("Record receipt") { openReceipt(fromBasket: true, basket: basket, memberID: memberID) }
-                        .buttonStyle(RoomButtonStyle(kind: .primary))
-                        .accessibilityIdentifier("record-basket-receipt")
-                        .disabled(changesBlocked || model.ledger == nil || model.choreCalendar == nil)
-                }
-                if shopping.items.count >= HouseholdShopping.itemLimit {
-                    Text("The list has reached \(HouseholdShopping.itemLimit) items. Remove unused items or record a receipt before adding more.")
-                        .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private func receipts(memberID: UUID) -> some View {
-        if let ledger = model.ledger, let currency = model.state?.session?.household.currency {
-            Text("Every receipt here is split equally between the roommates it names.")
+            Text("Claim what you will buy, then tick it into your basket. Ticking items never creates a debt.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             HStack {
-                Text("\(ledger.expenses.count) \(ledger.expenses.count == 1 ? "receipt" : "receipts")")
+                Text("\(items.count) \(items.count == 1 ? "item" : "items")")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 Spacer()
-                Button("Record expense") { openReceipt(fromBasket: false, basket: [], memberID: memberID) }
-                    .buttonStyle(RoomButtonStyle(kind: .primary))
-                    .fixedSize(horizontal: true, vertical: false)
-                    .accessibilityIdentifier("record-expense")
-                    .disabled(changesBlocked || model.choreCalendar == nil
-                              || ledger.expenses.count >= HouseholdLedger.expenseLimit)
+                if section == .list {
+                    Button("Add item") { openForm(nil) }
+                        .buttonStyle(RoomButtonStyle(kind: .primary))
+                        .fixedSize(horizontal: true, vertical: false)
+                        .disabled(changesBlocked || shopping.items.count >= HouseholdShopping.itemLimit)
+                }
             }
-            if ledger.expenses.isEmpty {
+            if items.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("No receipts yet.").font(RoomTheme.heading(20))
-                    Text("Record what you paid and Roomlings splits it for you.")
+                    Text(section == .basket ? "Your basket is empty." : "What does home need?")
+                        .font(RoomTheme.heading(20))
+                    Text(section == .basket ? "Pick up items from the shared list first." : "Add groceries, quantities and any useful notes.")
                         .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 }
                 .padding(.vertical, 16)
             }
-            ForEach(ledger.expenses) { expense in
-                receiptCard(expense, ledger: ledger, currency: currency, memberID: memberID)
-            }
-        } else {
-            Text(model.ledgerFailure ?? "Open a household to see its receipts.")
-                .foregroundStyle(RoomTheme.error)
-                .accessibilityIdentifier("receipts-unavailable")
-        }
-    }
-
-    private func receiptCard(
-        _ expense: HouseholdExpense, ledger: HouseholdLedger, currency: HouseholdCurrency, memberID: UUID
-    ) -> some View {
-        let payer = ledger.member(expense.paidBy)?.name ?? "Former roommate"
-        let shares = expense.shares
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(expense.description).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
-            Text(Money.text(expense.amount, currency: currency)).font(RoomTheme.heading(20))
-            Text("\(payer) paid on \(expense.date)")
-                .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            Text(expense.category.label).font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            ForEach(expense.participants, id: \.self) { participant in
-                Text("\(ledger.member(participant)?.name ?? "Former roommate") owes \(Money.text(shares[participant] ?? 0, currency: currency))")
-                    .font(RoomTheme.body(14))
-            }
-            if expense.shoppingRunID != nil {
-                Text("Recorded from a shopping run. Remove it on the web so its run history stays correct.")
+            ForEach(items) { item in itemCard(item, shopping: shopping, memberID: memberID) }
+            if section == .basket, !basket.isEmpty {
+                Text("Recording a receipt splits it in the shared ledger and takes these items off the list.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            } else if expense.isBillPayment {
-                Text("This is a bill payment. Manage it on the web.")
+                Button("Record receipt") { openReceipt(basket: basket, memberID: memberID) }
+                    .buttonStyle(RoomButtonStyle(kind: .primary))
+                    .accessibilityIdentifier("record-basket-receipt")
+                    .disabled(changesBlocked || model.ledger == nil || model.choreCalendar == nil)
+            }
+            if shopping.items.count >= HouseholdShopping.itemLimit {
+                Text("The list has reached \(HouseholdShopping.itemLimit) items. Remove unused items or record a receipt before adding more.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            } else {
-                Button("Remove receipt", role: .destructive) { page = .removeReceipt(expense); model.clearFeedback() }
-                    .buttonStyle(RoomButtonStyle(kind: .text))
-                    .accessibilityLabel("Remove \(expense.description)")
-                    .disabled(changesBlocked || !ledger.canRemove(expense, memberID: memberID))
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(RoomTheme.border))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("receipt-\(expense.id.uuidString.lowercased())")
     }
 
     private func itemCard(_ item: ShoppingItem, shopping: HouseholdShopping, memberID: UUID) -> some View {
@@ -428,19 +349,17 @@ struct ShoppingSheet: View {
         return shopper == memberID ? "You are buying this" : "\(name) is buying this"
     }
 
-    @ViewBuilder private func receiptForm(fromBasket: Bool, shopping: HouseholdShopping, memberID: UUID) -> some View {
-        let basket = fromBasket ? shopping.items.filter { shopping.inBasket($0, memberID: memberID) } : []
+    @ViewBuilder private func receiptForm(shopping: HouseholdShopping, memberID: UUID) -> some View {
+        let basket = shopping.items.filter { shopping.inBasket($0, memberID: memberID) }
         if let ledger = model.ledger, let calendar = model.choreCalendar,
-           let currency = model.state?.session?.household.currency, !fromBasket || !basket.isEmpty {
+           let currency = model.state?.session?.household.currency, !basket.isEmpty {
             VStack(alignment: .leading, spacing: 20) {
                 ReceiptForm(
                     values: $receipt, members: ledger.activeMembers, currency: currency, calendar: calendar,
                     basket: basket, disabled: changesBlocked
                 ) { draft in
                     formError = nil
-                    start(fromBasket
-                          ? .checkout(draft, UUID(), basket.map(ShoppingSelection.init))
-                          : .record(draft))
+                    start(.checkout(draft, UUID(), basket.map(ShoppingSelection.init)))
                 }
                 Button("Cancel") { page = .board; model.clearFeedback(); formError = nil }
                     .buttonStyle(RoomButtonStyle(kind: .text))
@@ -448,9 +367,7 @@ struct ShoppingSheet: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
-                Text(fromBasket
-                     ? "Your basket changed. Review the list before recording a receipt."
-                     : "Receipts are unavailable. Refresh shopping and try again.")
+                Text("Your basket changed. Review the list before recording a receipt.")
                     .foregroundStyle(RoomTheme.error)
                     .accessibilityIdentifier("receipt-unavailable")
                 Button("Back to shopping") { page = .board; model.clearFeedback() }
@@ -459,39 +376,18 @@ struct ShoppingSheet: View {
         }
     }
 
-    private func receiptRemoval(_ expense: HouseholdExpense, memberID: UUID) -> some View {
-        let allowed = model.ledger?.canRemove(expense, memberID: memberID) ?? false
-        let currency = model.state?.session?.household.currency
-        return VStack(alignment: .leading, spacing: 16) {
-            Text(expense.description).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
-            if let currency { Text(Money.text(expense.amount, currency: currency)).font(RoomTheme.heading(20)) }
-            Text("This takes the receipt out of the shared ledger for everyone. It cannot be edited back.")
-                .foregroundStyle(RoomTheme.muted)
-            if !allowed {
-                Text("This receipt changed or cannot be removed here. Close this sheet and review the ledger.")
-                    .foregroundStyle(RoomTheme.error)
-            }
-            Button("Cancel") { page = .board; model.clearFeedback() }.disabled(dismissalBlocked)
-            Button("Remove receipt") { start(.removeReceipt(expense)) }
-                .buttonStyle(RoomButtonStyle(kind: .primary))
-                .accessibilityIdentifier("confirm-remove-receipt")
-                .disabled(changesBlocked || !allowed)
-        }
-    }
-
-    private func openReceipt(fromBasket: Bool, basket: [ShoppingItem], memberID: UUID) {
-        let calendar = model.choreCalendar
+    private func openReceipt(basket: [ShoppingItem], memberID: UUID) {
         receipt = ReceiptFormValues(
-            description: fromBasket ? "Shopping run" : "",
+            description: "Shopping run",
             amount: "",
             category: .other,
             paidBy: memberID,
             participants: Set(model.ledger?.activeMembers.map(\.id) ?? []),
-            date: calendar.map { $0.instant(fromPickerDate: .now) } ?? .now
+            date: model.choreCalendar.map { $0.instant(fromPickerDate: .now) } ?? .now
         )
         formError = nil
         model.clearFeedback()
-        page = .receipt(fromBasket: fromBasket)
+        page = .receipt
     }
 
     private func openForm(_ item: ShoppingItem?) {
@@ -529,16 +425,10 @@ struct ShoppingSheet: View {
         case .pick(let item, let pickedUp):
             saved = await model.pickShoppingItem(item, pickedUp: pickedUp, householdID: save.householdID,
                                                 version: save.version, mutationID: save.mutationID)
-        case .record(let draft):
-            saved = await model.recordExpense(draft, householdID: save.householdID,
-                                              version: save.version, mutationID: save.mutationID)
         case .checkout(let draft, let checkoutID, let selection):
             saved = await model.checkoutShopping(draft, checkoutID: checkoutID, selection: selection,
                                                  householdID: save.householdID, version: save.version,
                                                  mutationID: save.mutationID)
-        case .removeReceipt(let expense):
-            saved = await model.removeExpense(expense, householdID: save.householdID,
-                                              version: save.version, mutationID: save.mutationID)
         }
         if saved {
             pending = nil
@@ -546,7 +436,7 @@ struct ShoppingSheet: View {
             page = .board
             formError = nil
             if case .add = save.change { section = .list }
-            if save.change.isLedger { section = .receipts }
+            if save.change.isLedger { section = .basket }
         } else {
             switch save.change.isLedger ? model.ledgerSaveFailure : model.shoppingSaveFailure {
             case .retrySameChange: pending = save

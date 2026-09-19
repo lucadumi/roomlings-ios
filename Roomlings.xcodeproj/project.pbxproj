@@ -28,9 +28,11 @@
 		A00000000000000000000013 /* RoomControlStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* RoomControlStyles.swift */; };
 		A00000000000000000000014 /* ShoppingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001B /* ShoppingSheet.swift */; };
 		A00000000000000000000015 /* ShoppingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001C /* ShoppingUITests.swift */; };
+		A0000000000000000000001A /* MoneyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000021 /* MoneyUITests.swift */; };
 		A00000000000000000000016 /* RoomSheetLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001D /* RoomSheetLoading.swift */; };
 		A00000000000000000000017 /* ReceiptForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001E /* ReceiptForm.swift */; };
 		A00000000000000000000018 /* Money.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001F /* Money.swift */; };
+		A00000000000000000000019 /* MoneySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* MoneySheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,9 +74,11 @@
 		B0000000000000000000001A /* RoomControlStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomControlStyles.swift; sourceTree = "<group>"; };
 		B0000000000000000000001B /* ShoppingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingSheet.swift; sourceTree = "<group>"; };
 		B0000000000000000000001C /* ShoppingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000021 /* MoneyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneyUITests.swift; sourceTree = "<group>"; };
 		B0000000000000000000001D /* RoomSheetLoading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSheetLoading.swift; sourceTree = "<group>"; };
 		B0000000000000000000001E /* ReceiptForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptForm.swift; sourceTree = "<group>"; };
 		B0000000000000000000001F /* Money.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Money.swift; sourceTree = "<group>"; };
+		B00000000000000000000020 /* MoneySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoneySheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +140,7 @@
 				B0000000000000000000001D /* RoomSheetLoading.swift */,
 				B0000000000000000000001E /* ReceiptForm.swift */,
 				B0000000000000000000001F /* Money.swift */,
+				B00000000000000000000020 /* MoneySheet.swift */,
 			);
 			path = Roomlings;
 			sourceTree = "<group>";
@@ -154,6 +159,7 @@
 				B00000000000000000000006 /* RoomlingsUITests.swift */,
 				B00000000000000000000010 /* AccountUITests.swift */,
 				B0000000000000000000001C /* ShoppingUITests.swift */,
+				B00000000000000000000021 /* MoneyUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
@@ -322,6 +328,7 @@
 				A00000000000000000000016 /* RoomSheetLoading.swift in Sources */,
 				A00000000000000000000017 /* ReceiptForm.swift in Sources */,
 				A00000000000000000000018 /* Money.swift in Sources */,
+				A00000000000000000000019 /* MoneySheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,6 +347,7 @@
 				A00000000000000000000006 /* RoomlingsUITests.swift in Sources */,
 				A0000000000000000000000A /* AccountUITests.swift in Sources */,
 				A00000000000000000000015 /* ShoppingUITests.swift in Sources */,
+				A0000000000000000000001A /* MoneyUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

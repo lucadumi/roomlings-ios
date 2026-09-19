@@ -216,6 +216,22 @@ final class AccountModel {
         }
     }
 
+    func recordSettlement(from: UUID, to: UUID, amount: Int64,
+                          householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Repayment recorded. Roomlings tracks it; no money moved.") {
+            try await $0.recordSettlement(from: from, to: to, amount: amount,
+                                          householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func removeSettlement(_ settlement: HouseholdSettlement,
+                          householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Repayment undone.") {
+            try await $0.removeSettlement(id: settlement.id, householdID: householdID,
+                                          version: version, mutationID: mutationID)
+        }
+    }
+
     private func saveLedger(_ notice: String, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
         let saved = await perform(.ledger, operation: operation)
         if saved { self.notice = notice }

@@ -42,6 +42,8 @@ All operations are explicit, asynchronous and throwing:
 | `recordExpense(_:householdID:version:mutationID:)` | `POST /api/expenses` |
 | `checkoutShopping(_:checkoutID:selection:householdID:version:mutationID:)` | `POST /api/shopping/checkout` |
 | `removeExpense(id:householdID:version:mutationID:)` | `DELETE /api/expenses/<id>` |
+| `recordSettlement(from:to:amount:householdID:version:mutationID:)` | `POST /api/settlements` |
+| `removeSettlement(id:householdID:version:mutationID:)` | `DELETE /api/settlements/<id>` |
 
 `state` starts as `nil`; successful state-returning operations validate and update it. Read `state`, `selectedHousehold` and `isBusy` with `await`.
 
@@ -81,13 +83,21 @@ All operations are explicit, asynchronous and throwing:
 
 ## Ledger
 
-- `try HouseholdLedger(household:)` projects `expenses`, `members` and `activeMembers` from the restored snapshot, without another GET. There is no expenses GET or edit route; the server returns the whole household. `HouseholdLedger.expenseLimit` is 20,000.
+- `try HouseholdLedger(household:)` projects `expenses`, `settlements`, `members` and `activeMembers` from the restored snapshot, without another GET. There is no expenses or settlements GET, and no expense edit route; the server returns the whole household. `HouseholdLedger.expenseLimit` is 20,000.
 - `try ExpenseDraft(description:amount:paidBy:participants:category:date:)` mirrors the shared expense schema: trimmed 1 to 100 character description, whole cents from 1 to 100,000,000, a payer and 1 to 12 unique participants, a `produce`/`dairy`/`pantry`/`drinks`/`other` category and a `YYYY-MM-DD` date.
 - Money is `Int64` cents everywhere. `shares` mirrors the web `splitAmount`: participants sort by member ID, everyone takes `amount / count`, and the remaining cents go one each to the first sorted IDs, so the shares always total the amount. It only previews what the server records.
 - `checkoutShopping` sends each selected item's current `version`; the server records one expense, files a shopping run and removes exactly those items. Reuse the same `checkoutID` and `mutationID` for an explicit retry so a replay cannot record a second run.
 - Responses must confirm the mutation receipt and the expected ledger. A fresh save must show the new expense first, unchanged remaining expenses, and for a checkout exactly the selected items removed plus the new run. Replays may contain later changes.
 - `canRemove(_:memberID:)` covers only plain expenses. Shopping receipts and bill payments belong to the flow that created them and are removed on the web, so run history stays consistent. Removal is not an edit; the server has no expense edit route.
-- Balances, settlements and suggested transfers stay server-owned and are not computed here.
+
+## Balances and repayments
+
+- `balances` and `suggestedTransfers` mirror the same functions in the web project's `shared/domain.ts`, so the app can never display a figure the server would contradict. There is no balances endpoint; both sides derive them from the shared ledger.
+- A balance is whole cents and positive when the household owes that member. A payer is credited the whole amount, each participant is debited their whole-cent share, and a repayment credits the member who paid it back. Balances always total zero.
+- `suggestedTransfers` settles the largest debtor against the largest creditor until one is square, breaking ties by member ID exactly as the shared sort does. Applying every suggestion leaves everyone at zero.
+- `canSettle(from:to:amount:)` repeats the server's own guard rails: the payer must owe, the recipient must be owed, and the amount cannot exceed either side. A repayment outside them is a `409` telling the member to use the updated suggestion.
+- `recordSettlement` sends only `from`, `to` and `amount`; the server generates the identifier and timestamp and unshifts it. `removeSettlement` undoes one and puts the amount back on the balances. Neither moves money, and the app never claims to.
+- Settlement responses are verified like every other mutation: the receipt must confirm it, the expenses and shopping list must be untouched, and the repayment must be the one that was requested.
 
 Tests inject `HTTPTransport` and `SessionTokenStore`; they do not use global URLProtocol state, a real server or the owner's Keychain. `SessionToken` deliberately has no public plaintext getter and redacts descriptions and mirrors.
 

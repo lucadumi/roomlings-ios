@@ -10,6 +10,7 @@ enum ShoppingFixtures {
     static let otherItemID = UUID(uuidString: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")!
     static let addedID = UUID(uuidString: "cccccccc-cccc-4ccc-8ccc-cccccccccccc")!
     static let mutationID = UUID(uuidString: "ddeeffaa-ddee-4ffa-8dde-aabbccddeeff")!
+    static let undoMutationID = UUID(uuidString: "ddeeffab-ddee-4ffa-8dde-aabbccddeeff")!
     static let updatedAt = "2026-09-17T12:00:00.000Z"
 
     static func id(_ value: UUID) -> JSONValue { .string(value.uuidString.lowercased()) }

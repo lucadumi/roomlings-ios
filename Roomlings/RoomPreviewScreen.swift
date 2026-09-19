@@ -10,7 +10,7 @@ struct RoomPreviewScreen: View {
     @State private var headerHeight: CGFloat = 88
 
     private enum Sheet: String, Identifiable {
-        case account, chores, shopping
+        case account, chores, shopping, money
         var id: String { rawValue }
     }
 
@@ -36,6 +36,8 @@ struct RoomPreviewScreen: View {
                         openChores(householdID: householdID, componentID: componentID)
                     case .openShopping(let householdID):
                         openShopping(householdID: householdID)
+                    case .openMoney(let householdID):
+                        openMoney(householdID: householdID)
                     }
                 }
                 .id(generation)
@@ -50,6 +52,7 @@ struct RoomPreviewScreen: View {
             case .account: AccountSheet(model: accounts)
             case .chores: ChoresSheet(model: accounts, object: choreObject)
             case .shopping: ShoppingSheet(model: accounts)
+            case .money: MoneySheet(model: accounts)
             }
         }
         .task {
@@ -61,7 +64,7 @@ struct RoomPreviewScreen: View {
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
             choreObject = nil
-            if presentedSheet == .chores || presentedSheet == .shopping {
+            if presentedSheet == .chores || presentedSheet == .shopping || presentedSheet == .money {
                 presentedSheet = householdID == nil ? .account : nil
             }
         }
@@ -72,6 +75,18 @@ struct RoomPreviewScreen: View {
             if phase == .active && accounts.restored && !accounts.busy {
                 Task { await accounts.refresh() }
             }
+        }
+    }
+
+    private func openMoney(householdID: UUID) {
+        guard accounts.canUseAccount, accounts.state?.session?.household.id == householdID else {
+            accounts.message = "Open your current household before using its money."
+            presentedSheet = .account
+            return
+        }
+        if presentedSheet == nil {
+            if !accounts.busy { accounts.clearFeedback() }
+            presentedSheet = .money
         }
     }
 
