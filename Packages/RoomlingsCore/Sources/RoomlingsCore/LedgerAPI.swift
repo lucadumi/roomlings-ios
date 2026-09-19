@@ -41,12 +41,16 @@ enum LedgerChange: Sendable {
     case record(ExpenseDraft)
     case checkout(ExpenseDraft, UUID, [ShoppingSelection])
     case remove(UUID)
+    case settle(from: UUID, to: UUID, amount: Int64)
+    case removeSettlement(UUID)
 
     var endpoint: APIEndpoint {
         switch self {
         case .record: .recordExpense
         case .checkout: .checkoutShopping
         case .remove(let id): .removeExpense(id)
+        case .settle: .recordSettlement
+        case .removeSettlement(let id): .removeSettlement(id)
         }
     }
 
@@ -72,31 +76,63 @@ enum LedgerChange: Sendable {
             return fields
         case .remove:
             return [:]
+        case .settle(let from, let to, let amount):
+            guard from != to, HouseholdValidation.uuid(from), HouseholdValidation.uuid(to) else {
+                throw AccountError.invalidInput(.participants)
+            }
+            guard (1...HouseholdValidation.maximumInteger).contains(amount) else {
+                throw AccountError.invalidInput(.amount)
+            }
+            return [
+                "from": .string(from.uuidString.lowercased()),
+                "to": .string(to.uuidString.lowercased()),
+                "amount": .integer(amount),
+            ]
+        case .removeSettlement:
+            return [:]
         }
     }
 
     func matches(_ result: HouseholdLedger, from original: HouseholdLedger, memberID: UUID) -> Bool {
         switch self {
         case .record(let draft):
-            guard result.runIDs == original.runIDs,
-                  result.shoppingItemIDs == original.shoppingItemIDs else { return false }
+            guard unchangedList(result, from: original), result.settlements == original.settlements else { return false }
             return recorded(result, from: original, draft: draft, runID: nil)
         case .checkout(let draft, let checkoutID, let selection):
             let removed = Set(selection.map(\.id))
             guard result.runIDs == original.runIDs.union([checkoutID]),
                   !original.runIDs.contains(checkoutID),
                   removed.isSubset(of: Set(original.shoppingItemIDs)),
-                  result.shoppingItemIDs == original.shoppingItemIDs.filter({ !removed.contains($0) }) else {
+                  result.shoppingItemIDs == original.shoppingItemIDs.filter({ !removed.contains($0) }),
+                  result.settlements == original.settlements else {
                 return false
             }
             return recorded(result, from: original, draft: draft, runID: checkoutID)
         case .remove(let id):
             guard let previous = original.expenses.first(where: { $0.id == id }),
                   original.canRemove(previous, memberID: memberID),
-                  result.runIDs == original.runIDs,
-                  result.shoppingItemIDs == original.shoppingItemIDs else { return false }
+                  unchangedList(result, from: original),
+                  result.settlements == original.settlements else { return false }
             return result.expenses == original.expenses.filter { $0.id != id }
+        case .settle(let from, let to, let amount):
+            // The server unshifts the repayment and only accepts one the balances allow.
+            guard original.canSettle(from: from, to: to, amount: amount),
+                  unchangedList(result, from: original),
+                  result.expenses == original.expenses,
+                  result.settlements.count == original.settlements.count + 1,
+                  Array(result.settlements.dropFirst()) == original.settlements,
+                  let saved = result.settlements.first else { return false }
+            return saved.from == from && saved.to == to && saved.amount == amount
+        case .removeSettlement(let id):
+            guard original.settlements.contains(where: { $0.id == id }),
+                  unchangedList(result, from: original),
+                  result.expenses == original.expenses else { return false }
+            return result.settlements == original.settlements.filter { $0.id != id }
         }
+    }
+
+    private func unchangedList(_ result: HouseholdLedger, from original: HouseholdLedger) -> Bool {
+        result.runIDs == original.runIDs && result.shoppingItemIDs == original.shoppingItemIDs
     }
 
     /// The server unshifts a new expense, so it is always the first entry and nothing else moves.

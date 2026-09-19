@@ -47,13 +47,15 @@ struct RoomVisualState: Equatable, Sendable {
             let householdId: String?
             let choresEnabled: Bool
             let shoppingEnabled: Bool
+            let moneyEnabled: Bool
             let roomStyle: String
             let roomZoom: Double
             let roomComponents: JSONValue?
             let viewportInsets: RoomViewportInsets
         }
         let message = Message(paused: paused, householdId: householdID, choresEnabled: householdID != nil,
-                              shoppingEnabled: householdID != nil, roomStyle: roomStyle, roomZoom: roomZoom,
+                              shoppingEnabled: householdID != nil, moneyEnabled: householdID != nil,
+                              roomStyle: roomStyle, roomZoom: roomZoom,
                               roomComponents: components, viewportInsets: viewportInsets)
         let data = try JSONEncoder().encode(message)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {

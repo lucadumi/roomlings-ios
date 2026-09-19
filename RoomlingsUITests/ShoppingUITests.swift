@@ -323,113 +323,25 @@ extension AccountUITests {
         XCTAssertEqual(attempts.first?.method, attempts.last?.method)
     }
 
-    private struct LedgerState: Decodable {
-        struct Expense: Decodable {
-            let id: String
-            let description: String
-            let amount: Int
-            let paidBy: String
-            let participants: [String]
-            let category: String
-            let date: String
-            let shoppingRunId: String?
-        }
-        struct Run: Decodable {
-            struct Archived: Decodable {
-                let id: String
-                let name: String
-            }
-            let id: String
-            let expenseId: String
-            let items: [Archived]
-        }
-        let version: Int
-        let expenses: [Expense]
-        let runs: [Run]
-        let items: [ShoppingState.Item]
-        let requests: [ShoppingState.Request]
-        let balances: [String: Int]
-    }
-
     @MainActor
-    private func ledgerState(_ home: Seed.Home) async throws -> LedgerState {
-        try JSONDecoder().decode(LedgerState.self, from: await fixture("_fixture/ledger/state", body: ["householdId": home.id]))
-    }
-
-    /// Submits the receipt form. The long form puts its primary action below the fold, and
-    /// dismissing the decimal keyboard can swallow the first tap. The form still being shown
-    /// with no error is proof the save never started, so tapping again cannot record twice.
-    @MainActor
-    private func submitReceipt(_ app: XCUIApplication, expecting text: String) throws {
-        let submit = app.buttons["record-receipt"]
-        for _ in 0..<3 {
-            try tap(submit, in: app)
-            if app.staticTexts[text].waitForExistence(timeout: Wait.flip) { return }
-            guard submit.exists, !app.staticTexts["shopping-error"].exists,
-                  !app.staticTexts["receipt-form-error"].exists else { break }
-        }
-        expectNotice(text, in: app)
-    }
-
-    /// Reports whatever the sheet is showing instead, so a failed save names its own reason.
-    @MainActor
-    private func expectNotice(_ text: String, in app: XCUIApplication) {
-        if app.staticTexts[text].waitForExistence(timeout: Wait.control) { return }
-        let sheetError = app.staticTexts["shopping-error"]
-        let formError = app.staticTexts["receipt-form-error"]
-        let submit = app.buttons["record-receipt"]
-        let keyboard = app.keyboards.firstMatch
-        XCTFail("""
-            "\(text)" never appeared.
-            sheet error: \(sheetError.exists ? sheetError.label : "none")
-            form error: \(formError.exists ? formError.label : "none")
-            submit shown: \(submit.exists), enabled: \(submit.exists && submit.isEnabled), \
-            hittable: \(submit.exists && submit.isHittable), frame: \(submit.exists ? "\(submit.frame)" : "gone")
-            keyboard: \(keyboard.exists ? "\(keyboard.frame)" : "hidden")
-            progress shown: \(app.otherElements["shopping-progress"].exists)
-            amount: \(app.textFields["receipt-amount-field"].value as? String ?? "gone")
-            retry offered: \(app.buttons["Retry save"].exists)
-            """)
-    }
-
-    @MainActor
-    private func openReceipts(_ app: XCUIApplication) throws {
-        try tap(app.segmentedControls["shopping-sections"].buttons["Receipts"], in: app)
-    }
-
-    @MainActor
-    func testReceiptsRecordTheSharedSplitAndClearTheBasket() async throws {
+    func testBasketCheckoutRecordsOneReceiptAndClearsThoseItems() async throws {
         executionTimeAllowance = 600
         continueAfterFailure = false
         let (app, home) = try await launchShopping()
         let opening = try await ledgerState(home)
         XCTAssertTrue(opening.expenses.isEmpty)
-        try openReceipts(app)
-        XCTAssertTrue(app.staticTexts["No receipts yet."].waitForExistence(timeout: Wait.control))
-        try tap(app.buttons["Record expense"], in: app)
-        try fill(app.textFields["Receipt name"], "Corner shop")
-        try fill(app.textFields["Amount"], "10.01")
-        XCTAssertTrue(app.staticTexts["The server records the same whole-cent split."].waitForExistence(timeout: Wait.control))
-        try submitReceipt(app, expecting: "Receipt recorded.")
-        let recorded = try await ledgerState(home)
-        let expense = try XCTUnwrap(recorded.expenses.first { $0.description == "Corner shop" })
-        // The phone must store whole cents, never a rounded decimal.
-        XCTAssertEqual(expense.amount, 1001)
-        XCTAssertNil(expense.shoppingRunId)
-        XCTAssertEqual(expense.participants.count, 2)
-        XCTAssertEqual(recorded.balances.values.reduce(0, +), 0)
-        XCTAssertTrue(recorded.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
-        XCTAssertTrue(app.otherElements["receipt-\(expense.id)"].waitForExistence(timeout: Wait.control))
-        try tap(app.segmentedControls["shopping-sections"].buttons["List"], in: app)
+        XCTAssertTrue(opening.runs.isEmpty)
         // Oats is already claimed by the fixture roommate, so the basket has to start from Milk.
         let basketItem = try XCTUnwrap(opening.items.first { $0.name == "Milk" })
         try setSwitch(app.otherElements["shopping-\(basketItem.id)"].switches["Picked up Milk"], on: true, in: app)
         XCTAssertTrue(app.staticTexts["Item picked up. No expense was created."].waitForExistence(timeout: Wait.control))
+        let ticked = try await ledgerState(home)
+        XCTAssertTrue(ticked.expenses.isEmpty, "Ticking an item must never create a debt.")
         try tap(app.segmentedControls["shopping-sections"].buttons["Basket"], in: app)
-        try tap(app.buttons["Record receipt"], in: app)
+        try tap(app.buttons["record-basket-receipt"], in: app)
         XCTAssertTrue(app.staticTexts["1 item from your basket"].waitForExistence(timeout: Wait.control))
         try fill(app.textFields["Amount"], "4.50")
-        try submitReceipt(app, expecting: "Receipt recorded and the basket cleared.")
+        try submitReceipt(app, expecting: "Receipt recorded and the basket cleared.", sheet: "shopping")
         let checkedOut = try await ledgerState(home)
         let run = try XCTUnwrap(checkedOut.runs.first { $0.items.contains { $0.id == basketItem.id } })
         let receipt = try XCTUnwrap(checkedOut.expenses.first { $0.id == run.expenseId })
@@ -437,58 +349,7 @@ extension AccountUITests {
         XCTAssertEqual(receipt.shoppingRunId, run.id)
         XCTAssertFalse(checkedOut.items.contains { $0.id == basketItem.id })
         XCTAssertEqual(checkedOut.balances.values.reduce(0, +), 0)
-        XCTAssertTrue(app.otherElements["receipt-\(receipt.id)"].waitForExistence(timeout: Wait.control))
-        XCTAssertFalse(app.otherElements["receipt-\(receipt.id)"].buttons["Remove \(receipt.description)"].exists)
-        try tap(app.otherElements["receipt-\(expense.id)"].buttons["Remove Corner shop"], in: app)
-        XCTAssertTrue(app.staticTexts["Remove this receipt?"].waitForExistence(timeout: Wait.control))
-        try tap(app.buttons["Remove receipt"], in: app)
-        XCTAssertTrue(app.staticTexts["Receipt removed from the ledger."].waitForExistence(timeout: Wait.control))
-        let removed = try await ledgerState(home)
-        XCTAssertFalse(removed.expenses.contains { $0.id == expense.id })
-        XCTAssertTrue(removed.expenses.contains { $0.id == receipt.id })
-    }
-
-    @MainActor
-    func testReceiptsKeepFailedDraftsAndRequireReviewAfterAConflict() async throws {
-        executionTimeAllowance = 600
-        continueAfterFailure = false
-        let (app, home) = try await launchShopping()
-        try openReceipts(app)
-        try tap(app.buttons["Record expense"], in: app)
-        try fill(app.textFields["Receipt name"], "Market run")
-        try fill(app.textFields["Amount"], "12.34")
-        _ = try await fixture("_fixture/ledger/failure", body: ["mode": "unavailable"])
-        try submitReceipt(app, expecting: "shopping-error")
-        XCTAssertFalse(app.staticTexts["Receipt recorded."].exists)
-        XCTAssertEqual(app.textFields["Receipt name"].value as? String, "Market run")
-        XCTAssertFalse(app.buttons["Done"].isEnabled)
-        let failed = try await ledgerState(home)
-        XCTAssertFalse(failed.expenses.contains { $0.description == "Market run" })
-        try tap(app.buttons["Retry save"], in: app)
-        XCTAssertTrue(app.staticTexts["Receipt recorded."].waitForExistence(timeout: Wait.control))
-        let saved = try await ledgerState(home)
-        XCTAssertEqual(saved.expenses.filter { $0.description == "Market run" }.count, 1)
-        try tap(app.buttons["Record expense"], in: app)
-        try fill(app.textFields["Receipt name"], "Late groceries")
-        try fill(app.textFields["Amount"], "7.77")
-        _ = try await fixture("_fixture/ledger/remote", body: ["householdId": home.id])
-        try submitReceipt(app, expecting: "shopping-error")
-        XCTAssertFalse(app.staticTexts["Receipt recorded."].exists)
-        let conflicted = try await ledgerState(home)
-        XCTAssertFalse(conflicted.expenses.contains { $0.description == "Late groceries" })
-        XCTAssertTrue(conflicted.expenses.contains { $0.description == "Recorded on another device" })
-        XCTAssertEqual(app.textFields["Receipt name"].value as? String, "Late groceries")
-        XCTAssertFalse(app.buttons["Record receipt"].isEnabled)
-        try tap(app.buttons["Review latest shopping"], in: app)
-        XCTAssertTrue(app.staticTexts["Shopping refreshed. Review the current list before starting another change."]
-            .waitForExistence(timeout: Wait.control))
-        // The draft survives the review, so the same receipt saves against the refreshed ledger.
-        XCTAssertEqual(app.textFields["Receipt name"].value as? String, "Late groceries")
-        try submitReceipt(app, expecting: "Receipt recorded.")
-        let settled = try await ledgerState(home)
-        XCTAssertEqual(settled.expenses.filter { $0.description == "Late groceries" }.count, 1)
-        XCTAssertTrue(settled.expenses.contains { $0.description == "Recorded on another device" })
-        XCTAssertEqual(settled.balances.values.reduce(0, +), 0)
-        XCTAssertTrue(app.staticTexts["Recorded on another device"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(checkedOut.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
+        XCTAssertFalse(app.staticTexts["1 item from your basket"].exists)
     }
 }

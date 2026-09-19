@@ -121,6 +121,9 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
       version: 1, type: 'state', paused: false, roomStyle: 'original', shoppingEnabled: true,
     })))
+    await assert.rejects(page.evaluate(() => window.RoomlingsRoom.receive({
+      version: 1, type: 'state', paused: false, roomStyle: 'original', moneyEnabled: true,
+    })))
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await page.evaluate(() => window.RoomlingsRoom.receive({ version: 1, type: 'state', paused: true, roomStyle: 'clay' }))
     await expect(page.locator('.kitchen-world')).toHaveAttribute('data-room-style', 'clay')
@@ -137,7 +140,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       component.slotId === 'kitchen-kettle' ? { ...component, installed: false } : component)
     const householdState = {
       version: 1, type: 'state', paused: false, roomStyle: 'clay', householdId, roomComponents,
-      choresEnabled: true, shoppingEnabled: true,
+      choresEnabled: true, shoppingEnabled: true, moneyEnabled: true,
       viewportInsets: { top: 100, right: 12, bottom: 34, left: 12 },
     }
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
@@ -147,10 +150,12 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveCount(0)
     const chores = page.getByRole('button', { name: 'Chores', exact: true })
     const shopping = page.getByRole('button', { name: 'Shopping', exact: true })
+    const money = page.getByRole('button', { name: 'Money', exact: true })
     const tools = page.getByRole('navigation', { name: 'Household tools' })
-    await expect(tools.getByRole('button')).toHaveCount(2)
+    await expect(tools.getByRole('button')).toHaveCount(3)
     await expect(chores).toBeEnabled()
     await expect(shopping).toBeEnabled()
+    await expect(money).toBeEnabled()
     await expect(page.locator('.world-hotspots')).toHaveCount(1)
     const object = roomComponents.find((component) => component.slotId === 'kitchen-fridge')
     assert.ok(object)
@@ -180,6 +185,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       await expect(page.locator('canvas')).toHaveCSS('width', `${viewport.width}px`)
       await expect(page.locator('canvas')).toHaveCSS('height', `${viewport.height}px`)
       await expect(shopping).toBeInViewport()
+      await expect(money).toBeInViewport()
     }
     await page.setViewportSize({ width: 390, height: 750 })
     const world = page.locator('.kitchen-world')
@@ -264,16 +270,23 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
       version: 1, type: 'open-shopping', householdId,
     })
+    await money.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-money', householdId,
+    })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...portraitState, paused: true })
     await expect(chores).toBeDisabled()
     await expect(shopping).toBeDisabled()
+    await expect(money).toBeDisabled()
     await expect(marker).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Hide object labels', exact: true })).toBeDisabled()
     await chores.evaluate((button) => button.click())
     await shopping.evaluate((button) => button.click())
+    await money.evaluate((button) => button.click())
     await marker.evaluate((button) => button.click())
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-chores').length, 3)
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-shopping').length, 1)
+    assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-money').length, 1)
     await page.setViewportSize({ width: 1194, height: 834 })
     await expect(camera).toHaveAttribute('width', '2388')
     const nextHousehold = randomUUID()
@@ -284,6 +297,10 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await shopping.click()
     assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
       version: 1, type: 'open-shopping', householdId: nextHousehold,
+    })
+    await money.click()
+    assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
+      version: 1, type: 'open-money', householdId: nextHousehold,
     })
     await chores.click()
     assert.deepEqual((await page.evaluate(() => window.roomEvents)).at(-1), {
@@ -297,8 +314,9 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       ...householdState, householdId: nextHousehold, choresEnabled: false,
     })
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
-    await expect(tools.getByRole('button')).toHaveCount(1)
+    await expect(tools.getByRole('button')).toHaveCount(2)
     await expect(shopping).toBeEnabled()
+    await expect(money).toBeEnabled()
     await expect(world).toHaveAttribute('data-component-focus', 'false')
     await expect(page.getByRole('button', { name: 'Hide object labels', exact: true })).toHaveCount(0)
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, householdId: nextHousehold })
@@ -307,6 +325,12 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       ...householdState, householdId: nextHousehold, shoppingEnabled: false,
     })
     await expect(shopping).toHaveCount(0)
+    await expect(money).toBeEnabled()
+    await expect(chores).toBeEnabled()
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, householdId: nextHousehold, moneyEnabled: false,
+    })
+    await expect(money).toHaveCount(0)
     await expect(chores).toBeEnabled()
     await page.evaluate(() => window.RoomlingsRoom.receive({
       version: 1, type: 'state', paused: false, roomStyle: 'original',
@@ -315,6 +339,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.locator('main')).toHaveAttribute('data-household-id', '')
     await expect(chores).toHaveCount(0)
     await expect(shopping).toHaveCount(0)
+    await expect(money).toHaveCount(0)
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
     await assert.rejects(page.evaluate(() => fetch('/api/account')))

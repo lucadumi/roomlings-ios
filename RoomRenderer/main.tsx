@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ListChecks, ShoppingBasket } from 'lucide-react'
+import { ListChecks, ShoppingBasket, Wallet } from 'lucide-react'
 import { z } from 'zod'
 import { KitchenPreview } from '@roomlings-web/src/KitchenWorld.tsx'
 import { SceneLoading } from '@roomlings-web/src/Branding.tsx'
@@ -25,10 +25,12 @@ const stateSchema = z.object({
   householdId: z.string().uuid().nullable().default(null),
   choresEnabled: z.boolean().default(false),
   shoppingEnabled: z.boolean().default(false),
+  moneyEnabled: z.boolean().default(false),
   roomComponents: z.array(roomComponentSchema).max(roomComponentLimit).optional(),
   viewportInsets: z.object({ top: inset, right: inset, bottom: inset, left: inset }).strict()
     .default({ top: 0, right: 0, bottom: 0, left: 0 }),
-}).strict().refine((value) => (!value.choresEnabled && !value.shoppingEnabled) || value.householdId !== null, {
+}).strict().refine((value) => (!value.choresEnabled && !value.shoppingEnabled && !value.moneyEnabled)
+  || value.householdId !== null, {
   message: 'Household tools require a selected household.',
   path: ['householdId'],
 })
@@ -38,6 +40,7 @@ type Status = 'loading' | 'ready' | 'unavailable'
 type NativeMessage = { version: 1; type: 'status'; status: Status }
   | { version: 1; type: 'open-chores'; householdId: string; componentId?: string }
   | { version: 1; type: 'open-shopping'; householdId: string }
+  | { version: 1; type: 'open-money'; householdId: string }
 
 declare global {
   interface Window {
@@ -95,6 +98,14 @@ function openShopping() {
   }
 }
 
+function openMoney() {
+  if (state.moneyEnabled && state.householdId && !state.paused && status === 'ready') {
+    window.webkit?.messageHandlers?.roomlings?.postMessage({
+      version: 1, type: 'open-money', householdId: state.householdId,
+    })
+  }
+}
+
 function Room() {
   const current = useSyncExternalStore(subscribe, () => state)
   const currentStatus = useSyncExternalStore(subscribe, () => status)
@@ -102,7 +113,8 @@ function Room() {
   const [dockSpace, setDockSpace] = useState(0)
   const hasChores = current.choresEnabled && current.householdId !== null
   const hasShopping = current.shoppingEnabled && current.householdId !== null
-  const hasTools = hasChores || hasShopping
+  const hasMoney = current.moneyEnabled && current.householdId !== null
+  const hasTools = hasChores || hasShopping || hasMoney
   useLayoutEffect(() => {
     const element = dock.current
     if (!element) { setDockSpace(0); return }
@@ -136,6 +148,10 @@ function Room() {
       {hasShopping && <button type="button" className="dock-tool" data-tool="stock" aria-label="Shopping" title="Shopping"
         aria-haspopup="dialog" disabled={current.paused || currentStatus !== 'ready'} onClick={openShopping}>
         <ShoppingBasket size="1.3125rem" /><span>Shopping</span>
+      </button>}
+      {hasMoney && <button type="button" className="dock-tool" data-tool="money" aria-label="Money" title="Money"
+        aria-haspopup="dialog" disabled={current.paused || currentStatus !== 'ready'} onClick={openMoney}>
+        <Wallet size="1.3125rem" /><span>Money</span>
       </button>}
     </nav>}
   </main>

@@ -39,13 +39,14 @@ final class RoomBridgeTests: XCTestCase {
         let visual = try RoomVisualState(household: household)
         let insets = RoomViewportInsets(top: 150, right: 12, bottom: 34, left: 12)
         let message = try visual.message(paused: true, viewportInsets: insets, roomZoom: 1.35)
-        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
+        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
         XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["top"], 150)
         XCTAssertEqual(message["householdId"] as? String, householdID)
         XCTAssertEqual(message["roomStyle"] as? String, "clay")
         XCTAssertEqual(message["paused"] as? Bool, true)
         XCTAssertEqual(message["choresEnabled"] as? Bool, true)
         XCTAssertEqual(message["shoppingEnabled"] as? Bool, true)
+        XCTAssertEqual(message["moneyEnabled"] as? Bool, true)
         XCTAssertEqual(message["roomZoom"] as? Double, 1.35)
         let encoded = String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
         for privateValue in ["private-invitation", "Ada", memberID, "budget", "expenses", "accessToken", "csrfToken"] {
@@ -56,6 +57,7 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertNil(preview["roomComponents"])
         XCTAssertEqual(preview["choresEnabled"] as? Bool, false)
         XCTAssertEqual(preview["shoppingEnabled"] as? Bool, false)
+        XCTAssertEqual(preview["moneyEnabled"] as? Bool, false)
         XCTAssertEqual(preview["roomZoom"] as? Double, 1)
     }
 
@@ -85,6 +87,10 @@ final class RoomBridgeTests: XCTestCase {
             "version": 1, "type": "open-shopping", "householdId": householdID.uuidString,
         ])
         XCTAssertEqual(shopping.event, .openShopping(householdID: householdID))
+        let money = try RoomBridgeMessage.decode([
+            "version": 1, "type": "open-money", "householdId": householdID.uuidString,
+        ])
+        XCTAssertEqual(money.event, .openMoney(householdID: householdID))
         let invalidMessages: [[String: Any]] = [
             ["version": 2, "type": "open-chores", "householdId": householdID.uuidString],
             ["version": true, "type": "open-chores", "householdId": householdID.uuidString],
@@ -97,6 +103,10 @@ final class RoomBridgeTests: XCTestCase {
             ["version": 1, "type": "open-shopping", "householdId": householdID.uuidString, "accessToken": "not-allowed"],
             ["version": 1, "type": "open-shopping"],
             ["version": true, "type": "open-shopping", "householdId": householdID.uuidString],
+            ["version": 1, "type": "open-money", "householdId": "unknown"],
+            ["version": 1, "type": "open-money", "householdId": householdID.uuidString, "componentId": "default-kitchen-fridge"],
+            ["version": 1, "type": "open-money", "householdId": householdID.uuidString, "accessToken": "not-allowed"],
+            ["version": 1, "type": "open-money"],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "url": "https://example.com"],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": ""],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": NSNull()],
