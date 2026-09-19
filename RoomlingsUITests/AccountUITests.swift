@@ -145,7 +145,8 @@ final class AccountUITests: XCTestCase {
             guard area.height > 44 else { throw FlowError.missingElement("A visible scroll area for \(button.description)") }
             let down = frame.minY < area.minY
             let gap = down ? area.minY - frame.minY : frame.maxY - area.maxY
-            let distance = min(max(44, gap + 12), area.height * 0.6)
+            // Leave a control-height margin so a revealed button clears the home indicator.
+            let distance = min(max(44, gap + 44), area.height * 0.6)
             // Use the sheet's gutter so dragging cannot focus a text field or open a menu.
             let x = area.minX - appFrame.minX + 8
             let origin = app.coordinate(withNormalizedOffset: .zero)
@@ -155,6 +156,22 @@ final class AccountUITests: XCTestCase {
             // Settle before lifting so a short fitted sheet cannot fling past the target in both directions.
             start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
+    }
+
+    @MainActor
+    func selectSegment(_ option: String, from identifier: String, in app: XCUIApplication) throws {
+        let button = app.segmentedControls[identifier].buttons[option]
+        guard button.exists || button.waitForExistence(timeout: Wait.control) else {
+            throw FlowError.missingElement("\(option) segment in \(identifier)")
+        }
+        // Selecting the same segment is idempotent; never infer selection from a tap alone.
+        for _ in 0..<3 {
+            if button.isSelected { return }
+            try tap(button, in: app)
+            let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
+            if XCTWaiter.wait(for: [selected], timeout: Wait.flip) == .completed { return }
+        }
+        throw FlowError.missingElement("\(option) segment in \(identifier) did not become selected")
     }
 
     @MainActor
@@ -370,9 +387,9 @@ final class AccountUITests: XCTestCase {
         add(screenshot)
         try tap(mine, in: app)
         XCTAssertFalse(try switchIsOn(mine))
-        try tap(app.segmentedControls["chore-sections"].buttons["Archived"], in: app)
+        try selectSegment("Archived", from: "chore-sections", in: app)
         XCTAssertTrue(app.staticTexts["No archived chores."].waitForExistence(timeout: Wait.control))
-        try tap(app.segmentedControls["chore-sections"].buttons["Chores"], in: app)
+        try selectSegment("Chores", from: "chore-sections", in: app)
     }
 
     @MainActor
@@ -427,7 +444,7 @@ final class AccountUITests: XCTestCase {
             XCTAssertEqual(value.label, "Bathroom|off|Chores")
         }
         let segments = app.segmentedControls["fixture-segments"]
-        try tap(segments.buttons["History"], in: app)
+        try selectSegment("History", from: "fixture-segments", in: app)
         XCTAssertEqual(value.label, "Bathroom|off|History")
         let enable = app.switches["Enable controls"]
         let nativeEnable = enable.switches.firstMatch.exists ? enable.switches.firstMatch : enable
@@ -490,7 +507,7 @@ final class AccountUITests: XCTestCase {
         XCTAssertEqual(completed.history.filter { $0.choreId == chore.id }.count, 1)
         XCTAssertTrue(completed.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
         XCTAssertTrue(app.buttons["Undo completion"].waitForExistence(timeout: Wait.control))
-        try tap(app.segmentedControls["chore-sections"].buttons["History"], in: app)
+        try selectSegment("History", from: "chore-sections", in: app)
         XCTAssertTrue(app.staticTexts["Sweep after dinner"].waitForExistence(timeout: Wait.control))
         let completion = try XCTUnwrap(completed.history.first { $0.choreId == chore.id })
         try tap(app.otherElements["completion-\(completion.id)"].buttons["Undo completion"], in: app)
@@ -509,7 +526,7 @@ final class AccountUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         try openChores(app)
-        try tap(app.segmentedControls["chore-sections"].buttons["History"], in: app)
+        try selectSegment("History", from: "chore-sections", in: app)
         XCTAssertTrue(app.staticTexts["Sweep after dinner"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.staticTexts["Undone"].waitForExistence(timeout: Wait.control))
         XCTAssertFalse(app.otherElements["completion-\(completion.id)"].buttons["Undo completion"].exists)

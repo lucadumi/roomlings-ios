@@ -117,7 +117,7 @@ extension AccountUITests {
 
     @MainActor
     private func openSection(_ name: String, in app: XCUIApplication) throws {
-        try tap(app.segmentedControls["money-sections"].buttons[name], in: app)
+        try selectSegment(name, from: "money-sections", in: app)
     }
 
     @MainActor

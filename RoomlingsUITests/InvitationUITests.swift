@@ -146,7 +146,11 @@ extension AccountUITests {
         let refreshed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "isEnabled == true"), object: app.buttons["create-invitation"]
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: Wait.control), .completed)
+        guard await XCTWaiter.fulfillment(of: [refreshed], timeout: Wait.control) == .completed else {
+            let error = app.staticTexts["account-error"]
+            XCTFail("Invitation refresh did not finish. Account error: \(error.exists ? error.label : "none").")
+            return
+        }
         XCTAssertFalse(app.buttons["share-invitation"].exists)
         _ = try await fixture("_fixture/chores/change", body: ["householdId": home.id])
         try revokeInvitation(invitation.id, in: app)
