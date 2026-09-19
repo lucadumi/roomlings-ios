@@ -68,7 +68,7 @@ struct AccountAPI: Sendable {
 
     func acceptInvitation(code: String, memberName: String, token: SessionToken?) async throws -> AccountState {
         let payload = AcceptInvitationRequest(
-            code: try invitationInput(code), memberName: try nameInput(memberName, field: .memberName)
+            code: try AccountInvitationCode(code).value, memberName: try nameInput(memberName, field: .memberName)
         )
         let response: OrdinaryAccountResponse = try await client.request(
             .acceptInvitation, body: JSONEncoder().encode(payload), token: token
@@ -140,33 +140,6 @@ struct AccountAPI: Sendable {
     private func nameInput(_ name: String, field: AccountInputField) throws -> String {
         guard let name = AccountValidation.name(name) else { throw AccountError.invalidInput(field) }
         return name
-    }
-
-    private func invitationInput(_ invitation: String) throws -> String {
-        var code = invitation.trimmingCharacters(in: .whitespacesAndNewlines)
-        if code.contains("://") {
-            guard !code.contains("\\"),
-                  code.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil,
-                  let link = URLComponents(string: code),
-                  ["https", "http"].contains(link.scheme?.lowercased() ?? ""),
-                  link.host?.isEmpty == false, link.url != nil,
-                  link.user == nil, link.password == nil,
-                  let fragment = link.percentEncodedFragment else {
-                throw AccountError.invalidInput(.invitationCode)
-            }
-            var parameters = URLComponents()
-            // Match URLSearchParams form decoding without opening the invitation's URL.
-            parameters.percentEncodedQuery = fragment.replacingOccurrences(of: "+", with: "%20")
-            let codes = parameters.queryItems?.filter { $0.name == "account-invite" } ?? []
-            guard codes.count == 1, let value = codes.first?.value else {
-                throw AccountError.invalidInput(.invitationCode)
-            }
-            code = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        guard AccountValidation.matches(code, #"^roomlings-invite-[A-Za-z0-9_-]{43}$"#) else {
-            throw AccountError.invalidInput(.invitationCode)
-        }
-        return code
     }
 }
 

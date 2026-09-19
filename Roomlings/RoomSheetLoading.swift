@@ -26,6 +26,7 @@ struct RoomSheetLoading: ViewModifier {
     let model: AccountModel
     let label: String
     var refreshOnOpen = true
+    var includeInvitations = false
     @State private var hasLoadedContent = false
 
     func body(content: Content) -> some View {
@@ -43,7 +44,7 @@ struct RoomSheetLoading: ViewModifier {
             }
         }
         .task {
-            if refreshOnOpen { await model.refresh() }
+            if refreshOnOpen { await model.refresh(includeInvitations: includeInvitations) }
             if !model.busy { hasLoadedContent = true }
         }
         .onChange(of: model.busy) { _, busy in

@@ -8,6 +8,7 @@ struct RoomPreviewScreen: View {
     @State private var presentedSheet: Sheet?
     @State private var choreObject: ChoreObject?
     @State private var headerHeight: CGFloat = 88
+    @State private var invitationPresentationPending = false
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money
@@ -47,7 +48,7 @@ struct RoomPreviewScreen: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             }
         }
-        .sheet(item: $presentedSheet) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: presentPendingInvitation) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
             case .chores: ChoresSheet(model: accounts, object: choreObject)
@@ -57,9 +58,20 @@ struct RoomPreviewScreen: View {
         }
         .task {
             await accounts.start()
+            #if DEBUG
+            if let input = ProcessInfo.processInfo.environment["ROOMLINGS_INVITATION_URL"],
+               let url = URL(string: input) {
+                receiveInvitation(url)
+            }
+            #endif
             if !accounts.signedIn || accounts.state?.session == nil || accounts.message != nil {
                 presentedSheet = .account
             }
+            presentPendingInvitation()
+        }
+        .onOpenURL(perform: receiveInvitation)
+        .onChange(of: accounts.busy) { _, busy in
+            if !busy { presentPendingInvitation() }
         }
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
@@ -76,6 +88,22 @@ struct RoomPreviewScreen: View {
                 Task { await accounts.refresh() }
             }
         }
+    }
+
+    private func receiveInvitation(_ url: URL) {
+        accounts.receiveInvitation(url)
+        invitationPresentationPending = true
+        if presentedSheet != nil && presentedSheet != .account && !accounts.busy {
+            accounts.notice = "An invitation is waiting in Account. Finish here, then close this sheet to review it."
+        }
+        presentPendingInvitation()
+    }
+
+    private func presentPendingInvitation() {
+        guard invitationPresentationPending, !accounts.busy,
+              presentedSheet == nil || presentedSheet == .account else { return }
+        invitationPresentationPending = false
+        presentedSheet = .account
     }
 
     private func openMoney(householdID: UUID) {

@@ -81,14 +81,18 @@ enum AccountValidation {
     }
 
     static func timestamp(_ value: String) -> Bool {
-        guard matches(value, #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"#) else { return false }
+        instant(value) != nil
+    }
+
+    static func instant(_ value: String) -> Date? {
+        guard matches(value, #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$"#) else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = value.contains(".")
             ? [.withInternetDateTime, .withFractionalSeconds]
             : [.withInternetDateTime]
-        guard let date = formatter.date(from: value) else { return false }
+        guard let date = formatter.date(from: value) else { return nil }
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date).prefix(19) == value.prefix(19)
+        return formatter.string(from: date).prefix(19) == value.prefix(19) ? date : nil
     }
 
     static func matches(_ value: String, _ pattern: String) -> Bool {

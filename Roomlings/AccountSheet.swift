@@ -42,6 +42,7 @@ struct AccountSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     feedback
+                    incomingInvitation
                     if let setupError = model.setupError {
                         AccountSection { Text(setupError) }
                     } else if model.deletionPending {
@@ -71,7 +72,8 @@ struct AccountSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .disabled(model.busy)
-            .modifier(RoomSheetLoading(model: model, label: "Loading your account...", refreshOnOpen: model.message == nil))
+            .modifier(RoomSheetLoading(model: model, label: "Loading your account...",
+                                       refreshOnOpen: model.message == nil, includeInvitations: true))
             .confirmationDialog("Sign out on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) {
                     Task {
@@ -102,12 +104,21 @@ struct AccountSheet: View {
         .interactiveDismissDisabled(model.busy)
         .modifier(RoomSheetPresentation(idealHeight: contentHeight + headerHeight + 1))
         .onAppear {
-            if model.signedIn { page = .account }
+            if model.signedIn { page = model.pendingInvitation == nil ? .account : .join }
+            invitation = model.pendingInvitation?.value ?? ""
             memberName = model.state?.account?.name ?? ""
         }
+        .onDisappear { model.clearInvitationLink() }
         .onChange(of: model.signedIn) { _, signedIn in
-            page = signedIn ? .account : .email
+            page = signedIn ? (model.pendingInvitation == nil ? .account : .join) : .email
             if signedIn { memberName = model.state?.account?.name ?? "" }
+        }
+        .onChange(of: model.pendingInvitation) { _, pending in
+            invitation = pending?.value ?? ""
+            if pending != nil, model.signedIn { page = .join }
+        }
+        .onChange(of: model.incomingInvitationError) { _, error in
+            if error != nil { invitation = "" }
         }
         .onChange(of: householdName) { creationID = UUID() }
         .onChange(of: memberName) { creationID = UUID() }
@@ -156,6 +167,27 @@ struct AccountSheet: View {
         }
         if let notice = model.notice {
             AccountSection { Text(notice).accessibilityIdentifier("account-notice") }
+        }
+    }
+
+    @ViewBuilder private var incomingInvitation: some View {
+        if model.pendingInvitation != nil || model.incomingInvitationError != nil {
+            AccountSection("Household invitation") {
+                if let error = model.incomingInvitationError {
+                    Text(error).foregroundStyle(RoomTheme.error).accessibilityIdentifier("invitation-link-error")
+                } else {
+                    Text(model.signedIn
+                         ? "Review your invitation and name before joining. Your existing households stay saved."
+                         : "Sign in to use your invitation. You will review it before joining.")
+                        .accessibilityIdentifier("pending-invitation")
+                }
+                Button("Cancel invitation") {
+                    model.dismissInvitation()
+                    model.clearFeedback()
+                    invitation = ""
+                    page = model.signedIn ? .account : .email
+                }
+            }
         }
     }
 
@@ -283,13 +315,17 @@ struct AccountSheet: View {
                     page = .join
                 }
             }
+            if let householdID = model.state?.session?.household.id {
+                AccountInvitationsSection(model: model)
+                    .id(householdID)
+            }
             accountActions
         }
     }
 
     private var accountActions: some View {
         AccountSection {
-            Button("Refresh account") { Task { await model.refresh() } }
+            Button("Refresh account") { Task { await model.refresh(includeInvitations: true) } }
             Button("Sign out", role: .destructive) { confirmingSignOut = true }
         }
     }
@@ -336,7 +372,7 @@ struct AccountSheet: View {
             RoomField("Your name in this household", text: $memberName)
             Button("Join household") {
                 Task {
-                    if await model.join(code: invitation, memberName: memberName) { dismiss() }
+                    if await model.join(code: invitation, memberName: memberName), model.pendingInvitation == nil { dismiss() }
                 }
             }
             .buttonStyle(RoomButtonStyle(kind: .primary))
@@ -345,7 +381,10 @@ struct AccountSheet: View {
     }
 
     private func finishEntry() {
-        if model.state?.session != nil { dismiss() }
+        if model.pendingInvitation != nil {
+            invitation = model.pendingInvitation?.value ?? ""
+            page = .join
+        } else if model.state?.session != nil { dismiss() }
         else { page = .account }
     }
 }

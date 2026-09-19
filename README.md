@@ -20,6 +20,7 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 ## Usage
 
 - Sign in or recover access, create/join a household, and open its saved kitchen.
+- Owners can share seven-day invitations and revoke pending links in **Account**. Paste local links into **Join a household**; app-opening links await a public domain. [Invitation setup](Packages/RoomlingsCore/README.md#invitations).
 - Open an object's **+** marker or **Chores** to view, add, complete and undo shared tasks, with schedules and rotations saved on the server.
 - Open **Shopping** to add, edit, claim and pick up items without creating debt, then record a paid receipt that splits it in the shared ledger.
 - Open **Money** for receipts, what each roommate owes or is owed, and repayments. Roomlings tracks money; it never moves it.

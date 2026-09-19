@@ -1,4 +1,6 @@
 #include "Shared.xcconfig"
 ROOMLINGS_API_SCHEME = https
 ROOMLINGS_API_HOST =
+ROOMLINGS_INVITATION_SCHEME = https
+ROOMLINGS_INVITATION_HOST =
 #include? "Local.xcconfig"

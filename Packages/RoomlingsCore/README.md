@@ -31,6 +31,9 @@ All operations are explicit, asynchronous and throwing:
 | `createHousehold(name:memberName:currency:budgetCents:requestID:)` | `POST /api/account/households` |
 | `acceptInvitation(code:memberName:)` | `POST /api/account/invitations/accept` |
 | `selectHousehold(id:)` | `POST /api/account/households/<id>/select` |
+| `loadInvitations(householdID:)` | `GET /api/account/households/<id>` |
+| `createInvitation(householdID:version:)` | `POST /api/account/households/<id>/invitations` |
+| `revokeInvitation(id:householdID:version:)` | `DELETE /api/account/households/<id>/invitations/<id>` |
 | `addChore(_:householdID:version:mutationID:)` | `POST /api/chores` |
 | `completeChore(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/<id>/complete` |
 | `undoChoreCompletion(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/completions/<id>/undo` |
@@ -59,6 +62,59 @@ All operations are explicit, asynchronous and throwing:
 `Account`, `AccountMembership`, `AccountDevice`, `AccountKitchenSession`, `AccountState` and `HouseholdSnapshot` are Sendable/Codable values. Timestamps retain validated UTC ISO 8601 strings. The household's `value: JSONValue` preserves supplied data without synthesizing empty collections. Metadata and collection envelopes are checked, not the complete TypeScript ledger schema. Integer values use `Int64`; out-of-range integral JSON fails rather than silently rounding through floating point. `csrfToken` is validated and private, and `session.token` must be null. State encoding preserves the backend contract, so do not send an entire encoded account state to JavaScript. Give a renderer only its intended household/room data.
 
 `APIConfiguration` accepts only origin URLs, HTTPS or exact loopback HTTP. `URLSessionTransport` is ephemeral, disables cookies, credentials and cache, has finite timeouts, and rejects every redirect. Requests always identify the native client and never use browser/CSRF headers. Bearers exist only in native requests and `SessionTokenStore`.
+
+## Invitations
+
+- Invitation management remains **owner-only**, matching the shared server. Admins and members ask the owner for a link. Revoking a link never removes people who already joined.
+- The household access GET returns invitation metadata, not reusable codes. Creation returns a case-sensitive code once and a seven-day expiry. Used links remain pending until revoked or expired. Invitation timestamps are validated UTC dates.
+- Create and revoke send the household `version`. These routes have no mutation receipt or automatic retry. After a conflict or uncertain response, refresh before another change. If a creation response was lost, revoke that pending invitation and create a new one; its original code cannot be retrieved.
+- `AccountInvitationCode` reuses the existing local fragment parser and redacts descriptions and mirrors. Incoming app links must match the configured invitation origin. Manually pasted links still extract only the code; requests always go to the configured native API, never the pasted host.
+- **Account** uses the system share sheet. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.
+- Incoming invitations stay in memory through native sign-in, recovery and failed joins. Joining always requires confirmation. Another room sheet can finish before the invitation opens. If the process closes, reopen the original link.
+
+### Local use
+
+With the local API and web preview running, open **Account** as the household owner, create an invitation and share or copy its link. A second account can paste it into **Join a household** in the native app, or use the existing web join flow.
+
+The default `http://localhost:5173` link is for the same Mac and its simulators, not another physical device. It does not open the native app automatically. Keep using the paste-to-join flow until the public domain and Universal Links are configured.
+
+### Public link setup
+
+**The public domain is not chosen yet.** The native URL handler is implemented, but no Associated Domains entitlement or deployed `apple-app-site-association` file is configured. Setting an origin alone does not enable Universal Links.
+
+`ROOMLINGS_INVITATION_SCHEME` and `ROOMLINGS_INVITATION_HOST` configure the web origin in `Configuration/Local.xcconfig`. Debug defaults to `http://localhost:5173`; Release leaves the host blank. Missing configuration is shown explicitly, and no new share link is offered. The web origin may differ from the API origin.
+
+After choosing the HTTPS domain and signing identity:
+
+1. Serve the existing web app at that origin and configure the invitation settings to match.
+2. Add the Associated Domains capability to the app target with `applinks:<chosen-domain>`, using a provisioning profile with that entitlement.
+3. Serve `/.well-known/apple-app-site-association` as JSON over HTTPS, without authentication or redirects. Replace the app ID prefix below with the signed app's actual prefix:
+
+```json
+{
+  "applinks": {
+    "details": [{
+      "appIDs": ["APP_ID_PREFIX.com.roomlings.app"],
+      "components": [{"/": "/", "#": "account-invite=roomlings-invite-*"}]
+    }]
+  }
+}
+```
+
+The fragment rule targets generated invitation links without intercepting unrelated web account or recovery URLs. See Apple's [association format](https://developer.apple.com/documentation/bundleresources/applinks) and [SwiftUI URL handler](https://developer.apple.com/documentation/swiftui/view/onopenurl(perform:)).
+
+Without the app, the link opens the existing web join flow. Either join there and later sign into the same native account, or install the app and reopen the original message's link. Universal Links do not automatically transfer a pending invitation through installation. No clipboard scanning or install tracking is used.
+
+### Invitation flows
+
+```sh
+node Scripts/test-accounts.mjs \
+  --ui-test AccountUITests/testInvitationsShareJoinAndRejectARevokedLink \
+  --ui-test AccountUITests/testInvitationsRequireRefreshAfterALostResponseAndAConflict \
+  --ui-test AccountUITests/testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership
+```
+
+The isolated flows use the real shared server with test accounts and exercise cookie-based web acceptance without invalidating that browser session. A DEBUG-only launch input drives the same native URL handler for signed-out and restored launches. These flows do not verify Apple's domain association. Before closing the Universal Links work, verify signed-device links from Messages with the app installed and absent, including revoked links and both installation paths.
 
 ## Chores
 

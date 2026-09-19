@@ -36,6 +36,10 @@ const shoppingRequests = []
 const shoppingActors = new Map()
 let ledgerFailure = null
 const ledgerRequests = []
+let invitationFailure = null
+const invitationRequests = []
+const invitationCodes = new Map()
+const invitationBrowsers = new Map()
 let nextAccountLoad = null
 let activeAccountLoad = null
 function releaseAccountLoad() {
@@ -119,6 +123,24 @@ observeMutations('/api/expenses', ledgerRequests, () => {
   ledgerFailure = null
   return failure
 })
+const invitationRoute = /^\/api\/account\/households\/[^/]+\/invitations(?:\/[^/]+)?$/
+app.use(invitationRoute, (request, response, next) => {
+  if (request.method === 'POST') {
+    const sendJSON = response.json
+    response.json = function (body) {
+      if (this.statusCode === 201 && typeof body.code === 'string' && body.invitation?.id) {
+        invitationCodes.set(body.invitation.id, body.code)
+      }
+      return sendJSON.call(this, body)
+    }
+  }
+  next()
+})
+observeMutations(invitationRoute, invitationRequests, () => {
+  const failure = invitationFailure
+  invitationFailure = null
+  return failure
+})
 app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
 app.post('/_fixture/loading', express.json(), (request, response) => {
@@ -143,6 +165,10 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
   shoppingRequests.length = 0
   ledgerFailure = null
   ledgerRequests.length = 0
+  invitationFailure = null
+  invitationRequests.length = 0
+  invitationCodes.clear()
+  invitationBrowsers.clear()
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
@@ -188,6 +214,61 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
 app.post('/_fixture/delivery', express.json(), (request, response) => {
   failDelivery = z.object({ fail: z.boolean() }).parse(request.body).fail
   response.json({ configured: true })
+})
+async function asInvitationOwner(email, operation) {
+  const issued = await store.accounts.signIn(identity(email), 'Ada', 'Invitation fixture')
+  try {
+    return await operation(issued.session)
+  } finally {
+    await store.accounts.logout(issued.session, false)
+  }
+}
+app.post('/_fixture/invitations/state', express.json(), async (request, response) => {
+  const input = z.object({ email: accountEmailSchema, householdId: z.string().uuid() }).parse(request.body)
+  const access = await asInvitationOwner(input.email, (session) => store.accounts.access(session, input.householdId))
+  response.json({
+    version: access.household.version,
+    invitations: access.invitations.map((invitation) => ({ ...invitation, code: invitationCodes.get(invitation.id) })),
+    requests: invitationRequests.filter((entry) => entry.path.startsWith(`/api/account/households/${input.householdId}/invitations`)),
+  })
+})
+app.post('/_fixture/invitations/failure', express.json(), (request, response) => {
+  invitationFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
+async function browserInvitationRequest(path, body, browser) {
+  const result = await fetch(`http://127.0.0.1:${server.address().port}/api/account${path}`, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      Origin: 'http://localhost:5173', 'X-Roomlings-Request': '1',
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(browser ? { Cookie: browser.cookie, 'X-CSRF-Token': browser.csrfToken } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!result.ok) throw new Error(`Browser invitation fixture request failed (${result.status}).`)
+  return { result, state: await result.json() }
+}
+app.post('/_fixture/invitations/browser-accept', express.json(), async (request, response) => {
+  const input = z.object({ email: accountEmailSchema, invitation: z.string() }).parse(request.body)
+  await browserInvitationRequest('/code', { email: input.email })
+  const { result, state } = await browserInvitationRequest('/verify', {
+    email: input.email, code: '123456', name: 'Sam', label: 'Web invitation fixture',
+  })
+  const cookie = result.headers.getSetCookie().find((entry) => entry.startsWith('roomlings_session='))?.split(';')[0]
+  if (!cookie || !state.csrfToken || state.accessToken !== undefined) throw new Error('The browser fixture did not receive browser-only access.')
+  const browser = { cookie, csrfToken: state.csrfToken }
+  const joined = await browserInvitationRequest('/invitations/accept', { code: input.invitation, memberName: 'Sam' }, browser)
+  if (!joined.state.session) throw new Error('The browser fixture did not join a household.')
+  invitationBrowsers.set(input.email, browser)
+  response.json({ householdId: joined.state.session.household.id })
+})
+app.post('/_fixture/invitations/browser-state', express.json(), async (request, response) => {
+  const input = z.object({ email: accountEmailSchema }).parse(request.body)
+  const browser = invitationBrowsers.get(input.email)
+  if (!browser) throw new Error('The invitation browser fixture is missing.')
+  const { state } = await browserInvitationRequest('', undefined, browser)
+  response.json({ signedIn: state.account !== null, householdId: state.session?.household.id })
 })
 app.post('/_fixture/chores/failure', express.json(), (request, response) => {
   choreFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
@@ -347,7 +428,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 23)
+    const expected = 23 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 18)
       + (values['include-room'] ? 1 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
