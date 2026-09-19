@@ -8,6 +8,7 @@ public actor AccountSession {
 
     private let api: AccountAPI
     private let shoppingAPI: ShoppingAPI
+    private let ledgerAPI: LedgerAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
 
@@ -21,6 +22,7 @@ public actor AccountSession {
         )
         api = AccountAPI(client: client)
         shoppingAPI = ShoppingAPI(client: client)
+        ledgerAPI = LedgerAPI(client: client)
         self.tokenStore = tokenStore
     }
 
@@ -202,6 +204,40 @@ public actor AccountSession {
         try await mutateSelectedHousehold(householdID: householdID, version: version) { [shoppingAPI] token, memberID, shopping in
             try await shoppingAPI.mutate(
                 change, version: version, mutationID: mutationID, memberID: memberID, shopping: shopping, token: token
+            )
+        }
+    }
+
+    @discardableResult
+    public func recordExpense(
+        _ draft: ExpenseDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(.record(draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func checkoutShopping(
+        _ draft: ExpenseDraft, checkoutID: UUID, selection: [ShoppingSelection],
+        householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(
+            .checkout(draft, checkoutID, selection), householdID: householdID, version: version, mutationID: mutationID
+        )
+    }
+
+    @discardableResult
+    public func removeExpense(
+        id: UUID, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(.remove(id), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    private func mutateLedger(
+        _ change: LedgerChange, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [ledgerAPI] token, memberID, ledger in
+            try await ledgerAPI.mutate(
+                change, version: version, mutationID: mutationID, memberID: memberID, ledger: ledger, token: token
             )
         }
     }

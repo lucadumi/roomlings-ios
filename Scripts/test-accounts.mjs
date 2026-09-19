@@ -21,7 +21,7 @@ const { createApp } = await import(pathToFileURL(join(web, 'server/app.ts')).hre
 const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
 const { getRoomComponents, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
-const { billingDate, choreSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { balances, billingDate, choreSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { accountEmailSchema } = await import(pathToFileURL(join(web, 'shared/accounts.ts')).href)
 const express = requireWeb('express')
 const { z } = requireWeb('zod')
@@ -34,6 +34,8 @@ const choreRequests = []
 let shoppingFailure = null
 const shoppingRequests = []
 const shoppingActors = new Map()
+let ledgerFailure = null
+const ledgerRequests = []
 let nextAccountLoad = null
 let activeAccountLoad = null
 function releaseAccountLoad() {
@@ -107,6 +109,16 @@ observeMutations('/api/shopping/items', shoppingRequests, () => {
   shoppingFailure = null
   return failure
 })
+observeMutations('/api/shopping/checkout', ledgerRequests, () => {
+  const failure = ledgerFailure
+  ledgerFailure = null
+  return failure
+})
+observeMutations('/api/expenses', ledgerRequests, () => {
+  const failure = ledgerFailure
+  ledgerFailure = null
+  return failure
+})
 app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
 app.post('/_fixture/loading', express.json(), (request, response) => {
@@ -129,6 +141,8 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
   choreRequests.length = 0
   shoppingFailure = null
   shoppingRequests.length = 0
+  ledgerFailure = null
+  ledgerRequests.length = 0
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
@@ -269,6 +283,31 @@ app.post('/_fixture/shopping/state', express.json(), async (request, response) =
     ledger: JSON.stringify({ budget: household.budget, expenses: household.expenses, settlements: household.settlements, runs: household.shopping.runs }),
   })
 })
+app.post('/_fixture/ledger/failure', express.json(), (request, response) => {
+  ledgerFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
+app.post('/_fixture/ledger/remote', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const actor = shoppingActors.get(id)
+  const household = await store.get(id)
+  if (!actor || !household) throw new Error('The ledger fixture household or roommate is missing.')
+  await shoppingRequest(id, 'expenses', {
+    description: 'Recorded on another device', amount: 1_250, paidBy: actor.memberID,
+    participants: [actor.memberID], category: 'other', date: billingDate(household.billingTimeZone),
+  })
+  response.json({ changed: true })
+})
+app.post('/_fixture/ledger/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const household = await store.get(id)
+  if (!household) throw new Error('The ledger fixture household is missing.')
+  response.json({
+    version: household.version, expenses: household.expenses, runs: household.shopping.runs,
+    items: household.shopping.items, settlements: household.settlements, requests: ledgerRequests,
+    balances: Object.fromEntries(balances(household)),
+  })
+})
 app.use((error, _request, response, _next) => {
   console.error('Account fixture failed:', error.message)
   response.status(500).json({ error: 'Account fixture failed' })
@@ -308,7 +347,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 20)
+    const expected = (selectedFlows ? 8 + selectedFlows.length : values['chores-only'] ? 13 : 22)
       + (values['include-room'] ? 1 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
