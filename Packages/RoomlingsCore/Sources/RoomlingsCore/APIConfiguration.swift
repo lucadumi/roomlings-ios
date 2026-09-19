@@ -53,6 +53,7 @@ public struct APIConfiguration: Sendable, Equatable {
 enum APIEndpoint: Equatable {
     case account, code, verify, recover, logout
     case createHousehold, acceptInvitation, selectHousehold(UUID)
+    case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
@@ -60,9 +61,9 @@ enum APIEndpoint: Equatable {
 
     var method: String {
         switch self {
-        case .account: "GET"
+        case .account, .householdInvitations: "GET"
         case .editShoppingItem: "PATCH"
-        case .removeShoppingItem, .removeExpense, .removeSettlement: "DELETE"
+        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation: "DELETE"
         default: "POST"
         }
     }
@@ -77,6 +78,10 @@ enum APIEndpoint: Equatable {
         case .createHousehold: "api/account/households"
         case .acceptInvitation: "api/account/invitations/accept"
         case .selectHousehold(let id): "api/account/households/\(id.uuidString.lowercased())/select"
+        case .householdInvitations(let id): "api/account/households/\(id.uuidString.lowercased())"
+        case .createInvitation(let id): "api/account/households/\(id.uuidString.lowercased())/invitations"
+        case .revokeInvitation(let household, let invitation):
+            "api/account/households/\(household.uuidString.lowercased())/invitations/\(invitation.uuidString.lowercased())"
         case .addChore: "api/chores"
         case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         case .undoChoreCompletion(let id): "api/chores/completions/\(id.uuidString.lowercased())/undo"

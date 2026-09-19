@@ -349,7 +349,7 @@ enum EntryOperation: CaseIterable, Sendable {
     }
 }
 
-private extension Fixtures {
+extension Fixtures {
     static let entryRequestID = UUID(uuidString: "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF")!
     static let entryHouseholdID = UUID(uuidString: "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDE0")!
     static let invitationCode = "roomlings-invite-Ab_-0123" + String(repeating: "Z", count: 35)

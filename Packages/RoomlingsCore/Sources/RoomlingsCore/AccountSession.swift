@@ -9,6 +9,7 @@ public actor AccountSession {
     private let api: AccountAPI
     private let shoppingAPI: ShoppingAPI
     private let ledgerAPI: LedgerAPI
+    private let invitationAPI: InvitationAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
 
@@ -23,6 +24,7 @@ public actor AccountSession {
         api = AccountAPI(client: client)
         shoppingAPI = ShoppingAPI(client: client)
         ledgerAPI = LedgerAPI(client: client)
+        invitationAPI = InvitationAPI(client: client)
         self.tokenStore = tokenStore
     }
 
@@ -123,6 +125,24 @@ public actor AccountSession {
     public func selectHousehold(id: UUID) async throws -> AccountState {
         try await mutateHousehold { [api] token in
             try await api.selectHousehold(id: id, token: token)
+        }
+    }
+
+    public func loadInvitations(householdID: UUID) async throws -> HouseholdInvitationAccess {
+        try await withInvitations(householdID: householdID) { [invitationAPI] token in
+            try await invitationAPI.load(householdID: householdID, token: token)
+        }
+    }
+
+    public func createInvitation(householdID: UUID, version: Int64) async throws -> CreatedHouseholdInvitation {
+        try await withInvitations(householdID: householdID) { [invitationAPI] token in
+            try await invitationAPI.create(householdID: householdID, version: version, token: token)
+        }
+    }
+
+    public func revokeInvitation(id: UUID, householdID: UUID, version: Int64) async throws -> HouseholdInvitationAccess {
+        try await withInvitations(householdID: householdID) { [invitationAPI] token in
+            try await invitationAPI.revoke(id: id, householdID: householdID, version: version, token: token)
         }
     }
 
@@ -288,6 +308,34 @@ public actor AccountSession {
             let updated = try original.replacingHousehold(response.household)
             state = updated
             return updated
+        } catch {
+            try await handleConfirmedExpiry(error)
+            throw error
+        }
+    }
+
+    private func withInvitations<Response: HouseholdInvitationResponse>(
+        householdID: UUID, _ operation: @Sendable (SessionToken) async throws -> Response
+    ) async throws -> Response {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, original.isSignedIn, !original.deletionPending,
+              let selected = original.session else { throw AccountError.accountStateRequired }
+        guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        do {
+            let response = try await operation(token)
+            try Task.checkCancellation()
+            let access = response.access
+            guard state == original, stateToken == token, access.household.id == householdID,
+                  access.memberID == selected.memberID,
+                  access.household.version >= selected.household.version else {
+                throw AccountError.invalidResponse
+            }
+            state = try original.replacingHousehold(access.household)
+            return response
         } catch {
             try await handleConfirmedExpiry(error)
             throw error

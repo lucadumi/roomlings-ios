@@ -23,29 +23,48 @@ final class AccountModel {
     private(set) var ledger: HouseholdLedger?
     private(set) var ledgerFailure: String?
     private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
+    private(set) var invitations: HouseholdInvitationAccess?
+    private(set) var invitationLink: URL?
+    private(set) var invitationNeedsRefresh = false
+    private(set) var pendingInvitation: AccountInvitationCode?
+    private(set) var incomingInvitationError: String?
     var message: String?
     var notice: String?
     let setupError: String?
+    let invitationOrigin: APIConfiguration?
 
     private let client: AccountSession?
     private var deletionBlocked = false
+    private var sharedInvitationID: UUID?
 
     var signedIn: Bool { state?.isSignedIn == true }
     var deletionPending: Bool { deletionBlocked || state?.deletionPending == true }
     var householdName: String? { deletionPending ? nil : state?.session?.household.name }
     var canUseAccount: Bool { signedIn && !deletionPending }
+    var invitationSetupError: String? {
+        invitationOrigin == nil
+            ? "Invitation links are not configured in this build. Set the Roomlings invitation origin in Xcode."
+            : nil
+    }
+
+    func canShareInvitation(at date: Date) -> Bool {
+        !invitationNeedsRefresh && invitationLink != nil
+            && invitations?.invitations.contains(where: { $0.id == sharedInvitationID && $0.isPending(at: date) }) == true
+    }
 
     enum HouseholdSaveFailure {
         case none, retrySameChange, refreshRequired
     }
 
-    init(client: AccountSession) {
+    init(client: AccountSession, invitationOrigin: APIConfiguration? = nil) {
         self.client = client
+        self.invitationOrigin = invitationOrigin
         setupError = nil
     }
 
     private init(setupError: String) {
         client = nil
+        invitationOrigin = nil
         self.setupError = setupError
         message = setupError
     }
@@ -53,10 +72,12 @@ final class AccountModel {
     static func live() -> AccountModel {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.roomlings.app"
         var origin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsAPIOrigin") as? String ?? ""
+        var invitationOrigin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsInvitationOrigin") as? String ?? ""
         var service = "\(bundleID).account"
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         if let configured = environment["ROOMLINGS_API_ORIGIN"] { origin = configured }
+        if let configured = environment["ROOMLINGS_INVITATION_ORIGIN"] { invitationOrigin = configured }
         if let isolated = environment["ROOMLINGS_KEYCHAIN_SERVICE"] { service = isolated }
         #endif
         do {
@@ -64,7 +85,13 @@ final class AccountModel {
             let originKey = SHA256.hash(data: Data(configuration.origin.absoluteString.utf8))
                 .map { String(format: "%02x", $0) }.joined()
             let store = try KeychainSessionTokenStore(service: "\(service).\(originKey)")
-            return AccountModel(client: AccountSession(configuration: configuration, tokenStore: store))
+            let client = AccountSession(configuration: configuration, tokenStore: store)
+            do {
+                return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin))
+            } catch {
+                // Account access remains usable; invitationSetupError explains the missing link configuration.
+                return AccountModel(client: client)
+            }
         } catch {
             return AccountModel(setupError: "Account access is not configured. Set the Roomlings API origin in Xcode and rebuild the app.")
         }
@@ -77,11 +104,15 @@ final class AccountModel {
     }
 
     @discardableResult
-    func refresh() async -> Bool {
+    func refresh(includeInvitations: Bool = false) async -> Bool {
         guard !busy else { return false }
         refreshing = true
         defer { refreshing = false }
-        return await perform(.refresh) { try await $0.restore() }
+        let refreshed = await perform(.refresh) { try await $0.restore() }
+        if refreshed, includeInvitations, canUseAccount, state?.session != nil {
+            return await loadInvitations()
+        }
+        return refreshed
     }
 
     func sendCode(email: String) async -> Bool {
@@ -116,7 +147,12 @@ final class AccountModel {
     }
 
     func join(code: String, memberName: String) async -> Bool {
-        await perform(.join) { try await $0.acceptInvitation(code: code, memberName: memberName) }
+        let originalInvitation = pendingInvitation
+        let saved = await perform(.join) { try await $0.acceptInvitation(code: code, memberName: memberName) }
+        if saved, pendingInvitation == originalInvitation {
+            dismissInvitation()
+        }
+        return saved
     }
 
     func select(id: UUID) async -> Bool {
@@ -124,7 +160,108 @@ final class AccountModel {
     }
 
     func signOut() async -> Bool {
-        await perform(.logout) { try await $0.logout() }
+        let signedOut = await perform(.logout) { try await $0.logout() }
+        if signedOut { dismissInvitation() }
+        return signedOut
+    }
+
+    func receiveInvitation(_ url: URL) {
+        guard let invitationOrigin else {
+            pendingInvitation = nil
+            incomingInvitationError = invitationSetupError
+            return
+        }
+        do {
+            pendingInvitation = try AccountInvitationCode(link: url, origin: invitationOrigin)
+            incomingInvitationError = nil
+        } catch {
+            pendingInvitation = nil
+            incomingInvitationError = "This is not a valid invitation from the configured Roomlings website. Ask the owner for a current link."
+        }
+    }
+
+    func dismissInvitation() {
+        pendingInvitation = nil
+        incomingInvitationError = nil
+    }
+
+    func clearInvitationLink() {
+        invitationLink = nil
+        sharedInvitationID = nil
+    }
+
+    @discardableResult
+    func loadInvitations() async -> Bool {
+        guard canUseAccount, let householdID = state?.session?.household.id else {
+            message = "Open your household before loading its invitations."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        do {
+            let access = try await client.loadInvitations(householdID: householdID)
+            return acceptInvitations(access, state: await client.state)
+        } catch {
+            await failed(error, action: .invitationLoad, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
+    func createInvitation(householdID: UUID, version: Int64) async -> Bool {
+        guard !invitationNeedsRefresh else {
+            message = "Refresh invitations before making another change."
+            return false
+        }
+        guard let invitationOrigin else {
+            message = invitationSetupError
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        clearInvitationLink()
+        do {
+            let result = try await client.createInvitation(householdID: householdID, version: version)
+            let link = try result.code.link(origin: invitationOrigin)
+            let published = acceptInvitations(result.access, state: await client.state)
+            sharedInvitationID = result.invitation.id
+            invitationLink = link
+            notice = "Invitation created. Share it now; the link is only available this time."
+            return published
+        } catch {
+            await failed(error, action: .invitationCreate, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
+    func revokeInvitation(id: UUID, householdID: UUID, version: Int64) async -> Bool {
+        guard !invitationNeedsRefresh else {
+            message = "Refresh invitations before making another change."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        do {
+            let access = try await client.revokeInvitation(id: id, householdID: householdID, version: version)
+            let published = acceptInvitations(access, state: await client.state)
+            notice = "Invitation revoked. People who already joined keep their membership."
+            return published
+        } catch {
+            await failed(error, action: .invitationRevoke, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
+    private func acceptInvitations(_ access: HouseholdInvitationAccess, state: AccountState?) -> Bool {
+        let published = publish(state)
+        invitations = access
+        invitationNeedsRefresh = false
+        if access.role != .owner || !access.invitations.contains(where: { $0.id == sharedInvitationID && $0.isPending() }) {
+            clearInvitationLink()
+        }
+        return published
     }
 
     func addChore(_ draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
@@ -287,6 +424,14 @@ final class AccountModel {
     }
 
     private func publish(_ next: AccountState?) -> Bool {
+        if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
+            || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true {
+            invitations = nil
+            invitationNeedsRefresh = false
+            clearInvitationLink()
+        } else if let invitations, invitations.household.version != next?.session?.household.version {
+            invitationNeedsRefresh = true
+        }
         state = next
         roomFailure = nil
         chores = nil
@@ -365,8 +510,11 @@ final class AccountModel {
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout
         case addChore, completeChore, undoChore, shopping, ledger
+        case invitationLoad, invitationCreate, invitationRevoke
 
         var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
+        var isInvitation: Bool { self == .invitationLoad || isInvitationMutation }
+        var isInvitationMutation: Bool { self == .invitationCreate || self == .invitationRevoke }
 
         var resource: Resource? {
             if isChore { return .chores }
@@ -422,13 +570,22 @@ final class AccountModel {
 
     private static func message(for error: Error, action: Action) -> String {
         if let resource = action.resource { return mutationMessage(for: error, resource: resource) }
-        if error is CancellationError { return "The request stopped. Refresh your account before repeating it." }
+        if error is CancellationError {
+            return action.isInvitationMutation
+                ? "The invitation change could not be confirmed. Refresh invitations before making another change."
+                : "The request stopped. Refresh your account before repeating it."
+        }
         if error is KeychainError || (error as? AccountError) == .credentialStorage {
             return "Saved access could not be updated securely. Unlock the device and try again."
         }
         guard let error = error as? AccountError else { return "The account action could not be completed. Try again." }
         switch error {
         case .network:
+            if action.isInvitation {
+                return action.isInvitationMutation
+                    ? "The invitation change could not be confirmed. Refresh invitations before making another change. A new link cannot be fetched again."
+                    : "Could not load invitations. Check your connection and refresh invitations."
+            }
             return "Could not reach Roomlings. Your saved access is unchanged. Try again."
         case .server(let status, let code):
             if code == .accountDeletionPending { return "Account deletion is pending. Finish it on the web, or sign out here." }
@@ -437,8 +594,22 @@ final class AccountModel {
             if code == .accountSessionRequired { return "Your session has expired. Sign in again." }
             if code == .reauthenticationRequired { return "Sign in again before continuing this action." }
             if status == 429 { return "Too many attempts. Wait a few minutes before trying again." }
+            if action.isInvitation {
+                if status == 403 { return "Only the household owner can manage invitations. Refresh your account to check your access." }
+                if status == 409 {
+                    return "Invitations changed elsewhere or the active invitation limit was reached. Refresh invitations and review the pending links."
+                }
+                if status == 404 { return "That invitation or household is no longer available. Refresh invitations." }
+                if status >= 500 {
+                    return "The invitation request could not be confirmed. Refresh invitations before making another change."
+                }
+            }
             if status >= 500 { return "Roomlings is temporarily unavailable. Your saved access is unchanged." }
             if action == .join {
+                if status == 410 { return "That invitation is invalid, expired or revoked. Ask the owner for a new link." }
+                if status == 409 {
+                    return "That name may already be taken, or a household or account limit was reached. Try another name or ask the owner to check."
+                }
                 return status == 400 ? "Check the invitation and your name in this household."
                     : "That invitation cannot be used. Ask the owner for a current invitation link."
             }
@@ -453,7 +624,12 @@ final class AccountModel {
             return "Check the details. Names must be 1 to 50 characters, and codes must be complete."
         case .operationInProgress:
             return "Another account action is still running."
+        case .accountStateRequired, .householdSelectionChanged:
+            return "Your household access changed. Refresh your account before continuing."
         default:
+            if action.isInvitation {
+                return "The invitation response could not be used. Refresh invitations before making another change."
+            }
             return "The server response could not be used. Your saved access is unchanged."
         }
     }

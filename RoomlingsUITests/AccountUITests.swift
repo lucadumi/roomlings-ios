@@ -1,6 +1,7 @@
 import XCTest
 
 final class AccountUITests: XCTestCase {
+    static let invitationWebOrigin = "https://roomlings.example.test"
     private enum FlowError: Error { case missingElement(String) }
     struct Seed: Decodable {
         struct Home: Decodable { let id: String; let name: String }
@@ -61,10 +62,12 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    func launchApp(systemControls: Bool = false) throws -> XCUIApplication {
+    func launchApp(systemControls: Bool = false, invitationLink: String? = nil) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = systemControls ? ["-roomlings-system-controls"] : []
         app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = try fixtureOrigin().absoluteString
+        app.launchEnvironment["ROOMLINGS_INVITATION_ORIGIN"] = Self.invitationWebOrigin
+        app.launchEnvironment["ROOMLINGS_INVITATION_URL"] = invitationLink
         app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.account-test.\(UUID().uuidString)"
         app.launch()
         guard app.textFields["Email address"].waitForExistence(timeout: Wait.control) else {
@@ -88,7 +91,7 @@ final class AccountUITests: XCTestCase {
         // A loaded simulator drops synthesized keystrokes while SwiftUI rebuilds the form, so
         // confirm what actually landed rather than trusting a single typeText.
         for _ in 1...3 {
-            field.tap()
+            try tap(field, in: XCUIApplication())
             if let existing = field.value as? String, existing != field.placeholderValue, !existing.isEmpty {
                 field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
             }
@@ -140,13 +143,17 @@ final class AccountUITests: XCTestCase {
             }
             guard canScroll, attempt < 8 else { throw FlowError.missingElement("\(button.description) could not be reached") }
             guard area.height > 44 else { throw FlowError.missingElement("A visible scroll area for \(button.description)") }
-            let down = frame.midY < area.midY
+            let down = frame.minY < area.minY
+            let gap = down ? area.minY - frame.minY : frame.maxY - area.maxY
+            let distance = min(max(44, gap + 12), area.height * 0.6)
             // Use the sheet's gutter so dragging cannot focus a text field or open a menu.
             let x = area.minX - appFrame.minX + 8
             let origin = app.coordinate(withNormalizedOffset: .zero)
-            let start = origin.withOffset(CGVector(dx: x, dy: area.minY - appFrame.minY + area.height * (down ? 0.2 : 0.8)))
-            let end = origin.withOffset(CGVector(dx: x, dy: area.minY - appFrame.minY + area.height * (down ? 0.8 : 0.2)))
-            start.press(forDuration: 0.01, thenDragTo: end)
+            let middle = area.midY - appFrame.minY
+            let start = origin.withOffset(CGVector(dx: x, dy: middle + (down ? -distance : distance) / 2))
+            let end = origin.withOffset(CGVector(dx: x, dy: middle + (down ? distance : -distance) / 2))
+            // Settle before lifting so a short fitted sheet cannot fling past the target in both directions.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
     }
 

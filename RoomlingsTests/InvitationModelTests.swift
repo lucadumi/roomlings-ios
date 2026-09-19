@@ -1,0 +1,385 @@
+import Foundation
+import RoomlingsCore
+import XCTest
+@testable import Roomlings
+
+@MainActor
+final class InvitationModelTests: XCTestCase {
+    func testAnIncomingInvitationSurvivesRestoreAndSignInUntilExplicitAcceptance() async throws {
+        let (model, transport, _) = try makeModel([
+            fixture.state(signedIn: false), fixture.state(token: true), fixture.state()
+        ])
+        model.receiveInvitation(try fixture.link())
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        let initialRequests = await transport.requests
+        XCTAssertTrue(initialRequests.isEmpty)
+        await model.start()
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        let signedIn = await model.verify(email: "ada@example.test", code: "123456", name: "Ada", label: "iPhone")
+        XCTAssertTrue(signedIn)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        let beforeJoin = await transport.requests
+        XCTAssertEqual(beforeJoin.map { $0.url?.path }, ["/api/account", "/api/account/verify"])
+        let joined = await model.join(code: fixture.code, memberName: "Ada")
+        XCTAssertTrue(joined)
+        XCTAssertNil(model.pendingInvitation)
+        let requests = await transport.requests
+        XCTAssertEqual(requests.last?.url?.path, "/api/account/invitations/accept")
+        XCTAssertTrue(requests.allSatisfy { $0.url?.host == "api.roomlings.example" && $0.url?.fragment == nil })
+    }
+
+    func testConfirmedExpiryPreservesTheInvitationForRecovery() async throws {
+        let (model, _, _) = try makeModel([
+            fixture.state(), fixture.failure(401, code: "ACCOUNT_SESSION_REQUIRED"), fixture.state(token: true)
+        ])
+        await model.start()
+        model.receiveInvitation(try fixture.link())
+        let joined = await model.join(code: fixture.code, memberName: "Ada")
+        XCTAssertFalse(joined)
+        XCTAssertFalse(model.signedIn)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        let recovered = await model.recover(
+            email: "ada@example.test", code: "roomlings-account-abcd-1234-abcd-1234-abcd-1234-abcd-1234", label: "iPhone"
+        )
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+    }
+
+    func testARevokedInvitationKeepsTheExistingHouseholdAndShowsAReadableError() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.failure(410)])
+        await model.start()
+        let previous = model.state
+        model.receiveInvitation(try fixture.link())
+        let joined = await model.join(code: fixture.code, memberName: "Ada")
+        XCTAssertFalse(joined)
+        XCTAssertEqual(model.state, previous)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        XCTAssertEqual(model.message, "That invitation is invalid, expired or revoked. Ask the owner for a new link.")
+        XCTAssertNil(model.notice)
+    }
+
+    func testAJoinConflictPreservesTheInvitationAndExplainsHowToContinue() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.failure(409)])
+        await model.start()
+        let previous = model.state
+        model.receiveInvitation(try fixture.link())
+        let joined = await model.join(code: fixture.code, memberName: "Ada")
+        XCTAssertFalse(joined)
+        XCTAssertEqual(model.state, previous)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        XCTAssertEqual(model.message,
+                       "That name may already be taken, or a household or account limit was reached. Try another name or ask the owner to check.")
+        XCTAssertNil(model.notice)
+    }
+
+    func testFailedCredentialStorageDoesNotConsumeTheInvitationOrClaimSignIn() async throws {
+        let (model, _, store) = try makeModel([fixture.state(signedIn: false), fixture.state(token: true)])
+        await model.start()
+        await store.failSaves()
+        model.receiveInvitation(try fixture.link())
+        let signedIn = await model.verify(email: "ada@example.test", code: "123456", name: "Ada", label: "iPhone")
+        XCTAssertFalse(signedIn)
+        XCTAssertFalse(model.signedIn)
+        XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
+        XCTAssertEqual(model.message, "Saved access could not be updated securely. Unlock the device and try again.")
+    }
+
+    func testANewerIncomingInvitationIsNotConsumedByAnEarlierJoin() async throws {
+        let (model, transport, _) = try makeModel([fixture.state(), fixture.state()], holdIndex: 1)
+        await model.start()
+        model.receiveInvitation(try fixture.link())
+        let join = Task { await model.join(code: fixture.code, memberName: "Ada") }
+        await transport.started.wait()
+        let next = "roomlings-invite-" + String(repeating: "B", count: 43)
+        model.receiveInvitation(try fixture.link(code: next))
+        await transport.finish.signal()
+        let joined = await join.value
+        XCTAssertTrue(joined)
+        XCTAssertEqual(model.pendingInvitation?.value, next)
+    }
+
+    func testInvalidAndUnconfiguredLinksAreRejectedWithoutRequestsOrURLDisclosure() async throws {
+        let (model, transport, store) = try makeModel([])
+        model.receiveInvitation(try fixture.link())
+        let untrusted = try XCTUnwrap(URL(string: "https://other.example/#account-invite=\(fixture.code)"))
+        model.receiveInvitation(untrusted)
+        XCTAssertNil(model.pendingInvitation)
+        XCTAssertNotNil(model.incomingInvitationError)
+        XCTAssertFalse(model.incomingInvitationError?.contains(fixture.code) == true)
+        let unconfigured = AccountModel(client: AccountSession(
+            configuration: fixture.api, tokenStore: store, transport: transport
+        ))
+        unconfigured.receiveInvitation(try fixture.link())
+        XCTAssertNotNil(unconfigured.incomingInvitationError)
+        XCTAssertNil(unconfigured.pendingInvitation)
+        let requests = await transport.requests
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    func testChangingHouseholdsDiscardsTheOneTimeShareLink() async throws {
+        let (model, _, _) = try makeModel([
+            fixture.state(), fixture.created(), fixture.state(householdID: fixture.otherHouseholdID)
+        ])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        XCTAssertEqual(model.invitationLink, try fixture.link())
+        let selected = await model.select(id: fixture.otherHouseholdID)
+        XCTAssertTrue(selected)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertNil(model.invitations)
+    }
+
+    func testAnUncertainCreationRequiresRefreshInsteadOfOfferingAnotherSave() async throws {
+        let (model, transport, _) = try makeModel([fixture.state(), fixture.failure(503), fixture.access()])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertFalse(created)
+        XCTAssertTrue(model.invitationNeedsRefresh)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertNil(model.notice)
+        let repeated = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertFalse(repeated)
+        let requests = await transport.requests
+        XCTAssertEqual(requests.count, 2)
+        let refreshed = await model.loadInvitations()
+        XCTAssertTrue(refreshed)
+        XCTAssertFalse(model.invitationNeedsRefresh)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertEqual(model.invitations?.invitations.count, 1)
+    }
+
+    func testRevokingTheSharedInvitationRemovesItsShareAction() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.created(), fixture.access(version: 19, revoked: true)])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        XCTAssertTrue(model.canShareInvitation(at: fixture.now))
+        let revoked = await model.revokeInvitation(id: fixture.invitationID, householdID: fixture.householdID, version: 18)
+        XCTAssertTrue(revoked)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertFalse(model.canShareInvitation(at: fixture.now))
+        XCTAssertEqual(model.notice, "Invitation revoked. People who already joined keep their membership.")
+    }
+
+    func testLosingOwnerAccessDiscardsInvitationHistoryAndTheShareLink() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.created(), fixture.access(version: 19, owner: false)])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        let refreshed = await model.loadInvitations()
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(model.invitations?.role, .member)
+        XCTAssertEqual(model.invitations?.invitations.count, 0)
+        XCTAssertNil(model.invitationLink)
+    }
+
+    func testAnUnconfiguredLinkOriginStillAllowsAccountAccessAndRevocation() async throws {
+        let (model, transport, _) = try makeModel([
+            fixture.state(), fixture.access(), fixture.access(version: 19, revoked: true)
+        ], configureInvitations: false)
+        await model.start()
+        XCTAssertTrue(model.canUseAccount)
+        let loaded = await model.loadInvitations()
+        XCTAssertTrue(loaded)
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 18)
+        XCTAssertFalse(created)
+        XCTAssertNotNil(model.invitationSetupError)
+        XCTAssertEqual(model.message, model.invitationSetupError)
+        XCTAssertNil(model.notice)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertFalse(model.invitationNeedsRefresh)
+        let revoked = await model.revokeInvitation(id: fixture.invitationID, householdID: fixture.householdID, version: 18)
+        XCTAssertTrue(revoked)
+        XCTAssertTrue(model.canUseAccount)
+        let requests = await transport.requests
+        XCTAssertEqual(requests.map(\.httpMethod), ["GET", "GET", "DELETE"])
+    }
+
+    func testClosingAccountDiscardsTheOneTimeShareLink() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.created()])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        XCTAssertTrue(model.canShareInvitation(at: fixture.now))
+        model.clearInvitationLink()
+        XCTAssertNil(model.invitationLink)
+        XCTAssertFalse(model.canShareInvitation(at: fixture.now))
+        XCTAssertEqual(model.invitations?.invitations.count, 1)
+    }
+
+    func testAnInvitationCannotBeSharedAtOrAfterItsExpiry() async throws {
+        let (model, _, _) = try makeModel([fixture.state(), fixture.created()])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        let expiry = try XCTUnwrap(model.invitations?.invitations.first?.expiresAt)
+        XCTAssertTrue(model.canShareInvitation(at: expiry.addingTimeInterval(-0.001)))
+        XCTAssertFalse(model.canShareInvitation(at: expiry))
+        XCTAssertFalse(model.canShareInvitation(at: expiry.addingTimeInterval(1)))
+    }
+
+    func testHouseholdRefreshRequiresCurrentInvitationsBeforeSharing() async throws {
+        let (model, _, _) = try makeModel([
+            fixture.state(), fixture.created(), fixture.state(version: 19), fixture.access(version: 19, revoked: true)
+        ])
+        await model.start()
+        let created = await model.createInvitation(householdID: fixture.householdID, version: 17)
+        XCTAssertTrue(created)
+        XCTAssertTrue(model.canShareInvitation(at: fixture.now))
+        let refreshed = await model.refresh()
+        XCTAssertTrue(refreshed)
+        XCTAssertTrue(model.invitationNeedsRefresh)
+        XCTAssertFalse(model.canShareInvitation(at: fixture.now))
+        let loaded = await model.loadInvitations()
+        XCTAssertTrue(loaded)
+        XCTAssertFalse(model.invitationNeedsRefresh)
+        XCTAssertNil(model.invitationLink)
+        XCTAssertFalse(model.canShareInvitation(at: fixture.now))
+    }
+
+    private let fixture = InvitationModelFixture()
+
+    private func makeModel(_ responses: [HTTPResponse], holdIndex: Int? = nil, configureInvitations: Bool = true) throws
+        -> (AccountModel, InvitationModelTransport, InvitationModelStore) {
+        let transport = InvitationModelTransport(responses: responses, holdIndex: holdIndex)
+        let store = InvitationModelStore(token: try SessionToken(String(repeating: "a", count: 43)))
+        let client = AccountSession(configuration: fixture.api, tokenStore: store, transport: transport)
+        return (AccountModel(client: client, invitationOrigin: configureInvitations ? fixture.origin : nil), transport, store)
+    }
+}
+
+private struct InvitationModelFixture {
+    let api = try! APIConfiguration(origin: "https://api.roomlings.example")
+    let origin = try! APIConfiguration(origin: "https://roomlings.example")
+    let code = "roomlings-invite-Ab_-0123" + String(repeating: "Z", count: 35)
+    let householdID = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    let otherHouseholdID = UUID(uuidString: "55555555-5555-4555-8555-555555555555")!
+    let memberID = "22222222-2222-4222-8222-222222222222"
+    let invitationID = UUID(uuidString: "99999999-9999-4999-8999-999999999999")!
+    let now = Date()
+
+    func link(code: String? = nil) throws -> URL {
+        try AccountInvitationCode(code ?? self.code).link(origin: origin)
+    }
+
+    func household(id: UUID, version: Int) -> [String: Any] {
+        [
+            "id": id.uuidString, "name": "Our home", "currency": "EUR", "budget": 25_000, "version": version,
+            "inviteCode": "private-test-invitation", "roomStyle": "clay",
+            "members": [["id": memberID, "name": "Ada", "color": "#81b29a"]],
+            "expenses": [], "settlements": [], "roomComponents": []
+        ]
+    }
+
+    func state(signedIn: Bool = true, token: Bool = false, householdID: UUID? = nil, version: Int = 17) throws -> HTTPResponse {
+        let id = householdID ?? self.householdID
+        let timestamp = now.ISO8601Format()
+        var fields: [String: Any] = [
+            "configured": true,
+            "account": signedIn ? [
+                "id": "33333333-3333-4333-8333-333333333333", "email": "ada@example.test",
+                "name": "Ada", "createdAt": timestamp
+            ] : NSNull(),
+            "devices": signedIn ? [[
+                "id": "44444444-4444-4444-8444-444444444444", "label": "iPhone", "current": true,
+                "createdAt": timestamp, "lastUsedAt": timestamp, "expiresAt": now.addingTimeInterval(86_400).ISO8601Format()
+            ]] : [],
+            "memberships": signedIn ? [[
+                "householdId": id.uuidString, "householdName": "Our home", "memberId": memberID,
+                "currency": "EUR", "role": "owner"
+            ]] : [],
+            "csrfToken": signedIn ? String(repeating: "c", count: 64) : NSNull(),
+            "session": signedIn ? [
+                "token": NSNull(), "memberId": memberID, "household": household(id: id, version: version)
+            ] : NSNull()
+        ]
+        if token { fields["accessToken"] = String(repeating: "b", count: 43) }
+        return try response(fields)
+    }
+
+    func invitation(revoked: Bool = false) -> [String: Any] {
+        [
+            "id": invitationID.uuidString, "createdAt": now.ISO8601Format(),
+            "expiresAt": now.addingTimeInterval(7 * 86_400).ISO8601Format(),
+            "revokedAt": revoked ? now.ISO8601Format() : NSNull(), "uses": 0
+        ]
+    }
+
+    func accessFields(version: Int = 18, revoked: Bool = false, owner: Bool = true) -> [String: Any] {
+        [
+            "household": household(id: householdID, version: version), "memberId": memberID,
+            "role": owner ? "owner" : "member", "invitations": owner ? [invitation(revoked: revoked)] : []
+        ]
+    }
+
+    func access(version: Int = 18, revoked: Bool = false, owner: Bool = true) throws -> HTTPResponse {
+        try response(accessFields(version: version, revoked: revoked, owner: owner))
+    }
+
+    func created() throws -> HTTPResponse {
+        try response(["code": code, "invitation": invitation(), "access": accessFields()], status: 201)
+    }
+
+    func failure(_ status: Int, code: String? = nil) throws -> HTTPResponse {
+        var fields = ["error": "Test request failed"]
+        if let code { fields["code"] = code }
+        return try response(fields, status: status)
+    }
+
+    private func response(_ fields: [String: Any], status: Int = 200) throws -> HTTPResponse {
+        HTTPResponse(data: try JSONSerialization.data(withJSONObject: fields), statusCode: status, url: api.origin)
+    }
+}
+
+private actor InvitationModelStore: SessionTokenStore {
+    private var token: SessionToken?
+    private var saveFails = false
+
+    init(token: SessionToken?) { self.token = token }
+    func read() -> SessionToken? { token }
+    func save(_ token: SessionToken) throws {
+        if saveFails { throw AccountError.credentialStorage }
+        self.token = token
+    }
+    func clear() { token = nil }
+    func failSaves() { saveFails = true }
+}
+
+private actor InvitationModelSignal {
+    private var signalled = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if !signalled { await withCheckedContinuation { waiter = $0 } }
+    }
+    func signal() {
+        signalled = true
+        waiter?.resume()
+        waiter = nil
+    }
+}
+
+private actor InvitationModelTransport: HTTPTransport {
+    let started = InvitationModelSignal()
+    let finish = InvitationModelSignal()
+    private(set) var requests: [URLRequest] = []
+    private let responses: [HTTPResponse]
+    private let holdIndex: Int?
+
+    init(responses: [HTTPResponse], holdIndex: Int?) {
+        self.responses = responses
+        self.holdIndex = holdIndex
+    }
+
+    func send(_ request: URLRequest) async throws -> HTTPResponse {
+        let index = requests.count
+        requests.append(request)
+        guard responses.indices.contains(index) else { throw URLError(.badServerResponse) }
+        if index == holdIndex {
+            await started.signal()
+            await finish.wait()
+        }
+        return responses[index]
+    }
+}
