@@ -26,18 +26,10 @@ struct AccountSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(title)
-                    .font(RoomTheme.heading())
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 4)
-                Button(model.signedIn ? "Done" : "Not now") { dismiss() }
-                    .buttonStyle(RoomButtonStyle(kind: .text))
-                    .disabled(model.busy)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+            header
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             Rectangle().fill(RoomTheme.border).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -126,6 +118,41 @@ struct AccountSheet: View {
         .onChange(of: budget) { creationID = UUID() }
     }
 
+    private var header: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                RoomBrandMark(size: 36)
+                heading.fixedSize()
+                Spacer(minLength: 4)
+                dismissButton
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    RoomBrandMark(size: 36)
+                    Spacer(minLength: 0)
+                    dismissButton
+                }
+                heading.fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var heading: some View {
+        Text(title)
+            .font(RoomTheme.heading())
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var dismissButton: some View {
+        Button { dismiss() } label: {
+            Text(model.signedIn ? "Done" : "Not now")
+                .frame(minWidth: 44)
+        }
+        .buttonStyle(RoomButtonStyle(kind: .text))
+        .fixedSize()
+        .disabled(model.busy)
+    }
+
     private var title: String {
         if model.deletionPending { return "Your account" }
         if model.signedIn {
@@ -146,13 +173,13 @@ struct AccountSheet: View {
         if model.busy {
             AccountSection {
                 HStack {
-                    RoomLoadingIcon()
+                    RoomBrandMark()
                     Text("Contacting Roomlings...")
                 }
                 .accessibilityIdentifier("account-progress")
             }
         }
-        if let message = model.message {
+        if let message = model.message ?? model.viewerFailure {
             AccountSection {
                 Text(message)
                     .foregroundStyle(RoomTheme.error)

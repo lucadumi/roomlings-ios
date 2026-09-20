@@ -1,3 +1,4 @@
+import RoomlingsCore
 import SwiftUI
 
 enum RoomTheme {
@@ -26,7 +27,12 @@ enum RoomTheme {
     static let sky = color(WebThemeValues.sky)
     static let skySoft = color(WebThemeValues.skySoft)
     static let surfaceMuted = color(WebThemeValues.surfaceMuted)
+    static let line = color(WebThemeValues.line)
     static let radius = WebThemeValues.radius
+
+    static func member(_ value: HouseholdMemberColor) -> Color {
+        color(value.rgb)
+    }
 
     static func body(_ size: CGFloat = 16) -> Font {
         .custom("DMSans-9ptRegular_Regular", size: size, relativeTo: .body)

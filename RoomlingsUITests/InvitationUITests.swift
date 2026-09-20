@@ -76,11 +76,20 @@ extension AccountUITests {
         try tap(owner.buttons["Done"], in: owner)
         owner.terminate()
 
-        let member = try launchApp(invitationLink: link)
-        XCTAssertTrue(member.staticTexts["pending-invitation"].waitForExistence(timeout: Wait.control))
+        let member = try launchApp()
         try signIn(member, email: "invited-\(UUID().uuidString.lowercased())@example.test")
-        XCTAssertTrue(member.textFields["Invitation link or code"].waitForExistence(timeout: Wait.control))
-        XCTAssertEqual(member.textFields["Invitation link or code"].value as? String, code)
+        try tap(member.buttons["Join a household"], in: member)
+        let invitationField = member.textFields["Invitation link or code"]
+        try tap(invitationField, in: member)
+        invitationField.press(forDuration: 1)
+        let paste = member.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Paste")).firstMatch
+        XCTAssertTrue(paste.waitForExistence(timeout: Wait.control))
+        paste.tap()
+        let pasted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            invitationField.value as? String == link
+        }, object: invitationField)
+        XCTAssertEqual(XCTWaiter.wait(for: [pasted], timeout: Wait.control), .completed,
+                       "The system Copy action must paste only the complete invitation URL, including its fragment.")
         let unaccepted = try await invitationState(email: email, home: home)
         XCTAssertEqual(unaccepted.invitations.first { $0.id == invitation.id }?.uses, 0)
         try fill(member.textFields["Your name in this household"], "Ada")
@@ -88,13 +97,15 @@ extension AccountUITests {
         XCTAssertTrue(member.staticTexts[
             "That name may already be taken, or a household or account limit was reached. Try another name or ask the owner to check."
         ].waitForExistence(timeout: Wait.control))
-        XCTAssertEqual(member.textFields["Invitation link or code"].value as? String, code)
+        XCTAssertEqual(member.textFields["Invitation link or code"].value as? String, link)
         XCTAssertEqual(member.textFields["Your name in this household"].value as? String, "Ada")
         let conflicted = try await invitationState(email: email, home: home)
         XCTAssertEqual(conflicted.invitations.first { $0.id == invitation.id }?.uses, 0)
         try fill(member.textFields["Your name in this household"], "Sam")
         try tap(member.buttons["Join household"], in: member)
         XCTAssertTrue(member.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
+        XCTAssertEqual(member.buttons["account-entry"].value as? String, "Playing as Sam")
+        attachHeaderScreenshot("Native saved invited-member header, portrait")
         try openAccount(member)
         XCTAssertTrue(member.staticTexts["Only the household owner can create or revoke invitations. Ask them to share a link."]
             .waitForExistence(timeout: Wait.control))
@@ -121,7 +132,7 @@ extension AccountUITests {
             .waitForExistence(timeout: Wait.control))
         XCTAssertTrue(late.textFields["Invitation link or code"].exists)
         XCTAssertEqual(late.textFields["Your name in this household"].value as? String, "Ben")
-        XCTAssertEqual(late.staticTexts["household-title"].label, "Kitchen preview")
+        XCTAssertEqual(late.buttons["household-entry"].label, "Kitchen preview")
     }
 
     @MainActor

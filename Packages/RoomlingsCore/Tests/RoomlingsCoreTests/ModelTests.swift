@@ -48,6 +48,95 @@ struct ModelTests {
     }
 
     @Test
+    func viewerUsesTheSelectedPersistedMemberInsteadOfTheAccountNameOrFirstMember() throws {
+        let member = JSONValue.object([
+            "id": .string(Fixtures.memberID), "name": .string(" Élodie "), "color": .string("#AbCDef")
+        ])
+        let other = replacing(member, key: "id", with: .string(Fixtures.deviceID))
+        let household = replacing(Fixtures.household, key: "members", with: .array([other, member]))
+        var fields = Fixtures.state(selectedHousehold: true)
+        fields["session"] = replacing(fields["session"]!, key: "household", with: household)
+        let state = try JSONDecoder().decode(AccountState.self, from: Fixtures.data(fields))
+        let session = try #require(state.session)
+        let viewer = try session.viewer
+        #expect(viewer.id == UUID(uuidString: Fixtures.memberID))
+        #expect(viewer.name == "Élodie")
+        #expect(viewer.name != state.account?.name)
+        #expect(viewer.color == "#AbCDef")
+        #expect(viewer == (try HouseholdMember.projection(household)).last)
+    }
+
+    @Test
+    func viewerProjectionFailureIsExplicitWithoutChangingAccountEnvelopeValidation() throws {
+        let member = try #require(Fixtures.household["members"]?.arrayValue?.first)
+        let members = [member] + (0..<12).map { _ in
+            replacing(member, key: "id", with: .string(UUID().uuidString))
+        }
+        let household = replacing(Fixtures.household, key: "members", with: .array(members))
+        var fields = Fixtures.state(selectedHousehold: true)
+        fields["session"] = replacing(fields["session"]!, key: "household", with: household)
+        let state = try JSONDecoder().decode(AccountState.self, from: Fixtures.data(fields))
+        let session = try #require(state.session)
+        #expect(state.isSignedIn)
+        #expect(throws: AccountError.invalidResponse) { try session.viewer }
+        #expect(session.household.value["members"]?.arrayValue?.count == 13)
+    }
+
+    @Test
+    func viewerCanBeAnInactiveMemberInAFullRetainedRoster() throws {
+        let active = try #require(Fixtures.household["members"]?.arrayValue?.first)
+        let inactive = replacing(active, key: "inactive", with: .bool(true))
+        let members = [inactive] + (0..<199).map { index in
+            replacing(index < 12 ? active : inactive, key: "id", with: .string(UUID().uuidString))
+        }
+        let household = replacing(Fixtures.household, key: "members", with: .array(members))
+        let fields = JSONValue.object(["token": .null, "memberId": .string(Fixtures.memberID), "household": household])
+        let session = try JSONDecoder().decode(AccountKitchenSession.self, from: JSONEncoder().encode(fields))
+        #expect(try session.viewer.inactive)
+        #expect(try session.viewer.id == UUID(uuidString: Fixtures.memberID))
+    }
+
+    @Test
+    func aMissingViewerThrowsInsteadOfLookingLikeAnUnselectedHousehold() throws {
+        let fields = JSONValue.object([
+            "token": .null, "memberId": .string(Fixtures.deviceID), "household": Fixtures.household
+        ])
+        let session = try JSONDecoder().decode(AccountKitchenSession.self, from: JSONEncoder().encode(fields))
+        #expect(throws: AccountError.invalidResponse) { try session.viewer }
+    }
+
+    @Test(arguments: ["", "red", "var(--sage)", "rgb(12, 34, 56)"])
+    func unsupportedAvatarColoursDoNotRejectExistingRosterOrAccountData(color: String) throws {
+        let member = try #require(Fixtures.household["members"]?.arrayValue?.first)
+        let household = replacing(
+            Fixtures.household, key: "members", with: .array([replacing(member, key: "color", with: .string(color))])
+        )
+        var fields = Fixtures.state(selectedHousehold: true)
+        fields["session"] = replacing(fields["session"]!, key: "household", with: household)
+        let state = try JSONDecoder().decode(AccountState.self, from: Fixtures.data(fields))
+        let session = try #require(state.session)
+        #expect(state.isSignedIn)
+        #expect(try session.viewer.color == color)
+        #expect(HouseholdMemberColor(hex: color) == nil)
+    }
+
+    @Test(arguments: [
+        ("#7d9070", UInt32(0x7d9070)), ("#AbCDef", 0xabcdef), ("#abc", 0xaabbcc),
+        ("#000", 0), ("#000000", 0), ("#FFF", 0xffffff), ("#FFFFFF", 0xffffff)
+    ])
+    func memberColoursKeepTheirPersistedRGB(hex: String, rgb: UInt32) {
+        #expect(HouseholdMemberColor(hex: hex)?.rgb == rgb)
+    }
+
+    @Test(arguments: [
+        "", "sage", "transparent", "#12", "#abcd", "#1234567", "#12xx45", "7d9070",
+        "#12 345", " #123456", "rgb(255, 0, 0)", "#１２３４５６", "#abc\n", "#+00001"
+    ])
+    func unsupportedMemberColoursNeverBecomeSage(hex: String) {
+        #expect(HouseholdMemberColor(hex: hex) == nil)
+    }
+
+    @Test
     func explicitSignedOutAndDeletionOnlyStatesAreValid() throws {
         let signedOut = try JSONDecoder().decode(AccountState.self, from: Fixtures.data(Fixtures.state(signedIn: false)))
         #expect(!signedOut.isSignedIn)

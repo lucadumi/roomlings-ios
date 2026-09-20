@@ -28,6 +28,53 @@ final class RoomlingsUITests: XCTestCase {
     }
 
     @MainActor
+    func testAccountPlateAndDismissalStayUsableAtAccessibilitySizeAfterRotation() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = "http://127.0.0.1:1"
+        app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.header-test.\(UUID().uuidString)"
+        app.launch()
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                orientation.isLandscape == (app.frame.width > app.frame.height)
+            }, object: app)
+            XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: Wait.control), .completed)
+            let dismiss = app.buttons["Not now"]
+            XCTAssertTrue(dismiss.waitForExistence(timeout: Wait.control))
+            XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+            XCTAssertTrue(app.frame.contains(dismiss.frame))
+            let sheetScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            sheetScreenshot.name = "Account sheet at accessibility size, \(orientation.isLandscape ? "landscape" : "portrait")"
+            sheetScreenshot.lifetime = .keepAlways
+            add(sheetScreenshot)
+            tapControl(dismiss)
+            let account = app.buttons["account-entry"]
+            let household = app.buttons["household-entry"]
+            XCTAssertEqual(account.label, "Sign in")
+            XCTAssertEqual(household.label, "Kitchen preview")
+            for control in [account, household] {
+                XCTAssertTrue(control.waitForExistence(timeout: Wait.control))
+                XCTAssertGreaterThanOrEqual(control.frame.width, 44)
+                XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+                XCTAssertTrue(app.frame.contains(control.frame))
+                XCTAssertTrue(control.isHittable)
+            }
+            XCTAssertFalse(account.frame.intersects(household.frame))
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "Account plate at accessibility size, \(orientation.isLandscape ? "landscape" : "portrait")"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            tapControl(account)
+            XCTAssertTrue(app.otherElements["account-sheet"].waitForExistence(timeout: Wait.control))
+        }
+    }
+
+    @MainActor
     func testSharedKitchenLoadsOfflineAndItsControlsWork() throws {
         // Software-rendered simulators need time for the full gesture and orientation flow.
         executionTimeAllowance = 360

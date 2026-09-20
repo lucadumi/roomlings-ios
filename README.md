@@ -24,8 +24,9 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 - Open an object's **+** marker or **Chores** to view, add, complete and undo shared tasks, with schedules and rotations saved on the server.
 - Open **Shopping** to add, edit, claim and pick up items without creating debt, then record a paid receipt that splits it in the shared ledger.
 - Open **Money** for receipts, what each roommate owes or is owed, and repayments. Roomlings tracks money; it never moves it.
-- Object taps focus the camera; the iPhone's portrait room view is 35% closer.
-- Shared web fonts, colours, graphics and logo loaders; sessions stay in the native Keychain.
+- The branded header opens **Account** from the household name or your avatar.
+- The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
+- Shared web fonts, colours, graphics and static logo loaders; sessions stay in the native Keychain.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
 ## Contributing

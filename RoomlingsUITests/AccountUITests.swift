@@ -237,6 +237,91 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
+    func testAccountHeaderUsesTheSavedMemberAndKeepsLongHouseholdNamesReadable() async throws {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        _ = try await fixture("_fixture/seed", body: ["email": "header-owner-\(UUID().uuidString.lowercased())@example.test"])
+        let app = try launchApp()
+        try signIn(app, email: "header-\(UUID().uuidString.lowercased())@example.test")
+        XCTAssertEqual(app.buttons["account-entry"].label, "Account")
+        XCTAssertTrue((app.buttons["account-entry"].value as? String ?? "").isEmpty)
+        try tap(app.buttons["Done"], in: app)
+        try openAccount(app)
+        try tap(app.buttons["Create a household"], in: app)
+        let name = "The little household at the end of Maple Avenue"
+        try fill(app.textFields["Household name"], name)
+        try fill(app.textFields["Your name in this household"], "Bea")
+        try tap(app.buttons["Create household"], in: app)
+        let title = app.buttons["household-entry"]
+        let titleUpdated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", name), object: title)
+        XCTAssertEqual(XCTWaiter.wait(for: [titleUpdated], timeout: Wait.control), .completed)
+        let account = app.buttons["account-entry"]
+        XCTAssertEqual(account.label, "Account")
+        XCTAssertEqual(account.value as? String, "Playing as Bea")
+        let household = app.buttons["household-entry"]
+        for button in [account, household] {
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertTrue(app.frame.contains(button.frame))
+            XCTAssertTrue(button.isHittable)
+        }
+        XCTAssertFalse(account.frame.intersects(household.frame))
+        attachHeaderScreenshot("Native saved-member header, portrait")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let rotated = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in app.frame.width > app.frame.height }, object: app
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: Wait.control), .completed)
+        for button in [account, household] {
+            XCTAssertTrue(app.frame.contains(button.frame))
+            XCTAssertTrue(button.isHittable)
+        }
+        attachHeaderScreenshot("Native saved-member header, landscape")
+        try tap(household, in: app)
+        XCTAssertTrue(app.otherElements["account-sheet"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.buttons["Done"].isHittable)
+        try tap(app.buttons["Done"], in: app)
+        XCTAssertEqual(app.buttons["household-entry"].label, name)
+        try openAccount(app)
+        XCTAssertTrue(app.buttons["Open \(name)"].waitForExistence(timeout: Wait.control))
+    }
+
+    @MainActor
+    func testTheHeaderDoesNotClaimHouseholdLoadedAfterARequestFails() async throws {
+        continueAfterFailure = false
+        let email = "header-status-\(UUID().uuidString.lowercased())@example.test"
+        _ = try await fixture("_fixture/seed", body: ["email": email])
+        let app = try launchApp()
+        try signIn(app, email: email)
+        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+        _ = try await fixture("_fixture/loading", body: ["hold": true, "fail": true])
+        addTeardownBlock { @MainActor in
+            _ = try await self.fixture("_fixture/loading", body: ["hold": false])
+        }
+        try openAccount(app)
+        let loader = app.descendants(matching: .any).matching(identifier: "sheet-loading").firstMatch
+        XCTAssertTrue(loader.waitForExistence(timeout: Wait.control))
+        _ = try await fixture("_fixture/loading", body: ["hold": false])
+        XCTAssertTrue(app.staticTexts["account-error"].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["Done"], in: app)
+        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Account needs attention")
+        attachHeaderScreenshot("Native account status after a failed request")
+        try openAccount(app)
+        XCTAssertTrue(app.buttons["Open Cedar House"].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["Done"], in: app)
+        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+    }
+
+    @MainActor
+    func attachHeaderScreenshot(_ name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
     func testSignInRestoresTheSavedRoomSwitchesHomesAndSignsOut() async throws {
         continueAfterFailure = false
         let email = "room-\(UUID().uuidString.lowercased())@example.test"

@@ -1,14 +1,28 @@
 html, body, #root { width: 100%; height: 100%; min-width: 0; overflow: hidden; }
 body { overscroll-behavior: none; }
-.native-room.game-home { --world-top: var(--native-top, 0px); --world-bottom: calc(var(--native-bottom, 0px) + var(--native-dock-space, 0px)); display: block; height: 100%; }
+.native-room.game-home { --world-top: var(--native-top, 0px); --world-bottom: calc(var(--native-bottom, 0px) + var(--native-dock-space, 0px)); --camera-rail-space: 4.5rem; display: block; height: 100%; }
 .native-room .kitchen-world { position: absolute; inset: var(--native-top, 0px) var(--native-right, 0px) var(--world-bottom) var(--native-left, 0px); display: block; margin: 0; padding: 0; }
 .native-room button { touch-action: manipulation; }
 /* Keep WebKit taps on the button when its SVG icon changes. */
 .native-room button > * { pointer-events: none; }
-.native-room .world-camera-controls { --control-compact-height: max(44px, 2.75rem); max-height: calc(100% - 7rem); overflow-y: auto; }
-.native-room .world-quick-actions { position: absolute; inset: auto auto 1rem 1rem; max-width: calc(100% - 2rem); }
-.native-room .world-quick-actions button { min-height: 44px; }
+.native-room .world-camera-controls { --control-compact-height: max(44px, 2.75rem); right: 8px; max-height: calc(100% - 2rem); overflow-y: auto; }
+.native-room .world-camera-controls > * { flex-shrink: 0; }
+.native-room .world-camera-controls > span { min-width: 3.5em; font-size: max(11px, 0.6875rem); text-align: center; font-variant-numeric: tabular-nums; }
+.native-room .world-quick-actions { position: absolute; inset: auto auto 1rem 1rem; max-width: calc(100% - var(--camera-rail-space) - 2rem); }
+.native-room .world-quick-actions button { min-width: 44px; min-height: 44px; }
+.native-room .world-view-label { position: absolute; top: 0.75rem; left: 50%; max-width: calc(100% - 2rem); }
 .native-room .world-interaction-hint { bottom: 4.75rem; }
 .native-room .scene-loading { inset: 0; justify-content: center; background: var(--room-backdrop-center); z-index: 4; }
 .native-room .native-tools-dock { position: absolute; left: 50%; bottom: calc(var(--native-bottom, 0px) + 1rem); transform: translateX(-50%); display: flex; width: max-content; max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); z-index: 2; }
 .native-room .native-tools-dock .dock-tool { min-width: max(44px, 4.6875rem); min-height: 44px; }
+.native-room .world-view-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 0.125rem; padding: 0.3125rem; border: 1px solid var(--control-border); border-radius: var(--control-radius); background: var(--control-surface); box-shadow: var(--control-shadow); }
+.native-room .world-view-tools .icon-button { width: max(44px, 2.75rem); height: max(44px, 2.75rem); color: var(--control-ink); }
+.native-room .world-view-tools .icon-button[aria-pressed="true"] { background: var(--leaf-soft); color: var(--leaf-ink); }
+.native-room[data-landscape="true"] .native-tools-dock { left: auto; right: calc(var(--native-right, 0px) + 1rem); transform: none; }
+.native-room[data-landscape="true"] .world-quick-actions { position: fixed; left: calc(var(--native-left, 0px) + 1rem); bottom: calc(var(--native-bottom, 0px) + 1rem); width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - 2rem); min-height: max(44px, var(--native-dock-height, 0px)); flex-wrap: wrap; container: native-quick-actions / inline-size; }
+.native-room[data-landscape="true"][data-has-tools="true"] .world-quick-actions { width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - var(--native-dock-width) - 3rem); max-width: calc(100% - var(--native-left, 0px) - var(--native-right, 0px) - var(--native-dock-width) - 3rem); }
+.native-room[data-landscape="true"] .world-interaction-hint { display: none; }
+
+@container native-quick-actions (max-width: 29rem) {
+  .native-room .world-quick-actions .world-action-label { display: none; }
+}
