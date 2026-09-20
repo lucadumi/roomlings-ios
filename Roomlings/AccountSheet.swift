@@ -182,17 +182,12 @@ struct AccountSheet: View {
             }
         }
         if let message = model.message ?? model.viewerFailure {
-            AccountSection {
-                Text(message)
-                    .foregroundStyle(RoomTheme.error)
-                    .accessibilityIdentifier("account-error")
+            RoomFeedback(message, identifier: "account-error") {
                 if model.state == nil && model.setupError == nil {
                     Button("Retry connection") { Task { await model.refresh() } }
+                        .buttonStyle(RoomFeedbackActionStyle())
                 }
             }
-            .padding(12)
-            .background(RoomTheme.errorSoft, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.errorBorder))
         }
         if let notice = model.notice {
             AccountSection { Text(notice).accessibilityIdentifier("account-notice") }
@@ -203,7 +198,7 @@ struct AccountSheet: View {
         if model.pendingInvitation != nil || model.incomingInvitationError != nil {
             AccountSection("Household invitation") {
                 if let error = model.incomingInvitationError {
-                    Text(error).foregroundStyle(RoomTheme.error).accessibilityIdentifier("invitation-link-error")
+                    RoomFeedback(error, identifier: "invitation-link-error")
                 } else {
                     Text(model.signedIn
                          ? "Review your invitation and name before joining. Your existing households stay saved."

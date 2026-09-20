@@ -19,7 +19,7 @@ export async function buildTheme({ source, project, requireWeb }) {
     fieldSurface: '--field-surface', fieldBorder: '--field-border',
     primary: '--action-fill', primaryPressed: '--action-hover', primaryInk: '--action-ink',
     primaryBorder: '--action-border', primaryShadow: '--action-shadow',
-    error: '--tomato-ink', errorSoft: '--tomato-soft', errorBorder: '--tomato-border',
+    error: '--tomato-ink', errorSoft: '--tomato-soft', errorBorder: '--tomato-border', errorFill: '--red-dark',
     leaf: '--leaf-ink', leafSoft: '--leaf-soft',
     sky: '--sky-ink', skySoft: '--sky-soft', surfaceMuted: '--surface-muted',
   }

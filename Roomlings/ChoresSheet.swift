@@ -86,9 +86,8 @@ struct ChoresSheet: View {
                                 }
                             }
                         } else {
-                            Text(model.choresFailure ?? "Open a household to use its chores.")
-                                .foregroundStyle(RoomTheme.error)
-                                .accessibilityIdentifier("chores-unavailable")
+                            RoomFeedback(model.choresFailure ?? "Open a household to use its chores.",
+                                         identifier: "chores-unavailable")
                         }
                     }
                     .padding(24)
@@ -129,12 +128,7 @@ struct ChoresSheet: View {
             .accessibilityIdentifier("chores-progress")
         }
         if let message = model.message {
-            Text(message)
-                .foregroundStyle(RoomTheme.error)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoomTheme.errorSoft, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                .accessibilityIdentifier("chores-error")
+            RoomFeedback(message, identifier: "chores-error")
         }
         if let notice = model.notice {
             Text(notice).foregroundStyle(RoomTheme.leaf).accessibilityIdentifier("chores-notice")
@@ -376,8 +370,7 @@ struct ChoresSheet: View {
                 Text("Completion will be recorded by \(memberName(memberID, chores: chores)).")
             }
             if !allowed {
-                Text("Chore changed or its object is unavailable. Close this sheet and review the latest chores.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("Chore changed or its object is unavailable. Close this sheet and review the latest chores.")
             }
             Button("Record completion") { start(.complete(chore)) }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
@@ -397,8 +390,7 @@ struct ChoresSheet: View {
                                   componentName: completion.componentName))
             Text("Scheduled for \(ChoreCalendar.title(completion.dueDate, today: calendar.day())).")
             if !allowed {
-                Text("Chore changed. This completion can no longer be undone.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("Chore changed. This completion can no longer be undone.")
             }
             Button("Keep completion") { undoing = nil; model.clearFeedback() }
                 .disabled(model.busy)

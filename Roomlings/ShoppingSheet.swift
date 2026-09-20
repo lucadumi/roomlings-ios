@@ -93,9 +93,8 @@ struct ShoppingSheet: View {
                             case .receipt: receiptForm(shopping: shopping, memberID: session.memberID)
                             }
                         } else {
-                            Text(model.shoppingFailure ?? "Open a household to use its shopping list.")
-                                .foregroundStyle(RoomTheme.error)
-                                .accessibilityIdentifier("shopping-unavailable")
+                            RoomFeedback(model.shoppingFailure ?? "Open a household to use its shopping list.",
+                                         identifier: "shopping-unavailable")
                         }
                     }
                     .padding(24)
@@ -139,12 +138,7 @@ struct ShoppingSheet: View {
             .accessibilityIdentifier("shopping-progress")
         }
         if let message = model.message ?? formError {
-            Text(message)
-                .foregroundStyle(RoomTheme.error)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoomTheme.errorSoft, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                .accessibilityIdentifier("shopping-error")
+            RoomFeedback(message, identifier: "shopping-error")
         }
         if let notice = model.notice {
             Text(notice).foregroundStyle(RoomTheme.leaf).accessibilityIdentifier("shopping-notice")
@@ -282,11 +276,9 @@ struct ShoppingSheet: View {
             RoomField("Notes", text: $notes, axis: .vertical).lineLimit(2...5)
             if let item { sourceLabels(item) }
             if blocked {
-                Text("Item unavailable, picked up or claimed by a roommate. Close this sheet and review the list.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("Item unavailable, picked up or claimed by a roommate. Close this sheet and review the list.")
             } else if changed, let latest {
-                Text("This item changed. Latest: \(latest.quantity) \(latest.name). \(latest.notes)")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("This item changed. Latest: \(latest.quantity) \(latest.name). \(latest.notes)")
                 Button("Use latest item") { openForm(latest) }.disabled(changesBlocked)
                 Button("Keep my draft") { page = .form(latest); model.clearFeedback(); formError = nil }
                     .disabled(changesBlocked)
@@ -318,7 +310,7 @@ struct ShoppingSheet: View {
             Text(releasing ? "This returns it to the shared list and clears its basket status. Coordinate with the shopper before buying it again."
                  : "This only changes the list, not your ledger.")
                 .foregroundStyle(RoomTheme.muted)
-            if !allowed { Text("Item changed. Close this sheet and review it.").foregroundStyle(RoomTheme.error) }
+            if !allowed { RoomFeedback("Item changed. Close this sheet and review it.") }
             Button("Cancel") { page = .board; model.clearFeedback() }.disabled(dismissalBlocked)
             Button(releasing ? "Release claim" : "Remove item") { start(releasing ? .claim(item, false) : .remove(item)) }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
@@ -336,8 +328,7 @@ struct ShoppingSheet: View {
                 Text("For \(labels.joined(separator: "; "))")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             } else {
-                Text("Object details could not be displayed. Refresh shopping to try again.")
-                    .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.error)
+                RoomFeedback("Object details could not be displayed. Refresh shopping to try again.")
             }
         }
     }
@@ -367,9 +358,8 @@ struct ShoppingSheet: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Your basket changed. Review the list before recording a receipt.")
-                    .foregroundStyle(RoomTheme.error)
-                    .accessibilityIdentifier("receipt-unavailable")
+                RoomFeedback("Your basket changed. Review the list before recording a receipt.",
+                             identifier: "receipt-unavailable")
                 Button("Back to shopping") { page = .board; model.clearFeedback() }
                     .disabled(dismissalBlocked)
             }

@@ -105,9 +105,8 @@ struct MoneySheet: View {
                             case .undo(let settlement): undoForm(settlement, ledger: ledger, currency: currency)
                             }
                         } else {
-                            Text(model.ledgerFailure ?? "Open a household to see its shared money.")
-                                .foregroundStyle(RoomTheme.error)
-                                .accessibilityIdentifier("money-unavailable")
+                            RoomFeedback(model.ledgerFailure ?? "Open a household to see its shared money.",
+                                         identifier: "money-unavailable")
                         }
                     }
                     .padding(24)
@@ -171,12 +170,7 @@ struct MoneySheet: View {
             .accessibilityIdentifier("money-progress")
         }
         if let message = model.message ?? formError {
-            Text(message)
-                .foregroundStyle(RoomTheme.error)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoomTheme.errorSoft, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                .accessibilityIdentifier("money-error")
+            RoomFeedback(message, identifier: "money-error")
         }
         if let notice = model.notice {
             Text(notice).foregroundStyle(RoomTheme.leaf).accessibilityIdentifier("money-notice")
@@ -391,8 +385,7 @@ struct MoneySheet: View {
             Text("This takes the receipt out of the shared ledger for everyone. It cannot be edited back.")
                 .foregroundStyle(RoomTheme.muted)
             if !allowed {
-                Text("This receipt changed or cannot be removed here. Refresh money and review the ledger.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("This receipt changed or cannot be removed here. Refresh money and review the ledger.")
             }
             Button("Cancel") { page = .board; model.clearFeedback() }.disabled(dismissalBlocked)
             Button("Remove receipt") { start(.removeReceipt(expense)) }
@@ -416,9 +409,8 @@ struct MoneySheet: View {
                 .keyboardType(.decimalPad)
                 .accessibilityIdentifier("repayment-amount-field")
             if cents != nil && !allowed {
-                Text("These balances only allow up to \(Money.text(transfer.amount, currency: currency)) between them.")
-                    .foregroundStyle(RoomTheme.error)
-                    .accessibilityIdentifier("repayment-error")
+                RoomFeedback("These balances only allow up to \(Money.text(transfer.amount, currency: currency)) between them.",
+                             identifier: "repayment-error")
             }
             Button("Cancel") { page = .board; model.clearFeedback(); formError = nil }
                 .buttonStyle(RoomButtonStyle(kind: .text))
@@ -446,8 +438,7 @@ struct MoneySheet: View {
             Text("Undoing puts this amount back on the balances for everyone. No money moves either way.")
                 .foregroundStyle(RoomTheme.muted)
             if !present {
-                Text("This repayment is no longer in the ledger. Refresh money and review the balances.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("This repayment is no longer in the ledger. Refresh money and review the balances.")
             }
             Button("Cancel") { page = .board; model.clearFeedback() }.disabled(dismissalBlocked)
             Button("Undo repayment") { start(.undo(settlement)) }
@@ -459,7 +450,7 @@ struct MoneySheet: View {
 
     private func unavailable(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(message).foregroundStyle(RoomTheme.error).accessibilityIdentifier("money-form-unavailable")
+            RoomFeedback(message, identifier: "money-form-unavailable")
             Button("Back to money") { page = .board; model.clearFeedback() }.disabled(dismissalBlocked)
         }
     }

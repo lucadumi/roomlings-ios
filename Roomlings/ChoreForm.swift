@@ -63,9 +63,7 @@ struct ChoreForm: View {
                 .font(RoomTheme.body(14))
                 .foregroundStyle(RoomTheme.muted)
             if let error {
-                Text(error)
-                    .foregroundStyle(RoomTheme.error)
-                    .accessibilityIdentifier("chore-form-error")
+                RoomFeedback(error, identifier: "chore-form-error")
             }
             Button("Create chore", action: submit)
                 .buttonStyle(RoomButtonStyle(kind: .primary))

@@ -46,7 +46,7 @@ struct AccountInvitationsSection: View {
             Text("Invite a flatmate with a seven-day link. They will need to sign in to a Roomlings account.")
                 .foregroundStyle(RoomTheme.muted)
             if let error = model.invitationSetupError {
-                Text(error).foregroundStyle(RoomTheme.error)
+                RoomFeedback(error)
             } else {
                 Button("Create seven-day invitation") {
                     Task {
@@ -72,8 +72,7 @@ struct AccountInvitationsSection: View {
                     .foregroundStyle(RoomTheme.muted)
             }
             if model.invitationNeedsRefresh {
-                Text("Refresh invitations before creating, sharing or revoking another link.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("Refresh invitations before creating, sharing or revoking another link.")
             }
             let pending = access.invitations.filter { $0.isPending(at: date) }
             Text("Pending invitations").font(RoomTheme.body().weight(.semibold))

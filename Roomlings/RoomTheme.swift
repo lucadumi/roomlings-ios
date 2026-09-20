@@ -22,6 +22,7 @@ enum RoomTheme {
     static let error = color(WebThemeValues.error)
     static let errorSoft = color(WebThemeValues.errorSoft)
     static let errorBorder = color(WebThemeValues.errorBorder)
+    static let errorFill = color(WebThemeValues.errorFill)
     static let leaf = color(WebThemeValues.leaf)
     static let leafSoft = color(WebThemeValues.leafSoft)
     static let sky = color(WebThemeValues.sky)

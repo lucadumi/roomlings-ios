@@ -18,6 +18,7 @@
 		A00000000000000000000009 /* RoomVisualState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000D /* RoomVisualState.swift */; };
 		A0000000000000000000000A /* AccountUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* AccountUITests.swift */; };
 		A0000000000000000000000B /* RoomTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* RoomTheme.swift */; };
+		A00000000000000000000022 /* RoomFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002A /* RoomFeedback.swift */; };
 		A0000000000000000000000C /* WebThemeValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* WebThemeValues.swift */; };
 		A0000000000000000000000D /* Resources/Fonts in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* Resources/Fonts */; };
 		A0000000000000000000000E /* Wait.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* Wait.swift */; };
@@ -70,6 +71,7 @@
 		B0000000000000000000000F /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		B00000000000000000000010 /* AccountUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountUITests.swift; sourceTree = "<group>"; };
 		B00000000000000000000011 /* RoomTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomTheme.swift; sourceTree = "<group>"; };
+		B0000000000000000000002A /* RoomFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomFeedback.swift; sourceTree = "<group>"; };
 		B00000000000000000000012 /* WebThemeValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebThemeValues.swift; sourceTree = DERIVED_FILE_DIR; };
 		B00000000000000000000013 /* Resources/Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources/Fonts; sourceTree = "<group>"; };
 		B00000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -144,6 +146,7 @@
 				B0000000000000000000000C /* AccountSheet.swift */,
 				B0000000000000000000000D /* RoomVisualState.swift */,
 				B00000000000000000000011 /* RoomTheme.swift */,
+				B0000000000000000000002A /* RoomFeedback.swift */,
 				B00000000000000000000012 /* WebThemeValues.swift */,
 				B00000000000000000000013 /* Resources/Fonts */,
 				B00000000000000000000016 /* ChoresSheet.swift */,
@@ -348,6 +351,7 @@
 				A00000000000000000000008 /* AccountSheet.swift in Sources */,
 				A00000000000000000000009 /* RoomVisualState.swift in Sources */,
 				A0000000000000000000000B /* RoomTheme.swift in Sources */,
+				A00000000000000000000022 /* RoomFeedback.swift in Sources */,
 				A0000000000000000000000C /* WebThemeValues.swift in Sources */,
 				A0000000000000000000000F /* ChoresSheet.swift in Sources */,
 				A00000000000000000000010 /* ChoreForm.swift in Sources */,
