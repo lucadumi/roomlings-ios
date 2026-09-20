@@ -245,12 +245,11 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       const row = document.querySelector('.world-quick-actions')
       const dock = document.querySelector('.native-tools-dock').getBoundingClientRect()
       const native = getComputedStyle(document.querySelector('.native-room'))
-      const centers = [...row.children].map((child) => {
-        const box = child.getBoundingClientRect()
-        return box.y + box.height / 2
-      })
+      const children = [...row.children].map((child) => child.getBoundingClientRect())
+      const centers = children.map((box) => box.y + box.height / 2)
       return {
         height: row.getBoundingClientRect().height,
+        singleRowHeight: Math.max(44, dock.height, ...children.map((box) => box.height)),
         centerSpread: Math.max(...centers) - Math.min(...centers),
         measured: Math.abs(parseFloat(native.getPropertyValue('--native-dock-width')) - dock.width) < 0.1
           && Math.abs(parseFloat(native.getPropertyValue('--native-dock-height')) - dock.height) < 0.1,
@@ -261,24 +260,24 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       await expect(camera).toHaveCSS('height', `${height}px`)
       await expect.poll(async () => (await bottomRow()).measured).toBe(true)
     }
+    const expectSingleBottomRow = async () => {
+      await expect.poll(async () => {
+        const { height, singleRowHeight, centerSpread, measured } = await bottomRow()
+        return measured && centerSpread < 1 && Math.abs(height - singleRowHeight) < 1
+          ? 'one fitted row' : JSON.stringify({ height, singleRowHeight, centerSpread, measured })
+      }, { message: 'The lower controls must fit one row without retaining a previous wrapped height.' }).toBe('one fitted row')
+    }
     await settleBottomRow(874, 402)
-    await expect.poll(async () => {
-      const { centerSpread } = await bottomRow()
-      return centerSpread
-    }).toBeLessThan(1)
-    const unwrappedHeight = (await bottomRow()).height
+    await expectSingleBottomRow()
     await page.setViewportSize({ width: 600, height: 375 })
     await settleBottomRow(600, 375)
     await expect.poll(async () => {
-      const { height } = await bottomRow()
-      return height - unwrappedHeight
+      const { height, singleRowHeight } = await bottomRow()
+      return height - singleRowHeight
     }).toBeGreaterThan(20)
     await page.setViewportSize({ width: 874, height: 402 })
     await settleBottomRow(874, 402)
-    await expect.poll(async () => {
-      const { height } = await bottomRow()
-      return Math.abs(height - unwrappedHeight)
-    }, { message: 'A wrapped bottom row must shrink back when the landscape window widens.' }).toBeLessThan(1)
+    await expectSingleBottomRow()
     await page.setViewportSize({ width: 390, height: 750 })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     const world = page.locator('.kitchen-world')
