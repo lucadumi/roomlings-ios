@@ -240,23 +240,44 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       ...householdState, roomComponents: defaultRoomComponents(),
       viewportInsets: { top: 76, right: 59, bottom: 21, left: 59 },
     })
-    const bottomRowHeights = () => page.evaluate(() => ({
-      actions: document.querySelector('.world-quick-actions').getBoundingClientRect().height,
-      dock: document.querySelector('.native-tools-dock').getBoundingClientRect().height,
-    }))
+    await page.evaluate(() => document.fonts.ready)
+    const bottomRow = () => page.evaluate(() => {
+      const row = document.querySelector('.world-quick-actions')
+      const dock = document.querySelector('.native-tools-dock').getBoundingClientRect()
+      const native = getComputedStyle(document.querySelector('.native-room'))
+      const centers = [...row.children].map((child) => {
+        const box = child.getBoundingClientRect()
+        return box.y + box.height / 2
+      })
+      return {
+        height: row.getBoundingClientRect().height,
+        centerSpread: Math.max(...centers) - Math.min(...centers),
+        measured: Math.abs(parseFloat(native.getPropertyValue('--native-dock-width')) - dock.width) < 0.1
+          && Math.abs(parseFloat(native.getPropertyValue('--native-dock-height')) - dock.height) < 0.1,
+      }
+    })
+    const settleBottomRow = async (width, height) => {
+      await expect(camera).toHaveCSS('width', `${width}px`)
+      await expect(camera).toHaveCSS('height', `${height}px`)
+      await expect.poll(async () => (await bottomRow()).measured).toBe(true)
+    }
+    await settleBottomRow(874, 402)
     await expect.poll(async () => {
-      const { actions, dock } = await bottomRowHeights()
-      return Math.abs(actions - dock)
+      const { centerSpread } = await bottomRow()
+      return centerSpread
     }).toBeLessThan(1)
+    const unwrappedHeight = (await bottomRow()).height
     await page.setViewportSize({ width: 600, height: 375 })
+    await settleBottomRow(600, 375)
     await expect.poll(async () => {
-      const { actions, dock } = await bottomRowHeights()
-      return actions - dock
+      const { height } = await bottomRow()
+      return height - unwrappedHeight
     }).toBeGreaterThan(20)
     await page.setViewportSize({ width: 874, height: 402 })
+    await settleBottomRow(874, 402)
     await expect.poll(async () => {
-      const { actions, dock } = await bottomRowHeights()
-      return Math.abs(actions - dock)
+      const { height } = await bottomRow()
+      return Math.abs(height - unwrappedHeight)
     }, { message: 'A wrapped bottom row must shrink back when the landscape window widens.' }).toBeLessThan(1)
     await page.setViewportSize({ width: 390, height: 750 })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
