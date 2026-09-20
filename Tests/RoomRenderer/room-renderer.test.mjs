@@ -54,6 +54,17 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       viewport: { width: 390, height: 750 }, hasTouch: true, deviceScaleFactor: 2, reducedMotion: 'reduce',
     })
     page.setDefaultTimeout(process.env.CI ? 90_000 : 30_000)
+    const resizeViewport = async (viewport) => {
+      await page.setViewportSize(viewport)
+      // A software-rendered frame can delay ResizeObserver and React beyond the viewport command.
+      await page.waitForFunction(({ width, height }) => {
+        const root = document.querySelector('.native-room')
+        const canvas = root?.querySelector('canvas')
+        return root?.clientWidth === width && root.clientHeight === height
+          && root.dataset.landscape === String(width > height)
+          && canvas?.clientWidth === width && canvas.clientHeight === height
+      }, viewport)
+    }
     page.on('pageerror', (error) => console.error('Bundled room error:', error.message))
     await page.addInitScript(() => {
       window.roomEvents = []
@@ -133,7 +144,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.getByRole('button', { name: 'Put the kettle on', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await page.setViewportSize({ width: 1194, height: 834 })
+    await resizeViewport({ width: 1194, height: 834 })
     await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeInViewport()
     const householdId = randomUUID()
     const roomComponents = defaultRoomComponents().map((component) =>
@@ -172,7 +183,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       { width: 667, height: 375 }, { width: 375, height: 768 }, { width: 800, height: 900 },
       { width: 820, height: 900 }, { width: 834, height: 1194 }, { width: 1194, height: 834 },
     ]) {
-      await page.setViewportSize(viewport)
+      await resizeViewport(viewport)
       const roomZoom = Math.min(1, Math.max(0.3, viewport.width / viewport.height / 0.767))
       await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, roomZoom })
       const landscape = viewport.width > viewport.height
@@ -235,7 +246,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
         await expect(rail.getByRole('button')).toHaveCount(5)
       }
     }
-    await page.setViewportSize({ width: 874, height: 402 })
+    await resizeViewport({ width: 874, height: 402 })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
       ...householdState, roomComponents: defaultRoomComponents(),
       viewportInsets: { top: 76, right: 59, bottom: 21, left: 59 },
@@ -269,16 +280,16 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     }
     await settleBottomRow(874, 402)
     await expectSingleBottomRow()
-    await page.setViewportSize({ width: 600, height: 375 })
+    await resizeViewport({ width: 600, height: 375 })
     await settleBottomRow(600, 375)
     await expect.poll(async () => {
       const { height, singleRowHeight } = await bottomRow()
       return height - singleRowHeight
     }).toBeGreaterThan(20)
-    await page.setViewportSize({ width: 874, height: 402 })
+    await resizeViewport({ width: 874, height: 402 })
     await settleBottomRow(874, 402)
     await expectSingleBottomRow()
-    await page.setViewportSize({ width: 390, height: 750 })
+    await resizeViewport({ width: 390, height: 750 })
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     const world = page.locator('.kitchen-world')
     const settleFraming = async () => {
@@ -394,7 +405,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-chores').length, 3)
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-shopping').length, 1)
     assert.equal((await page.evaluate(() => window.roomEvents)).filter((event) => event.type === 'open-money').length, 1)
-    await page.setViewportSize({ width: 1194, height: 834 })
+    await resizeViewport({ width: 1194, height: 834 })
     await expect(camera).toHaveAttribute('width', '2388')
     const nextHousehold = randomUUID()
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, householdId: nextHousehold })
@@ -449,7 +460,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(money).toHaveCount(0)
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
-    await page.setViewportSize({ width: 808, height: 900 })
+    await resizeViewport({ width: 808, height: 900 })
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await expect.poll(async () => Number(await camera.getAttribute('data-camera-span'))).toBeCloseTo(9.2, 4)
     await expect(world).toHaveAttribute('data-camera-moving', 'false')
@@ -462,7 +473,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
       }
       requestAnimationFrame(measure)
     })
-    await page.setViewportSize({ width: 812, height: 900 })
+    await resizeViewport({ width: 812, height: 900 })
     const finalSpan = cameraFraming(812, 900, 'room', false).halfHeight * 2
     await expect.poll(async () => Number(await camera.getAttribute('data-camera-span'))).toBeCloseTo(finalSpan, 4)
     const spans = await page.evaluate(() => {
