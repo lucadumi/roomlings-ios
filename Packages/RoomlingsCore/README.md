@@ -1,6 +1,6 @@
 # RoomlingsCore
 
-Local Swift 6 package for native accounts, household chores, shopping and the shared money ledger. iOS 18 is the minimum; macOS is declared only to run host tests. No UI, provider SDK, browser authentication or local ledger arithmetic beyond the shared split preview is included.
+Local Swift 6 package for native accounts, household chores, shopping, the shared money ledger and notification contracts. iOS 18 is the minimum; macOS is declared only to run host tests. No UI, provider SDK, browser authentication or local ledger arithmetic beyond the shared split preview is included.
 
 Link the `RoomlingsCore` library from `Packages/RoomlingsCore` in the Xcode project:
 
@@ -34,6 +34,10 @@ All operations are explicit, asynchronous and throwing:
 | `loadInvitations(householdID:)` | `GET /api/account/households/<id>` |
 | `createInvitation(householdID:version:)` | `POST /api/account/households/<id>/invitations` |
 | `revokeInvitation(id:householdID:version:)` | `DELETE /api/account/households/<id>/invitations/<id>` |
+| `loadNotificationSettings(householdID:)` | `GET /api/account/households/<id>/notifications` |
+| `saveNotificationSettings(_:householdID:)` | `PUT /api/account/households/<id>/notifications` |
+| `registerPushDevice(installationID:token:environment:)` | `PUT /api/account/push-devices` |
+| `unregisterPushDevice(installationID:)` | `DELETE /api/account/push-devices/<installationId>` |
 | `addChore(_:householdID:version:mutationID:)` | `POST /api/chores` |
 | `completeChore(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/<id>/complete` |
 | `undoChoreCompletion(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/completions/<id>/undo` |
@@ -62,6 +66,27 @@ All operations are explicit, asynchronous and throwing:
 `Account`, `AccountMembership`, `AccountDevice`, `AccountKitchenSession`, `AccountState` and `HouseholdSnapshot` are Sendable/Codable values. Timestamps retain validated UTC ISO 8601 strings. The household's `value: JSONValue` preserves supplied data without synthesizing empty collections. Metadata and collection envelopes are checked, not the complete TypeScript ledger schema. Integer values use `Int64`; out-of-range integral JSON fails rather than silently rounding through floating point. `csrfToken` is validated and private, and `session.token` must be null. State encoding preserves the backend contract, so do not send an entire encoded account state to JavaScript. Give a renderer only its intended household/room data.
 
 `APIConfiguration` accepts only origin URLs, HTTPS or exact loopback HTTP. `URLSessionTransport` is ephemeral, disables cookies, credentials and cache, has finite timeouts, and rejects every redirect. Requests always identify the native client and never use browser/CSRF headers. Bearers exist only in native requests and `SessionTokenStore`.
+
+## Notifications
+
+- `NotificationPreferences(chores:money:)` belongs to the current household member on the server. Preferences survive app reinstall and are independent of the household ledger version. Settings requests require the intended selected household and an active member; successful responses never replace account or ledger state.
+- Device registration requires a confirmed native account and bearer, but no selected household. It sends the installation UUID, `APNsDeviceToken` and explicit `.sandbox` or `.production` environment. The server binds registration to that account session/device and invalidates it on logout, revocation or account deletion.
+- All four calls share the account operation gate and confirmed-expiry handling. Response types, household/member identity and true registration/removal acknowledgments are required. Credential changes during a request prevent success; failures preserve good local state. No request is automatically retried.
+- `pushAvailable` reports provider availability. `503 PUSH_NOT_CONFIGURED` becomes `AccountServerCode.pushNotConfigured`, not a successful registration. Preferences can still be read or saved when delivery is unavailable.
+- The app must offer an explicit **Enable** action before requesting OS notification permission. `PushInstallation(id:enabled:accountID:)` stores a stable random installation ID, that device's explicit opt-in and an optional account binding, never an APNs token. Enable binds the current account; automatic registration requires `enabled` and a matching signed-in `accountID`. Missing or null account bindings remain unbound, including old stored records. Disable stores `enabled: false, accountID: nil` without rotating the installation ID.
+- `KeychainPushInstallationStore(service:account:)` defaults to account `"push-installation"`; use the existing app/API-origin-scoped Keychain service with that separate account name.
+- Installation storage uses atomic update/add with duplicate-item retry, `WhenUnlockedThisDeviceOnly` and no synchronization. Missing storage returns `nil`; locked, corrupt or failed storage throws. Do not turn storage failures into a new installation or a successful opt-in.
+- APNs tokens accept nonempty, even-length ASCII hex from 2 through 1,024 characters, or 1 through 512 bytes. Serialization is internal, and descriptions and mirrors redact them. Tokens, credentials and registration bodies must never enter logs or the room renderer.
+- Decode `NotificationDestination` from only the custom `roomlings` object, not the outer APNs payload. Its `target: NotificationDestination.Target` supports `.chores(componentID:)`, `.expense(UUID)` and `.settlement(UUID)` in version `1`. Chores may omit `componentId`; money routes require their own UUID. Unknown fields, URLs, versions and malformed identifiers are rejected. The app must restore account access and validate the target household and item before navigating.
+- Approved delivery policy is a daily **09:00** reminder for due assigned chores in the household time zone, plus immediate expense and repayment notifications to other members. Notification text remains generic. Scheduling and recipient preferences are server-owned.
+
+### App setup and delivery validation
+
+- **Account** exposes household chore/money switches and an explicit **Enable notifications** action. The app never prompts for notification permission on startup.
+- `RoomlingsAPNsEnvironment` reads `ROOMLINGS_APNS_ENVIRONMENT`: `development` in Debug maps to APNs sandbox, while `production` in Release uses production APNs. TestFlight uses production.
+- The app target has the **Push Notifications** capability. `Roomlings/Roomlings.entitlements` is applied only for the iPhoneOS SDK. Provisioned signing must include the corresponding push entitlement and APNs topic `com.roomlings.app`.
+- Startup registers fresh tokens only for the matching opted-in account. APNs tokens are never stored on disk; the installation Keychain entry stores only the installation UUID, `enabled` flag and `accountID`.
+- Delivery needs a reachable notification backend with APNs credentials. Mocks and injected payloads verify app flows and contracts, not real APNs delivery. Some newer Apple Silicon simulator runtimes support APNs, but issue acceptance explicitly requires proof on a properly provisioned real device.
 
 ## Invitations
 

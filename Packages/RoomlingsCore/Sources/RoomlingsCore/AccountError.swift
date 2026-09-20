@@ -7,6 +7,7 @@ public enum AccountInputField: String, Sendable {
     case quantity, itemVersion
     case expenseDescription = "description"
     case amount, paidBy, participants, date, checkoutID
+    case pushToken
 }
 
 public enum AccountServerCode: String, Sendable, Codable {
@@ -18,6 +19,7 @@ public enum AccountServerCode: String, Sendable, Codable {
     case authProviderUnavailable = "AUTH_PROVIDER_UNAVAILABLE"
     case clientUnsupported = "CLIENT_UNSUPPORTED"
     case nativeClientRequired = "NATIVE_CLIENT_REQUIRED"
+    case pushNotConfigured = "PUSH_NOT_CONFIGURED"
     case mutationIDConflict = "MUTATION_ID_CONFLICT"
     case mutationPayloadChanged = "MUTATION_PAYLOAD_CHANGED"
     case mutationTooOld = "MUTATION_TOO_OLD"

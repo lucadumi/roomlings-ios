@@ -4,6 +4,7 @@ import SwiftUI
 struct MoneySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: AccountModel
+    let destination: Destination?
     @State private var section = Section.balances
     @State private var page = Page.board
     @State private var receipt = ReceiptFormValues()
@@ -13,6 +14,26 @@ struct MoneySheet: View {
     @State private var reviewRequired = false
     @State private var contentHeight: CGFloat = 480
     @State private var headerHeight: CGFloat = 64
+    @State private var destinationOpened = false
+
+    enum Destination: Equatable {
+        case receipt(UUID), repayment(UUID)
+
+        var rowID: String {
+            switch self {
+            case .receipt(let id): "receipt-\(id.uuidString.lowercased())"
+            case .repayment(let id): "settlement-\(id.uuidString.lowercased())"
+            }
+        }
+    }
+
+    init(model: AccountModel, destination: Destination? = nil) {
+        self.model = model
+        self.destination = destination
+        if case .receipt = destination {
+            _section = State(initialValue: .receipts)
+        }
+    }
 
     private enum Section: String, CaseIterable {
         case balances = "Balances", receipts = "Receipts"
@@ -104,6 +125,10 @@ struct MoneySheet: View {
                 .onChange(of: formError) { _, error in
                     if error != nil { proxy.scrollTo("money-feedback", anchor: .top) }
                 }
+                .onChange(of: contentHeight, initial: true) { _, _ in revealDestination(using: proxy) }
+                .onChange(of: model.refreshing) { _, refreshing in
+                    if !refreshing { revealDestination(using: proxy) }
+                }
             }
             .modifier(RoomSheetLoading(model: model, label: "Loading money..."))
         }
@@ -119,6 +144,22 @@ struct MoneySheet: View {
         .presentationCornerRadius(16)
         .interactiveDismissDisabled(dismissalBlocked)
         .modifier(RoomSheetPresentation(idealHeight: contentHeight + headerHeight + 1))
+    }
+
+    private func revealDestination(using proxy: ScrollViewProxy) {
+        guard !destinationOpened, !model.busy, let destination, let ledger = model.ledger else { return }
+        destinationOpened = true
+        let available: Bool
+        switch destination {
+        case .receipt(let id): available = ledger.expenses.contains { $0.id == id }
+        case .repayment(let id): available = ledger.settlements.contains { $0.id == id }
+        }
+        if available {
+            proxy.scrollTo(destination.rowID, anchor: .center)
+        } else {
+            model.message = "The entry from this notification is no longer in the ledger."
+            proxy.scrollTo("money-feedback", anchor: .top)
+        }
     }
 
     @ViewBuilder private var feedback: some View {
@@ -255,6 +296,7 @@ struct MoneySheet: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(RoomTheme.border))
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("settlement-\(settlement.id.uuidString.lowercased())")
+                .id("settlement-\(settlement.id.uuidString.lowercased())")
             }
         }
     }
@@ -317,6 +359,7 @@ struct MoneySheet: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(RoomTheme.border))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("receipt-\(expense.id.uuidString.lowercased())")
+        .id("receipt-\(expense.id.uuidString.lowercased())")
     }
 
     @ViewBuilder private func expenseForm(_ ledger: HouseholdLedger, currency: HouseholdCurrency, memberID: UUID) -> some View {

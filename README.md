@@ -25,6 +25,7 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 - Open **Shopping** to add, edit, claim and pick up items without creating debt, then record a paid receipt that splits it in the shared ledger.
 - Open **Money** for receipts, what each roommate owes or is owed, and repayments. Roomlings tracks money; it never moves it.
 - The branded header opens **Account** from the household name or your avatar.
+- **Account > Notifications** saves chore and money preferences. Enable push explicitly on each account/device; delivery requires the server and Apple signing setup in the [native guide](Packages/RoomlingsCore/README.md).
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
 - Shared web fonts, colours, graphics and static logo loaders; sessions stay in the native Keychain.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
@@ -43,5 +44,6 @@ Use `node Scripts/test-accounts.mjs --chores-only` for the isolated native chore
 Shopping flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testShoppingEditsClaimsAndPicksWithoutCreatingDebt`.
 Receipt flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testBalancesMatchTheServerAndRepaymentsCanBeUndone`.
 Use `--ui-test TestClass/testMethod` to select individual UI flows.
+Notification flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.

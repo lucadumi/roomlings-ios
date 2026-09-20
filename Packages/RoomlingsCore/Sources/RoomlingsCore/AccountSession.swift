@@ -10,6 +10,7 @@ public actor AccountSession {
     private let shoppingAPI: ShoppingAPI
     private let ledgerAPI: LedgerAPI
     private let invitationAPI: InvitationAPI
+    private let notificationAPI: NotificationAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
 
@@ -25,6 +26,7 @@ public actor AccountSession {
         shoppingAPI = ShoppingAPI(client: client)
         ledgerAPI = LedgerAPI(client: client)
         invitationAPI = InvitationAPI(client: client)
+        notificationAPI = NotificationAPI(client: client)
         self.tokenStore = tokenStore
     }
 
@@ -143,6 +145,36 @@ public actor AccountSession {
     public func revokeInvitation(id: UUID, householdID: UUID, version: Int64) async throws -> HouseholdInvitationAccess {
         try await withInvitations(householdID: householdID) { [invitationAPI] token in
             try await invitationAPI.revoke(id: id, householdID: householdID, version: version, token: token)
+        }
+    }
+
+    public func loadNotificationSettings(householdID: UUID) async throws -> HouseholdNotificationSettings {
+        try await withNotificationAccount(householdID: householdID) { [notificationAPI] token, memberID in
+            guard let memberID else { throw AccountError.accountStateRequired }
+            return try await notificationAPI.load(householdID: householdID, memberID: memberID, token: token)
+        }
+    }
+
+    public func saveNotificationSettings(
+        _ preferences: NotificationPreferences, householdID: UUID
+    ) async throws -> HouseholdNotificationSettings {
+        try await withNotificationAccount(householdID: householdID) { [notificationAPI] token, memberID in
+            guard let memberID else { throw AccountError.accountStateRequired }
+            return try await notificationAPI.save(preferences, householdID: householdID, memberID: memberID, token: token)
+        }
+    }
+
+    public func registerPushDevice(installationID: UUID, token: APNsDeviceToken, environment: APNsEnvironment) async throws {
+        try await withNotificationAccount { [notificationAPI] credential, _ in
+            try await notificationAPI.register(
+                installationID: installationID, token: token, environment: environment, credential: credential
+            )
+        }
+    }
+
+    public func unregisterPushDevice(installationID: UUID) async throws {
+        try await withNotificationAccount { [notificationAPI] token, _ in
+            try await notificationAPI.unregister(installationID: installationID, token: token)
         }
     }
 
@@ -340,6 +372,48 @@ public actor AccountSession {
             try await handleConfirmedExpiry(error)
             throw error
         }
+    }
+
+    private func withNotificationAccount<Response: Sendable>(
+        householdID: UUID? = nil,
+        _ operation: @Sendable (SessionToken, UUID?) async throws -> Response
+    ) async throws -> Response {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, original.isSignedIn, !original.deletionPending else {
+            throw AccountError.accountStateRequired
+        }
+        var memberID: UUID?
+        if let householdID {
+            guard let selected = original.session else { throw AccountError.accountStateRequired }
+            guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
+            guard try !selected.viewer.inactive else { throw AccountError.accountStateRequired }
+            memberID = selected.memberID
+        }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken, state == original else {
+            throw AccountError.accountStateRequired
+        }
+        do {
+            let response = try await operation(token, memberID)
+            try Task.checkCancellation()
+            try await confirmNotificationIdentity(original, token: token)
+            try Task.checkCancellation()
+            return response
+        } catch {
+            if error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
+                try await confirmNotificationIdentity(original, token: token)
+                try await handleConfirmedExpiry(error)
+            }
+            throw error
+        }
+    }
+
+    private func confirmNotificationIdentity(_ original: AccountState, token: SessionToken) async throws {
+        let stored = try await readCredential()
+        guard state == original, stateToken == token else { throw AccountError.invalidResponse }
+        guard stored == token else { throw AccountError.accountStateRequired }
     }
 
     private func mutateHousehold(

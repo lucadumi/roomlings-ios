@@ -38,12 +38,14 @@ public enum KeychainOperation: String, Sendable {
 public enum KeychainError: Error, Sendable, Equatable, LocalizedError {
     case invalidConfiguration
     case invalidStoredCredential
+    case invalidStoredPushInstallation
     case status(operation: KeychainOperation, status: OSStatus)
 
     public var errorDescription: String? {
         switch self {
         case .invalidConfiguration: "The Keychain service and account must not be empty."
         case .invalidStoredCredential: "The saved account credential is unreadable."
+        case .invalidStoredPushInstallation: "The saved notification installation is unreadable."
         case .status(let operation, let status): "Keychain \(operation.rawValue) failed (OSStatus \(status))."
         }
     }
@@ -127,7 +129,7 @@ protocol KeychainOperations: Sendable {
     func delete(_ query: CFDictionary) -> OSStatus
 }
 
-private struct SystemKeychainOperations: KeychainOperations {
+struct SystemKeychainOperations: KeychainOperations {
     func copyMatching(_ query: CFDictionary) -> (OSStatus, CFTypeRef?) {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query, &result)

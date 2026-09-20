@@ -32,8 +32,10 @@ final class AccountModel {
     private(set) var incomingInvitationError: String?
     var message: String?
     var notice: String?
+    var notificationFailure: String?
     let setupError: String?
     let invitationOrigin: APIConfiguration?
+    let notificationStore: (any PushInstallationStore)?
 
     private let client: AccountSession?
     private var deletionBlocked = false
@@ -48,7 +50,8 @@ final class AccountModel {
     var headerStatus: HeaderStatus {
         if busy { return .updating }
         if requestFailed || setupError != nil || deletionPending || viewerFailure != nil
-            || roomFailure != nil || choresFailure != nil || shoppingFailure != nil || ledgerFailure != nil {
+            || roomFailure != nil || choresFailure != nil || shoppingFailure != nil || ledgerFailure != nil
+            || notificationFailure != nil {
             return .needsAttention
         }
         return householdName == nil ? .preview : .loaded
@@ -81,15 +84,18 @@ final class AccountModel {
         }
     }
 
-    init(client: AccountSession, invitationOrigin: APIConfiguration? = nil) {
+    init(client: AccountSession, invitationOrigin: APIConfiguration? = nil,
+         notificationStore: (any PushInstallationStore)? = nil) {
         self.client = client
         self.invitationOrigin = invitationOrigin
+        self.notificationStore = notificationStore
         setupError = nil
     }
 
     private init(setupError: String) {
         client = nil
         invitationOrigin = nil
+        notificationStore = nil
         self.setupError = setupError
         message = setupError
     }
@@ -110,12 +116,14 @@ final class AccountModel {
             let originKey = SHA256.hash(data: Data(configuration.origin.absoluteString.utf8))
                 .map { String(format: "%02x", $0) }.joined()
             let store = try KeychainSessionTokenStore(service: "\(service).\(originKey)")
+            let notifications = try KeychainPushInstallationStore(service: "\(service).\(originKey)")
             let client = AccountSession(configuration: configuration, tokenStore: store)
             do {
-                return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin))
+                return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin),
+                                    notificationStore: notifications)
             } catch {
                 // Account access remains usable; invitationSetupError explains the missing link configuration.
-                return AccountModel(client: client)
+                return AccountModel(client: client, notificationStore: notifications)
             }
         } catch {
             return AccountModel(setupError: "Account access is not configured. Set the Roomlings API origin in Xcode and rebuild the app.")
@@ -188,6 +196,45 @@ final class AccountModel {
         let signedOut = await perform(.logout) { try await $0.logout() }
         if signedOut { dismissInvitation() }
         return signedOut
+    }
+
+    func loadNotificationSettings(householdID: UUID) async throws -> HouseholdNotificationSettings {
+        try await notificationOperation { try await $0.loadNotificationSettings(householdID: householdID) }
+    }
+
+    func saveNotificationSettings(
+        _ preferences: NotificationPreferences, householdID: UUID
+    ) async throws -> HouseholdNotificationSettings {
+        try await notificationOperation {
+            try await $0.saveNotificationSettings(preferences, householdID: householdID)
+        }
+    }
+
+    func registerPushDevice(installationID: UUID, token: APNsDeviceToken, environment: APNsEnvironment) async throws {
+        try await notificationOperation {
+            try await $0.registerPushDevice(installationID: installationID, token: token, environment: environment)
+        }
+    }
+
+    func unregisterPushDevice(installationID: UUID) async throws {
+        try await notificationOperation { try await $0.unregisterPushDevice(installationID: installationID) }
+    }
+
+    private func notificationOperation<Result: Sendable>(
+        _ operation: @Sendable (AccountSession) async throws -> Result
+    ) async throws -> Result {
+        guard let client, canUseAccount else { throw AccountError.accountStateRequired }
+        guard !busy else { throw AccountError.operationInProgress }
+        busy = true
+        defer { busy = false }
+        do {
+            return try await operation(client)
+        } catch {
+            if case AccountError.server(_, .some(.accountDeletionPending)) = error { deletionBlocked = true }
+            let latest = await client.state
+            if latest != state || deletionBlocked { _ = publish(latest, requestFailed: true) }
+            throw error
+        }
     }
 
     func receiveInvitation(_ url: URL) {
