@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  WEB_REVISION: 91e87374810a4ee84c393297d2c4894733e8f442
+  WEB_REPOSITORY: lucadumi/roomlings
+  WEB_REVISION: 979e97e78cfe409c8aac7303bef2edcabaeea774
   ROOMLINGS_WEB_ROOT: ../roomlings
 
 defaults:
@@ -23,8 +24,36 @@ defaults:
     working-directory: roomlings-ios
 
 jobs:
+  # A revision that main cannot reach is not published. It can be rewritten or deleted
+  # while these jobs still pass, so check it before spending the macOS minutes.
+  web-revision:
+    name: Pinned web revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the pinned web revision to be on the web main branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! comparison=$(gh api "repos/$WEB_REPOSITORY/compare/main...$WEB_REVISION" 2>&1); then
+            echo "Could not compare $WEB_REVISION against $WEB_REPOSITORY main."
+            echo "$comparison"
+            exit 1
+          fi
+          unreachable=$(printf '%s' "$comparison" | jq -r '.ahead_by')
+          if [ "$unreachable" != 0 ]; then
+            echo "$WEB_REVISION is not on $WEB_REPOSITORY main."
+            echo "It holds $unreachable commit(s) that main does not, so it was orphaned or never merged."
+            echo "Merge that work into main, then pin a revision main contains."
+            exit 1
+          fi
+
   renderer:
     name: Shared renderer
+    needs: web-revision
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
@@ -37,7 +66,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v7
         with:
-          repository: lucadumi/roomlings
+          repository: ${{ env.WEB_REPOSITORY }}
           ref: ${{ env.WEB_REVISION }}
           path: roomlings
           persist-credentials: false
@@ -61,6 +90,7 @@ jobs:
 
   native:
     name: Native (${{ matrix.name }})
+    needs: web-revision
     runs-on: macos-26
     timeout-minutes: 75
     strategy:
@@ -78,7 +108,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v7
         with:
-          repository: lucadumi/roomlings
+          repository: ${{ env.WEB_REPOSITORY }}
           ref: ${{ env.WEB_REVISION }}
           path: roomlings
           persist-credentials: false
@@ -136,7 +166,7 @@ jobs:
   complete:
     name: iOS checks
     if: ${{ always() }}
-    needs: [renderer, native]
+    needs: [web-revision, renderer, native]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     defaults:
@@ -145,6 +175,10 @@ jobs:
     steps:
       - name: Require every job to pass
         env:
+          WEB_REVISION_RESULT: ${{ needs.web-revision.result }}
           RENDERER_RESULT: ${{ needs.renderer.result }}
           NATIVE_RESULT: ${{ needs.native.result }}
-        run: test "$RENDERER_RESULT" = success && test "$NATIVE_RESULT" = success
+        run: |
+          test "$WEB_REVISION_RESULT" = success &&
+            test "$RENDERER_RESULT" = success &&
+            test "$NATIVE_RESULT" = success

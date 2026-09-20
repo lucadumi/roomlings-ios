@@ -221,6 +221,17 @@ final class AccountUITests: XCTestCase {
         }
     }
 
+    // Signing in only settles the account. The household loads after it, so sampling the
+    // status here races that load instead of waiting for the state under test.
+    @MainActor
+    private func expectHeaderStatus(_ app: XCUIApplication, _ status: String) {
+        let entry = app.buttons["household-entry"]
+        let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", status), object: entry)
+        if XCTWaiter.wait(for: [matched], timeout: Wait.control) != .completed {
+            XCTFail("The header status stayed \(entry.value as? String ?? "unset") instead of reaching \(status).")
+        }
+    }
+
     @MainActor
     func openAccount(_ app: XCUIApplication) throws {
         let sheet = app.otherElements["account-sheet"]
@@ -296,7 +307,7 @@ final class AccountUITests: XCTestCase {
         _ = try await fixture("_fixture/seed", body: ["email": email])
         let app = try launchApp()
         try signIn(app, email: email)
-        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+        expectHeaderStatus(app, "Household loaded")
         _ = try await fixture("_fixture/loading", body: ["hold": true, "fail": true])
         addTeardownBlock { @MainActor in
             _ = try await self.fixture("_fixture/loading", body: ["hold": false])
@@ -312,7 +323,7 @@ final class AccountUITests: XCTestCase {
         try openAccount(app)
         XCTAssertTrue(app.buttons["Open Cedar House"].waitForExistence(timeout: Wait.control))
         try tap(app.buttons["Done"], in: app)
-        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+        expectHeaderStatus(app, "Household loaded")
     }
 
     @MainActor
