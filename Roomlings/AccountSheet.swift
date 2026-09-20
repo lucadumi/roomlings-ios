@@ -185,7 +185,7 @@ struct AccountSheet: View {
             RoomFeedback(message, identifier: "account-error") {
                 if model.state == nil && model.setupError == nil {
                     Button("Retry connection") { Task { await model.refresh() } }
-                        .buttonStyle(RoomFeedbackActionStyle())
+                        .buttonStyle(RoomButtonStyle(kind: .secondary))
                 }
             }
         }

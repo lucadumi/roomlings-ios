@@ -38,6 +38,7 @@ final class AccountModel {
     let notificationStore: (any PushInstallationStore)?
 
     private let client: AccountSession?
+    private let analytics: NativeAnalytics?
     private var deletionBlocked = false
     private var sharedInvitationID: UUID?
     private var requestFailed = false
@@ -47,6 +48,7 @@ final class AccountModel {
     var householdName: String? { deletionPending ? nil : state?.session?.household.name }
     var viewerColor: HouseholdMemberColor? { viewer.flatMap { HouseholdMemberColor(hex: $0.color) } }
     var canUseAccount: Bool { signedIn && !deletionPending }
+    var analyticsContext: AnalyticsContext? { analytics?.context }
     var headerStatus: HeaderStatus {
         if busy { return .updating }
         if requestFailed || setupError != nil || deletionPending || viewerFailure != nil
@@ -85,8 +87,9 @@ final class AccountModel {
     }
 
     init(client: AccountSession, invitationOrigin: APIConfiguration? = nil,
-         notificationStore: (any PushInstallationStore)? = nil) {
+         notificationStore: (any PushInstallationStore)? = nil, analytics: NativeAnalytics? = nil) {
         self.client = client
+        self.analytics = analytics
         self.invitationOrigin = invitationOrigin
         self.notificationStore = notificationStore
         setupError = nil
@@ -94,6 +97,7 @@ final class AccountModel {
 
     private init(setupError: String) {
         client = nil
+        analytics = nil
         invitationOrigin = nil
         notificationStore = nil
         self.setupError = setupError
@@ -118,12 +122,13 @@ final class AccountModel {
             let store = try KeychainSessionTokenStore(service: "\(service).\(originKey)")
             let notifications = try KeychainPushInstallationStore(service: "\(service).\(originKey)")
             let client = AccountSession(configuration: configuration, tokenStore: store)
+            let analytics = NativeAnalytics(client: client)
             do {
                 return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin),
-                                    notificationStore: notifications)
+                                    notificationStore: notifications, analytics: analytics)
             } catch {
                 // Account access remains usable; invitationSetupError explains the missing link configuration.
-                return AccountModel(client: client, notificationStore: notifications)
+                return AccountModel(client: client, notificationStore: notifications, analytics: analytics)
             }
         } catch {
             return AccountModel(setupError: "Account access is not configured. Set the Roomlings API origin in Xcode and rebuild the app.")
@@ -181,7 +186,11 @@ final class AccountModel {
 
     func join(code: String, memberName: String) async -> Bool {
         let originalInvitation = pendingInvitation
+        let previousHouseholds = Set(state?.memberships.map(\.householdID) ?? [])
         let saved = await perform(.join) { try await $0.acceptInvitation(code: code, memberName: memberName) }
+        if saved, let context = analyticsContext, !previousHouseholds.contains(context.householdID) {
+            analytics?.record(.inviteAccepted, context: context)
+        }
         if saved, pendingInvitation == originalInvitation {
             dismissInvitation()
         }
@@ -196,6 +205,22 @@ final class AccountModel {
         let signedOut = await perform(.logout) { try await $0.logout() }
         if signedOut { dismissInvitation() }
         return signedOut
+    }
+
+    func analyticsBecameActive() { analytics?.becameActive() }
+    func analyticsEnteredBackground() { analytics?.enteredBackground() }
+
+    func invitationSharingFinished(context: AnalyticsContext?, completed: Bool, failed: Bool) {
+        if failed {
+            message = "The invitation could not be shared. Try sharing the link again."
+        } else if completed, let context {
+            analytics?.record(.inviteShared, context: context)
+        }
+    }
+
+    func recordNotificationOpened(householdID: UUID, at date: Date) {
+        guard let context = analyticsContext, context.householdID == householdID else { return }
+        analytics?.record(.notificationOpened, context: context, at: date)
     }
 
     func loadNotificationSettings(householdID: UUID) async throws -> HouseholdNotificationSettings {
@@ -496,6 +521,7 @@ final class AccountModel {
     }
 
     private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
+        defer { analytics?.updateAccount(deletionPending ? nil : state) }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true {
             invitations = nil

@@ -53,6 +53,7 @@ final class SystemNotifications: NotificationSystem {
 final class NativeNotifications {
     struct Pending: Equatable, Identifiable {
         let id = UUID()
+        let receivedAt = Date()
         let destination: NotificationDestination
     }
 

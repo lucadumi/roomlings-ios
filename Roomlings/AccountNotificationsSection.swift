@@ -67,7 +67,7 @@ struct AccountNotificationsSection: View {
             if let error = notifications.error {
                 RoomFeedback(error, identifier: "notifications-error") {
                     Button("Retry notifications") { Task { await notifications.retry() } }
-                        .buttonStyle(RoomFeedbackActionStyle())
+                        .buttonStyle(RoomButtonStyle(kind: .secondary))
                 }
             }
             Button("Refresh notifications") { Task { await notifications.refreshSettings() } }

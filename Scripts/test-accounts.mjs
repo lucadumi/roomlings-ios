@@ -19,13 +19,21 @@ if (selectedFlows?.some((flow) => !/^[A-Za-z_]\w*\/test\w+$/.test(flow))) {
 }
 const { createApp } = await import(pathToFileURL(join(web, 'server/app.ts')).href)
 const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
+const { SQLiteDatabase } = await import(pathToFileURL(join(web, 'server/database.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
 const { getRoomComponents, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { balances, billingDate, choreSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { accountEmailSchema } = await import(pathToFileURL(join(web, 'shared/accounts.ts')).href)
 const express = requireWeb('express')
 const { z } = requireWeb('zod')
-const store = new Store(':memory:')
+const database = new SQLiteDatabase(':memory:')
+const store = new Store(database)
+if (typeof store.analytics?.record !== 'function') {
+  await store.close()
+  throw new Error('Native analytics tests require the pinned web revision. Set ROOMLINGS_WEB_ROOT to a compatible checkout.')
+}
+let analyticsFailure = null
+const analyticsRequests = []
 const identities = new Map()
 const pendingCodes = new Set()
 let failDelivery = false
@@ -141,8 +149,55 @@ observeMutations(invitationRoute, invitationRequests, () => {
   invitationFailure = null
   return failure
 })
+app.post(/^\/api\/account\/households\/[^/]+\/analytics$/, express.json(), (request, response, next) => {
+  const observed = {
+    householdId: request.path.split('/')[4],
+    keys: Object.keys(request.body),
+    events: request.body.events.map(({ kind, occurredAt, localDate, ...extra }) => ({
+      kind, occurredAt, localDate, extraKeys: Object.keys(extra),
+    })),
+    native: request.get('X-Roomlings-Client') === 'ios',
+    browserHeaders: ['origin', 'cookie', 'x-csrf-token', 'sec-fetch-site'].some((name) => request.get(name) !== undefined),
+    status: null,
+  }
+  analyticsRequests.push(observed)
+  const failure = analyticsFailure
+  analyticsFailure = null
+  if (failure === 'unavailable') {
+    observed.status = 503
+    response.status(503).json({ error: 'Test analytics unavailable' })
+    return
+  }
+  const sendJSON = response.json
+  response.json = function (body) {
+    observed.status = this.statusCode
+    if (failure === 'lost-response' && this.statusCode >= 200 && this.statusCode < 300) {
+      this.destroy()
+      return this
+    }
+    return sendJSON.call(this, body)
+  }
+  next()
+})
 app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
+app.post('/_fixture/analytics/state', express.json(), async (request, response) => {
+  const { householdIds } = z.object({ householdIds: z.array(z.string().uuid()).min(1).max(50) }).parse(request.body)
+  const rows = await database.prepare(`SELECT household_id, member_id, kind, local_date, occurrences
+    FROM analytics_events WHERE household_id IN (${householdIds.map(() => '?').join(', ')})
+    ORDER BY household_id, member_id, kind, local_date`).all(...householdIds)
+  response.json({
+    rows: rows.map((row) => ({
+      householdId: row.household_id, memberId: row.member_id, kind: row.kind,
+      localDate: row.local_date, occurrences: row.occurrences,
+    })),
+    requests: analyticsRequests.filter((entry) => householdIds.includes(entry.householdId)),
+  })
+})
+app.post('/_fixture/analytics/failure', express.json(), (request, response) => {
+  analyticsFailure = z.object({ mode: z.enum(['unavailable', 'lost-response']) }).parse(request.body).mode
+  response.json({ configured: true })
+})
 app.post('/_fixture/loading', express.json(), (request, response) => {
   const input = z.object({ hold: z.boolean(), fail: z.boolean().default(false) }).parse(request.body)
   if (input.hold) {
@@ -158,6 +213,8 @@ app.post('/_fixture/loading', express.json(), (request, response) => {
 app.post('/_fixture/seed', express.json(), async (request, response) => {
   const email = accountEmailSchema.parse(request.body.email)
   releaseAccountLoad()
+  analyticsFailure = null
+  analyticsRequests.length = 0
   failDelivery = false
   choreFailure = null
   choreRequests.length = 0
@@ -428,7 +485,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = 49 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 24)
+    const expected = 60 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 26)
       + (values['include-room'] ? 2 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)

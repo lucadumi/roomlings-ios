@@ -41,6 +41,10 @@
 		A0000000000000000000001F /* AccountNotificationsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* AccountNotificationsSection.swift */; };
 		A00000000000000000000020 /* NotificationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000028 /* NotificationModelTests.swift */; };
 		A00000000000000000000021 /* NotificationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000029 /* NotificationUITests.swift */; };
+		A00000000000000000000023 /* NativeAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002B /* NativeAnalytics.swift */; };
+		A00000000000000000000024 /* InvitationShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002C /* InvitationShareSheet.swift */; };
+		A00000000000000000000025 /* AnalyticsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002D /* AnalyticsModelTests.swift */; };
+		A00000000000000000000026 /* AnalyticsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002E /* AnalyticsUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +100,10 @@
 		B00000000000000000000027 /* Roomlings.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Roomlings.entitlements; sourceTree = "<group>"; };
 		B00000000000000000000028 /* NotificationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationModelTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000029 /* NotificationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationUITests.swift; sourceTree = "<group>"; };
+		B0000000000000000000002B /* NativeAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAnalytics.swift; sourceTree = "<group>"; };
+		B0000000000000000000002C /* InvitationShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationShareSheet.swift; sourceTree = "<group>"; };
+		B0000000000000000000002D /* AnalyticsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsModelTests.swift; sourceTree = "<group>"; };
+		B0000000000000000000002E /* AnalyticsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +168,8 @@
 				B0000000000000000000001F /* Money.swift */,
 				B00000000000000000000020 /* MoneySheet.swift */,
 				B00000000000000000000022 /* AccountInvitationsSection.swift */,
+				B0000000000000000000002C /* InvitationShareSheet.swift */,
+				B0000000000000000000002B /* NativeAnalytics.swift */,
 				B00000000000000000000025 /* NativeNotifications.swift */,
 				B00000000000000000000026 /* AccountNotificationsSection.swift */,
 				B00000000000000000000027 /* Roomlings.entitlements */,
@@ -173,6 +183,7 @@
 				B00000000000000000000005 /* RoomBridgeTests.swift */,
 				B00000000000000000000023 /* InvitationModelTests.swift */,
 				B00000000000000000000028 /* NotificationModelTests.swift */,
+				B0000000000000000000002D /* AnalyticsModelTests.swift */,
 			);
 			path = RoomlingsTests;
 			sourceTree = "<group>";
@@ -186,6 +197,7 @@
 				B00000000000000000000021 /* MoneyUITests.swift */,
 				B00000000000000000000024 /* InvitationUITests.swift */,
 				B00000000000000000000029 /* NotificationUITests.swift */,
+				B0000000000000000000002E /* AnalyticsUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
@@ -364,6 +376,8 @@
 				A00000000000000000000018 /* Money.swift in Sources */,
 				A00000000000000000000019 /* MoneySheet.swift in Sources */,
 				A0000000000000000000001B /* AccountInvitationsSection.swift in Sources */,
+				A00000000000000000000024 /* InvitationShareSheet.swift in Sources */,
+				A00000000000000000000023 /* NativeAnalytics.swift in Sources */,
 				A0000000000000000000001E /* NativeNotifications.swift in Sources */,
 				A0000000000000000000001F /* AccountNotificationsSection.swift in Sources */,
 			);
@@ -376,6 +390,7 @@
 				A00000000000000000000005 /* RoomBridgeTests.swift in Sources */,
 				A0000000000000000000001C /* InvitationModelTests.swift in Sources */,
 				A00000000000000000000020 /* NotificationModelTests.swift in Sources */,
+				A00000000000000000000025 /* AnalyticsModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -389,6 +404,7 @@
 				A0000000000000000000001A /* MoneyUITests.swift in Sources */,
 				A0000000000000000000001D /* InvitationUITests.swift in Sources */,
 				A00000000000000000000021 /* NotificationUITests.swift in Sources */,
+				A00000000000000000000026 /* AnalyticsUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

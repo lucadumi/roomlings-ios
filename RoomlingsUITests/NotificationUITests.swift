@@ -18,6 +18,7 @@ extension AccountUITests {
         XCTAssertTrue(app.otherElements["chores-sheet"].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(app.buttons["household-entry"].label, home.name)
         XCTAssertTrue(app.staticTexts["Wipe the fridge shelves"].waitForExistence(timeout: Wait.control))
+        try await waitForAnalytics("notification_opened", count: 1, homes: [home])
         try tap(app.buttons["Done"], in: app)
     }
 
@@ -78,6 +79,7 @@ extension AccountUITests {
         XCTAssertTrue(receipt.waitForExistence(timeout: Wait.control))
         XCTAssertTrue(receipt.isHittable, "The notification must reveal its receipt rather than only opening Money.")
         XCTAssertEqual(app.buttons["household-entry"].label, home.name)
+        try await waitForAnalytics("notification_opened", count: 1, homes: [home])
         attachHeaderScreenshot("Notification opened the recorded receipt")
         try tap(app.buttons["Done"], in: app)
         app.terminate()
@@ -88,6 +90,7 @@ extension AccountUITests {
         XCTAssertTrue(app.otherElements["chores-sheet"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.staticTexts["Wipe the fridge shelves"].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(app.buttons["household-entry"].label, home.name)
+        try await waitForAnalytics("notification_opened", count: 2, homes: [home])
         try tap(app.buttons["Done"], in: app)
     }
 
@@ -118,6 +121,8 @@ extension AccountUITests {
         XCTAssertTrue(app.staticTexts["That repayment is no longer available. Open Money to review the current ledger."]
             .waitForExistence(timeout: Wait.control))
         XCTAssertFalse(app.otherElements["money-sheet"].exists)
+        let analytics = try await analyticsState(seed.homes)
+        XCTAssertEqual(analytics.occurrences("notification_opened"), 0)
         try tap(app.buttons["Done"], in: app)
     }
 
