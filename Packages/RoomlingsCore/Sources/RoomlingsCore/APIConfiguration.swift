@@ -54,6 +54,7 @@ enum APIEndpoint: Equatable {
     case account, code, verify, recover, logout
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
+    case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
@@ -61,9 +62,10 @@ enum APIEndpoint: Equatable {
 
     var method: String {
         switch self {
-        case .account, .householdInvitations: "GET"
+        case .account, .householdInvitations, .notificationSettings: "GET"
+        case .saveNotificationSettings, .registerPushDevice: "PUT"
         case .editShoppingItem: "PATCH"
-        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation: "DELETE"
+        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice: "DELETE"
         default: "POST"
         }
     }
@@ -82,6 +84,10 @@ enum APIEndpoint: Equatable {
         case .createInvitation(let id): "api/account/households/\(id.uuidString.lowercased())/invitations"
         case .revokeInvitation(let household, let invitation):
             "api/account/households/\(household.uuidString.lowercased())/invitations/\(invitation.uuidString.lowercased())"
+        case .notificationSettings(let id), .saveNotificationSettings(let id):
+            "api/account/households/\(id.uuidString.lowercased())/notifications"
+        case .registerPushDevice: "api/account/push-devices"
+        case .unregisterPushDevice(let id): "api/account/push-devices/\(id.uuidString.lowercased())"
         case .addChore: "api/chores"
         case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         case .undoChoreCompletion(let id): "api/chores/completions/\(id.uuidString.lowercased())/undo"

@@ -1,7 +1,9 @@
+import RoomlingsCore
 import SwiftUI
 
 struct RoomPreviewScreen: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(NativeNotifications.self) private var notifications
     @State private var generation = UUID()
     @State private var failure: String?
     @State private var accounts = AccountModel.live()
@@ -11,6 +13,9 @@ struct RoomPreviewScreen: View {
     @State private var invitationPresentationPending = false
     @State private var roomZoom: Double?
     @State private var viewportFailure: String?
+    @State private var openingNotification = false
+    @State private var sheetHouseholdID: UUID?
+    @State private var moneyDestination: MoneySheet.Destination?
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money
@@ -87,44 +92,77 @@ struct RoomPreviewScreen: View {
                 }
             }
         }
-        .sheet(item: $presentedSheet, onDismiss: presentPendingInvitation) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: presentPendingContent) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
             case .chores: ChoresSheet(model: accounts, object: choreObject)
             case .shopping: ShoppingSheet(model: accounts)
-            case .money: MoneySheet(model: accounts)
+            case .money: MoneySheet(model: accounts, destination: moneyDestination)
             }
         }
         .task {
             await accounts.start()
+            notifications.attach(to: accounts)
             #if DEBUG
             if let input = ProcessInfo.processInfo.environment["ROOMLINGS_INVITATION_URL"],
                let url = URL(string: input) {
                 receiveInvitation(url)
             }
+            if let payload = ProcessInfo.processInfo.environment["ROOMLINGS_NOTIFICATION_PAYLOAD"] {
+                notifications.receiveNotification(Data(payload.utf8))
+            }
             #endif
             if !accounts.signedIn || accounts.state?.session == nil || accounts.message != nil {
                 presentedSheet = .account
             }
-            presentPendingInvitation()
+            presentPendingContent()
+            await notifications.synchronize()
         }
         .onOpenURL(perform: receiveInvitation)
         .onChange(of: accounts.busy) { _, busy in
-            if !busy { presentPendingInvitation() }
+            if !busy {
+                notifications.attach(to: accounts)
+                presentPendingContent()
+                Task { await notifications.synchronize() }
+            }
         }
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
-            choreObject = nil
-            if presentedSheet == .chores || presentedSheet == .shopping || presentedSheet == .money {
-                presentedSheet = householdID == nil ? .account : nil
+            notifications.attach(to: accounts)
+            if sheetHouseholdID != accounts.state?.session?.household.id {
+                choreObject = nil
+                moneyDestination = nil
+                if presentedSheet == .chores || presentedSheet == .shopping || presentedSheet == .money {
+                    presentedSheet = householdID == nil ? .account : nil
+                }
             }
         }
         .onChange(of: accounts.signedIn) { previous, signedIn in
+            notifications.attach(to: accounts)
             if previous && !signedIn { presentedSheet = .account }
+        }
+        .onChange(of: notifications.pending) { _, pending in
+            if pending != nil, presentedSheet != nil {
+                accounts.notice = "A notification is waiting. Finish here, then close this sheet to open it."
+            }
+            presentPendingContent()
+        }
+        .onChange(of: notifications.routingError) { _, error in
+            if let error {
+                accounts.message = error
+                if presentedSheet == nil { presentedSheet = .account }
+            }
+        }
+        .onChange(of: openingNotification) { _, opening in
+            if !opening { presentPendingContent() }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && accounts.restored && !accounts.busy {
-                Task { await accounts.refresh() }
+                Task {
+                    await accounts.refresh()
+                    notifications.attach(to: accounts)
+                    await notifications.synchronize()
+                }
             }
         }
     }
@@ -145,6 +183,74 @@ struct RoomPreviewScreen: View {
         presentedSheet = .account
     }
 
+    private func presentPendingContent() {
+        presentPendingInvitation()
+        guard !openingNotification, !accounts.busy, presentedSheet == nil,
+              let pending = notifications.pending else { return }
+        guard accounts.canUseAccount else {
+            presentedSheet = .account
+            return
+        }
+        openingNotification = true
+        Task {
+            defer { openingNotification = false }
+            guard await accounts.refresh() else {
+                presentedSheet = .account
+                return
+            }
+            guard notifications.pending?.id == pending.id else { return }
+            let destination = pending.destination
+            guard accounts.state?.memberships.contains(where: { $0.householdID == destination.householdID }) == true else {
+                rejectPendingNotification(pending.id, "That notification no longer belongs to a household you can access.")
+                return
+            }
+            if accounts.state?.session?.household.id != destination.householdID {
+                guard await accounts.select(id: destination.householdID) else {
+                    presentedSheet = .account
+                    return
+                }
+            }
+            guard notifications.pending?.id == pending.id,
+                  accounts.state?.session?.household.id == destination.householdID else { return }
+            sheetHouseholdID = destination.householdID
+            switch destination.target {
+            case .chores(let componentID):
+                guard accounts.chores != nil else {
+                    rejectPendingNotification(pending.id, accounts.choresFailure ?? "Your chores could not be loaded.")
+                    return
+                }
+                let object = componentID.flatMap { id in accounts.choreObjects.first { $0.id == id && $0.installed } }
+                guard componentID == nil || object != nil else {
+                    rejectPendingNotification(pending.id, "That chore object is no longer available. Open Chores to review the current list.")
+                    return
+                }
+                choreObject = object
+                presentedSheet = .chores
+            case .expense(let id):
+                guard accounts.ledger?.expenses.contains(where: { $0.id == id }) == true else {
+                    rejectPendingNotification(pending.id, "That receipt is no longer available. Open Money to review the current ledger.")
+                    return
+                }
+                moneyDestination = .receipt(id)
+                presentedSheet = .money
+            case .settlement(let id):
+                guard accounts.ledger?.settlements.contains(where: { $0.id == id }) == true else {
+                    rejectPendingNotification(pending.id, "That repayment is no longer available. Open Money to review the current ledger.")
+                    return
+                }
+                moneyDestination = .repayment(id)
+                presentedSheet = .money
+            }
+            notifications.finishOpening(pending.id)
+        }
+    }
+
+    private func rejectPendingNotification(_ id: UUID, _ message: String) {
+        notifications.finishOpening(id)
+        accounts.message = message
+        presentedSheet = .account
+    }
+
     private func openMoney(householdID: UUID) {
         guard accounts.canUseAccount, accounts.state?.session?.household.id == householdID else {
             accounts.message = "Open your current household before using its money."
@@ -153,6 +259,8 @@ struct RoomPreviewScreen: View {
         }
         if presentedSheet == nil {
             if !accounts.busy { accounts.clearFeedback() }
+            sheetHouseholdID = householdID
+            moneyDestination = nil
             presentedSheet = .money
         }
     }
@@ -165,6 +273,7 @@ struct RoomPreviewScreen: View {
         }
         if presentedSheet == nil {
             if !accounts.busy { accounts.clearFeedback() }
+            sheetHouseholdID = householdID
             presentedSheet = .shopping
         }
     }
@@ -185,6 +294,7 @@ struct RoomPreviewScreen: View {
         }
         if presentedSheet == nil {
             if !accounts.busy { accounts.clearFeedback() }
+            sheetHouseholdID = householdID
             choreObject = object
             presentedSheet = .chores
         }

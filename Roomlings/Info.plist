@@ -24,6 +24,8 @@
     <string>$(ROOMLINGS_API_SCHEME)://$(ROOMLINGS_API_HOST)</string>
     <key>RoomlingsInvitationOrigin</key>
     <string>$(ROOMLINGS_INVITATION_SCHEME)://$(ROOMLINGS_INVITATION_HOST)</string>
+    <key>RoomlingsAPNsEnvironment</key>
+    <string>$(ROOMLINGS_APNS_ENVIRONMENT)</string>
     <key>UIAppFonts</key>
     <array>
         <string>Fonts/DMSans.ttf</string>

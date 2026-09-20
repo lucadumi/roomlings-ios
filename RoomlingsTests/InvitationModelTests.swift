@@ -420,7 +420,7 @@ final class AccountHeaderTests: XCTestCase {
     }
 }
 
-private struct InvitationModelFixture {
+struct InvitationModelFixture {
     let api = try! APIConfiguration(origin: "https://api.roomlings.example")
     let origin = try! APIConfiguration(origin: "https://roomlings.example")
     let code = "roomlings-invite-Ab_-0123" + String(repeating: "Z", count: 35)
@@ -506,7 +506,7 @@ private struct InvitationModelFixture {
     }
 }
 
-private actor InvitationModelStore: SessionTokenStore {
+actor InvitationModelStore: SessionTokenStore {
     private var token: SessionToken?
     private var saveFails = false
 
@@ -520,7 +520,7 @@ private actor InvitationModelStore: SessionTokenStore {
     func failSaves() { saveFails = true }
 }
 
-private actor InvitationModelSignal {
+actor InvitationModelSignal {
     private var signalled = false
     private var waiter: CheckedContinuation<Void, Never>?
 
@@ -534,7 +534,7 @@ private actor InvitationModelSignal {
     }
 }
 
-private actor InvitationModelTransport: HTTPTransport {
+actor InvitationModelTransport: HTTPTransport {
     let started = InvitationModelSignal()
     let finish = InvitationModelSignal()
     private(set) var requests: [URLRequest] = []

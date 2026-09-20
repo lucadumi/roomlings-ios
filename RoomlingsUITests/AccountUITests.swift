@@ -62,12 +62,14 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    func launchApp(systemControls: Bool = false, invitationLink: String? = nil) throws -> XCUIApplication {
+    func launchApp(systemControls: Bool = false, invitationLink: String? = nil,
+                   notificationPayload: String? = nil) throws -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = systemControls ? ["-roomlings-system-controls"] : []
         app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = try fixtureOrigin().absoluteString
         app.launchEnvironment["ROOMLINGS_INVITATION_ORIGIN"] = Self.invitationWebOrigin
         app.launchEnvironment["ROOMLINGS_INVITATION_URL"] = invitationLink
+        app.launchEnvironment["ROOMLINGS_NOTIFICATION_PAYLOAD"] = notificationPayload
         app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.account-test.\(UUID().uuidString)"
         app.launch()
         guard app.textFields["Email address"].waitForExistence(timeout: Wait.control) else {
@@ -175,7 +177,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func switchIsOn(_ control: XCUIElement) throws -> Bool {
+    func switchIsOn(_ control: XCUIElement) throws -> Bool {
         switch control.value as? String {
         case "1", "On": true
         case "0", "Off": false

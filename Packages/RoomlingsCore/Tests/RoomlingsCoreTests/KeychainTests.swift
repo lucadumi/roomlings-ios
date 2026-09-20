@@ -137,7 +137,7 @@ struct KeychainTests {
     }
 }
 
-private struct KeychainCall: Sendable {
+struct KeychainCall: Sendable {
     let operation: KeychainOperation
     let service: String?
     let account: String?
@@ -157,7 +157,7 @@ private struct KeychainCall: Sendable {
     }
 }
 
-private final class FakeKeychain: KeychainOperations, @unchecked Sendable {
+final class FakeKeychain: KeychainOperations, @unchecked Sendable {
     private let lock = NSLock()
     private var data: Data?
     private var recordedCalls: [KeychainCall] = []

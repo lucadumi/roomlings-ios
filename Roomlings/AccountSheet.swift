@@ -4,6 +4,7 @@ import SwiftUI
 struct AccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.roomControlAppearance) private var controlAppearance
+    @Environment(NativeNotifications.self) private var notifications
     @Bindable var model: AccountModel
     @State private var page = Page.email
     @State private var email = ""
@@ -35,6 +36,7 @@ struct AccountSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     feedback
                     incomingInvitation
+                    incomingNotification
                     if let setupError = model.setupError {
                         AccountSection { Text(setupError) }
                     } else if model.deletionPending {
@@ -218,6 +220,23 @@ struct AccountSheet: View {
         }
     }
 
+    @ViewBuilder private var incomingNotification: some View {
+        if notifications.pending != nil {
+            AccountSection("Notification") {
+                Text(model.signedIn
+                     ? "Your notification is waiting. Finish here, then close Account to open it."
+                     : "Sign in to open your notification. Your household access will be checked first.")
+                    .accessibilityIdentifier("pending-notification")
+                if model.signedIn {
+                    Button("Open notification") { dismiss() }
+                        .accessibilityIdentifier("open-pending-notification")
+                }
+                Button("Dismiss notification") { notifications.cancelPending() }
+                    .buttonStyle(RoomButtonStyle(kind: .text))
+            }
+        }
+    }
+
     private var emailForm: some View {
         Group {
             AccountSection {
@@ -345,6 +364,8 @@ struct AccountSheet: View {
             if let householdID = model.state?.session?.household.id {
                 AccountInvitationsSection(model: model)
                     .id(householdID)
+                AccountNotificationsSection(model: model)
+                    .id("notifications-\(householdID)")
             }
             accountActions
         }
