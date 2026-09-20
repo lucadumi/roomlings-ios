@@ -57,8 +57,7 @@ struct AccountInvitationsSection: View {
                 .disabled(model.invitationNeedsRefresh)
             }
             if model.canShareInvitation(at: date), let link = model.invitationLink {
-                ShareLink(item: link, subject: Text("Join \(access.household.name)"),
-                          message: Text("Join our household on Roomlings.")) {
+                ShareLink(item: link, subject: Text("Join \(access.household.name)")) {
                     Label("Share invitation", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(RoomButtonStyle(kind: .primary))

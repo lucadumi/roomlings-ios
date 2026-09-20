@@ -123,7 +123,7 @@ struct ChoresSheet: View {
     @ViewBuilder private var feedback: some View {
         if model.busy {
             HStack {
-                RoomLoadingIcon()
+                RoomBrandMark()
                 Text(pending == nil ? "Refreshing chores..." : "Saving chores...")
             }
             .accessibilityIdentifier("chores-progress")

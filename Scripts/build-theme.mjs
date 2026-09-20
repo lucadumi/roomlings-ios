@@ -14,7 +14,7 @@ export async function buildTheme({ source, project, requireWeb }) {
     return reference ? resolve(reference[1], new Set([...visited, name])) : value
   }
   const names = {
-    paper: '--paper', ink: '--ink', muted: '--muted', sage: '--sage',
+    paper: '--paper', ink: '--ink', muted: '--muted', sage: '--sage', line: '--line',
     surface: '--control-surface', border: '--control-border', hover: '--control-hover',
     fieldSurface: '--field-surface', fieldBorder: '--field-border',
     primary: '--action-fill', primaryPressed: '--action-hover', primaryInk: '--action-ink',

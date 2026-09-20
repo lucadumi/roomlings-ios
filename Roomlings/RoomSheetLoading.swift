@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct RoomLoadingIcon: View {
+struct RoomBrandMark: View {
     var size: CGFloat = 24
 
     private static let image = Bundle.main.url(forResource: "roomlings-loader", withExtension: "png", subdirectory: "RoomRenderer")
@@ -35,7 +35,7 @@ struct RoomSheetLoading: ViewModifier {
                 content
             } else {
                 VStack(spacing: 16) {
-                    RoomLoadingIcon(size: 64)
+                    RoomBrandMark(size: 64)
                     Text(label).font(RoomTheme.body()).foregroundStyle(RoomTheme.muted)
                 }
                 .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)

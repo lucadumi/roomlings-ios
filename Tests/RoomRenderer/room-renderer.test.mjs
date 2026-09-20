@@ -15,7 +15,7 @@ const { chromium, expect: baseExpect } = requireWeb('@playwright/test')
 const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 })
 const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
-const { roomFramingArea } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
+const { cameraFraming } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
 
 test('the native chore catalog is generated from the shared rooms and object definitions', async () => {
   const catalog = JSON.parse(await readFile(join(project, 'Build/RoomRenderer/chores.json'), 'utf8'))
@@ -167,36 +167,105 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     const markerIDs = await page.locator('.world-hotspot').evaluateAll((buttons) => buttons.map((button) => button.dataset.componentId))
     assert.ok(markerIDs.every((id) => roomComponents.some((component) =>
       component.id === id && component.installed && component.roomId === 'kitchen')))
-    for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 750 }, { width: 1194, height: 834 }]) {
+    for (const viewport of [
+      { width: 320, height: 568 }, { width: 402, height: 874 }, { width: 874, height: 402 },
+      { width: 667, height: 375 }, { width: 375, height: 768 }, { width: 800, height: 900 },
+      { width: 820, height: 900 }, { width: 834, height: 1194 }, { width: 1194, height: 834 },
+    ]) {
       await page.setViewportSize(viewport)
+      const roomZoom = Math.min(1, Math.max(0.3, viewport.width / viewport.height / 0.767))
+      await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, roomZoom })
+      const landscape = viewport.width > viewport.height
+      await expect(page.locator('main')).toHaveAttribute('data-landscape', String(landscape))
+      await expect(camera).toHaveAttribute('data-camera-zoom', roomZoom.toFixed(5))
+      await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
+      const expectedSpan = 2 * cameraFraming(viewport.width, viewport.height, 'room', false).halfHeight / roomZoom
+      await expect.poll(async () => Number(await camera.getAttribute('data-camera-span'))).toBeCloseTo(expectedSpan, 4)
       // Measuring both boxes in one evaluate keeps them in the same layout pass. Two separate
       // round trips can straddle a dock resize and compare a stale dock against a fresh row.
       await expect.poll(async () => page.evaluate(({ width, height }) => {
         const dock = document.querySelector('.native-tools-dock')?.getBoundingClientRect()
         const quick = document.querySelector('.world-quick-actions')?.getBoundingClientRect()
-        if (!dock || !quick) return 'a laid out dock and quick action row'
+        const rail = document.querySelector('.world-camera-controls')?.getBoundingClientRect()
+        if (!dock || !quick || !rail) return 'a laid out dock, camera rail and quick action row'
         const complaints = []
         if (dock.x < 12) complaints.push(`dock left ${dock.x.toFixed(1)} past the 12px inset`)
         if (dock.right > width - 12) complaints.push(`dock right ${dock.right.toFixed(1)} past ${width - 12}`)
         if (dock.bottom > height - 34) complaints.push(`dock bottom ${dock.bottom.toFixed(1)} past ${height - 34}`)
-        if (quick.bottom >= dock.y) complaints.push(`quick actions end at ${quick.bottom.toFixed(1)}, dock starts at ${dock.y.toFixed(1)}`)
+        if (width > height) {
+          if (Math.abs(quick.bottom - dock.bottom) > 1) complaints.push('landscape controls are not level with household tools')
+          if (quick.right >= dock.x) complaints.push('landscape controls overlap household tools')
+        } else if (quick.bottom >= dock.y) complaints.push(`quick actions end at ${quick.bottom.toFixed(1)}, dock starts at ${dock.y.toFixed(1)}`)
+        if (rail.top < 100 || rail.bottom > height - 34) complaints.push('camera controls outside the safe area')
+        if (Math.abs(width - 12 - rail.right - 8) > 1) complaints.push('zoom rail is not near the safe right edge')
+        if (quick.right > rail.left && quick.left < rail.right && quick.bottom > rail.top && quick.top < rail.bottom) {
+          complaints.push(`quick actions overlap camera controls at ${width}x${height}`)
+        }
         return complaints.join(' and ') || 'inside the safe area'
       }, viewport)).toBe('inside the safe area')
       await expect(page.locator('canvas')).toHaveCSS('width', `${viewport.width}px`)
       await expect(page.locator('canvas')).toHaveCSS('height', `${viewport.height}px`)
       await expect(shopping).toBeInViewport()
       await expect(money).toBeInViewport()
+      const rail = page.locator('.world-camera-controls')
+      const viewTools = page.getByRole('group', { name: 'Room view controls', exact: true })
+      if (landscape) {
+        await expect(rail).toHaveCSS('flex-direction', 'column')
+        await expect(rail.getByRole('button')).toHaveCount(2)
+        await expect(rail.getByRole('button').nth(0)).toHaveAttribute('aria-label', 'Zoom in')
+        await expect(rail.getByRole('button').nth(1)).toHaveAttribute('aria-label', 'Zoom out')
+        await expect(viewTools.getByRole('button')).toHaveCount(3)
+        assert.deepEqual(await viewTools.getByRole('button').evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
+          ['Hide object labels', 'Reset room view', 'Switch to evening lighting'])
+        for (const button of [...await rail.getByRole('button').all(), ...await viewTools.getByRole('button').all()]) {
+          await expect(button).toBeInViewport({ ratio: 1 })
+          const box = await button.boundingBox()
+          assert.ok(box && box.width >= 44 && box.height >= 44, 'Landscape controls keep full touch targets.')
+        }
+        await viewTools.getByRole('button', { name: 'Hide object labels', exact: true }).click()
+        await expect(page.locator('.world-hotspots')).toHaveClass(/hide-labels/)
+        await viewTools.getByRole('button', { name: 'Show object labels', exact: true }).click()
+        await viewTools.getByRole('button', { name: 'Switch to evening lighting', exact: true }).click()
+        await expect(page.locator('.kitchen-world')).toHaveAttribute('data-evening', 'true')
+        await viewTools.getByRole('button', { name: 'Switch to daylight', exact: true }).click()
+        await viewTools.getByRole('button', { name: 'Reset room view', exact: true }).click()
+        await expect(rail.locator(':scope > span')).toHaveText('100%')
+      } else {
+        await expect(viewTools).toHaveCount(0)
+        await expect(rail.getByRole('button')).toHaveCount(5)
+      }
     }
+    await page.setViewportSize({ width: 874, height: 402 })
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, roomComponents: defaultRoomComponents(),
+      viewportInsets: { top: 76, right: 59, bottom: 21, left: 59 },
+    })
+    const bottomRowHeights = () => page.evaluate(() => ({
+      actions: document.querySelector('.world-quick-actions').getBoundingClientRect().height,
+      dock: document.querySelector('.native-tools-dock').getBoundingClientRect().height,
+    }))
+    await expect.poll(async () => {
+      const { actions, dock } = await bottomRowHeights()
+      return Math.abs(actions - dock)
+    }).toBeLessThan(1)
+    await page.setViewportSize({ width: 600, height: 375 })
+    await expect.poll(async () => {
+      const { actions, dock } = await bottomRowHeights()
+      return actions - dock
+    }).toBeGreaterThan(20)
+    await page.setViewportSize({ width: 874, height: 402 })
+    await expect.poll(async () => {
+      const { actions, dock } = await bottomRowHeights()
+      return Math.abs(actions - dock)
+    }, { message: 'A wrapped bottom row must shrink back when the landscape window widens.' }).toBeLessThan(1)
     await page.setViewportSize({ width: 390, height: 750 })
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     const world = page.locator('.kitchen-world')
     const settleFraming = async () => {
       await expect.poll(async () => {
-        const [canvas, stage, controls] = await Promise.all([
-          camera.boundingBox(), world.boundingBox(), page.locator('.world-camera-controls').boundingBox(),
-        ])
-        assert.ok(canvas && stage && controls)
-        const area = roomFramingArea(canvas, stage, controls)
-        const expected = [area.x, area.y, area.width, area.height].map((value) => value.toFixed(3)).join(',')
+        const canvas = await camera.boundingBox()
+        assert.ok(canvas)
+        const expected = [0, 0, canvas.width, canvas.height].map((value) => value.toFixed(3)).join(',')
         return await camera.getAttribute('data-camera-area') === expected
       }).toBe(true)
       await expect(world).toHaveAttribute('data-camera-moving', 'false')
@@ -206,15 +275,17 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await settleFraming()
     const originalSpan = Number(await camera.getAttribute('data-camera-span'))
     assert.ok(originalSpan > 0)
-    const portraitState = { ...householdState, roomZoom: 1.35 }
+    const portraitState = { ...householdState, roomZoom: 0.6 }
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), portraitState)
-    await expect(camera).toHaveAttribute('data-camera-zoom', '1.35000')
+    await expect(camera).toHaveAttribute('data-camera-zoom', '0.60000')
     await settleFraming()
     const portraitSpan = Number(await camera.getAttribute('data-camera-span'))
-    assert.equal(Number((originalSpan / portraitSpan).toFixed(3)), 1.35,
-      'Portrait framing must actually magnify the room by 35%.')
+    assert.equal(Number((originalSpan / portraitSpan).toFixed(3)), 0.6,
+      'The portrait pullback must apply to the shared entry framing.')
+    assert.ok(portraitSpan < 16, 'The native default must use the close entry view, not the old pulled-back shell.')
+    await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
     const roomTarget = await camera.getAttribute('data-camera-target')
-    for (const roomZoom of [0, -1, 1.51, '1.35']) {
+    for (const roomZoom of [0, -1, 0.29, 1.51, '0.6']) {
       await assert.rejects(page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, roomZoom }))
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' })
@@ -229,21 +300,37 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(world).toHaveAttribute('data-rendering', 'paused')
     await expect(camera).toHaveAttribute('data-camera-zoom', '1.00000')
     await expect(camera).not.toHaveAttribute('data-camera-target', roomTarget)
-    assert.ok(Number(await camera.getAttribute('data-camera-span')) < portraitSpan * 0.8,
-      'Selecting an object must finish a real close-up even while the native sheet pauses the room.')
+    const focusedSpan = Number(await camera.getAttribute('data-camera-span'))
+    assert.ok(focusedSpan < portraitSpan,
+      'Focusing the fridge must magnify the enlarged default view even while the native sheet pauses the room.')
+    const expectFocusedPercent = async () => {
+      const span = Number(await camera.getAttribute('data-camera-span'))
+      await expect(page.locator('.world-camera-controls > span')).toHaveText(`${Math.round(portraitSpan / span * 100)}%`)
+    }
+    await expectFocusedPercent()
+    await expect(page.locator('.world-camera-controls > span')).not.toHaveText('100%')
     await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeDisabled()
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), portraitState)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    for (const zoom of [1.1, 1.2, 1.3, 1.4, 1.5]) {
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+      await expect(camera).toHaveAttribute('data-camera-zoom', zoom.toFixed(5))
+      await expectFocusedPercent()
+    }
+    await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'Reset room view', exact: true }).click()
     await expect(world).toHaveAttribute('data-component-focus', 'false')
-    await expect(camera).toHaveAttribute('data-camera-zoom', '1.35000')
+    await expect(camera).toHaveAttribute('data-camera-zoom', '0.60000')
+    await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
     await expect(world).toHaveAttribute('data-camera-moving', 'false')
     assert.ok(Math.abs(Number(await camera.getAttribute('data-camera-span')) - portraitSpan) < 0.001)
     await marker.click()
     await expect(world).toHaveAttribute('data-component-focus', 'true')
     await expect(camera).toHaveAttribute('data-camera-zoom', '1.00000')
     await expect(world).toHaveAttribute('data-camera-moving', 'false')
-    assert.ok(Number(await camera.getAttribute('data-camera-span')) < portraitSpan * 0.8,
-      'Selecting the same object after Reset must focus it again.')
+    assert.ok(Math.abs(Number(await camera.getAttribute('data-camera-span')) - focusedSpan) < 0.001,
+      'Selecting the same object after Reset must restore exactly its focused magnification.')
     const fridgeTarget = await camera.getAttribute('data-camera-target')
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
       ...portraitState, roomComponents: roomComponents.map((component) =>
@@ -257,7 +344,7 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(page.locator('.world-view-label')).toHaveText('A little tea break')
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), portraitState)
     await page.getByRole('button', { name: 'Reset room view', exact: true }).click()
-    await expect(camera).toHaveAttribute('data-camera-zoom', '1.35000')
+    await expect(camera).toHaveAttribute('data-camera-zoom', '0.60000')
     await expect(world).toHaveAttribute('data-camera-moving', 'false')
     await page.getByRole('button', { name: 'Hide object labels', exact: true }).click()
     await expect(page.locator('.world-hotspots')).toHaveClass(/hide-labels/)
@@ -342,6 +429,35 @@ test('@room the bundled kitchen stays offline, uses the shared controls and vali
     await expect(money).toHaveCount(0)
     await expect(page.locator('.world-hotspots')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Put the kettle on', exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 808, height: 900 })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await expect.poll(async () => Number(await camera.getAttribute('data-camera-span'))).toBeCloseTo(9.2, 4)
+    await expect(world).toHaveAttribute('data-camera-moving', 'false')
+    await page.evaluate(() => {
+      window.resizeSpans = []
+      window.recordingResize = true
+      const measure = () => {
+        window.resizeSpans.push({ time: performance.now(), span: Number(document.querySelector('canvas').dataset.cameraSpan) })
+        if (window.recordingResize) requestAnimationFrame(measure)
+      }
+      requestAnimationFrame(measure)
+    })
+    await page.setViewportSize({ width: 812, height: 900 })
+    const finalSpan = cameraFraming(812, 900, 'room', false).halfHeight * 2
+    await expect.poll(async () => Number(await camera.getAttribute('data-camera-span'))).toBeCloseTo(finalSpan, 4)
+    const spans = await page.evaluate(() => {
+      window.recordingResize = false
+      return window.resizeSpans
+    })
+    assert.ok(spans.length > 1)
+    assert.ok(spans.every(({ span }) => Number.isFinite(span) && span >= 9.2 && span <= finalSpan + 0.0001))
+    const maximumSpringSpeed = (finalSpan - 9.2) * 16 / Math.E
+    for (let index = 1; index < spans.length; index++) {
+      const seconds = (spans[index].time - spans[index - 1].time) / 1000
+      assert.ok(Math.abs(spans[index].span - spans[index - 1].span) <= maximumSpringSpeed * seconds + 0.01,
+        'Resizing follows the camera spring without jumping faster than its maximum speed.')
+    }
+    await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
     await assert.rejects(page.evaluate(() => fetch('/api/account')))
     assert.ok(!requests.some((path) => path.startsWith('/api/')))
     assert.ok((await page.evaluate(() => window.roomEvents)).some((event) => event.version === 1 && event.status === 'ready'))

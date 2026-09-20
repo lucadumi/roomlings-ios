@@ -1,9 +1,74 @@
 import XCTest
 import RoomlingsCore
+import SwiftUI
 import UIKit
 @testable import Roomlings
 
 final class RoomBridgeTests: XCTestCase {
+    @MainActor
+    func testPortraitRoomFramingUsesTheFullWebViewportIncludingSafeAreas() throws {
+        let full = try RoomPreviewScreen.roomZoom(for: CGSize(width: 402, height: 874))
+        let measured = try RoomPreviewScreen.roomZoom(
+            for: CGSize(width: 402, height: 778),
+            safeAreaInsets: EdgeInsets(top: 62, leading: 0, bottom: 34, trailing: 0)
+        )
+        XCTAssertEqual(measured, full, accuracy: 0.000_001)
+        XCTAssertEqual(measured, 0.60, accuracy: 0.005)
+        XCTAssertNotEqual(measured, try RoomPreviewScreen.roomZoom(for: CGSize(width: 402, height: 778)))
+    }
+
+    @MainActor
+    func testRoomFramingRecomputesAcrossRotationWithoutDeviceCategories() throws {
+        let portrait = try RoomPreviewScreen.roomZoom(for: CGSize(width: 402, height: 874))
+        let landscape = try RoomPreviewScreen.roomZoom(
+            for: CGSize(width: 750, height: 381),
+            safeAreaInsets: EdgeInsets(top: 0, leading: 62, bottom: 21, trailing: 62)
+        )
+        let returned = try RoomPreviewScreen.roomZoom(
+            for: CGSize(width: 402, height: 778),
+            safeAreaInsets: EdgeInsets(top: 62, leading: 0, bottom: 34, trailing: 0)
+        )
+        XCTAssertEqual(landscape, 1)
+        XCTAssertLessThan(portrait, landscape)
+        XCTAssertEqual(returned, portrait, accuracy: 0.000_001)
+        XCTAssertEqual(try RoomPreviewScreen.roomZoom(for: CGSize(width: 834, height: 1194)), 0.91, accuracy: 0.005)
+        XCTAssertEqual(try RoomPreviewScreen.roomZoom(for: CGSize(width: 1194, height: 834)), 1)
+    }
+
+    @MainActor
+    func testNarrowWindowsUseAContinuousClampedRoomScale() throws {
+        let narrow = try RoomPreviewScreen.roomZoom(for: CGSize(width: 320, height: 1194))
+        let wider = try RoomPreviewScreen.roomZoom(for: CGSize(width: 500, height: 1194))
+        XCTAssertEqual(narrow, Double(320.0 / 1194.0) / 0.767, accuracy: 0.000_001)
+        XCTAssertGreaterThan(wider, narrow)
+        XCTAssertEqual(try RoomPreviewScreen.roomZoom(for: CGSize(width: 200, height: 1194)), 0.3)
+        XCTAssertEqual(try RoomPreviewScreen.roomZoom(for: CGSize(width: 1194, height: 200)), 1)
+        XCTAssertEqual(
+            try RoomPreviewScreen.roomZoom(for: CGSize(width: 640, height: 2388)), narrow, accuracy: 0.000_001
+        )
+    }
+
+    @MainActor
+    func testInvalidViewportMeasurementsAreNotReportedAsDefaultZoom() {
+        for size in [
+            CGSize.zero, CGSize(width: 402, height: 0), CGSize(width: -1, height: 874),
+            CGSize(width: CGFloat.infinity, height: 874), CGSize(width: 402, height: CGFloat.nan)
+        ] {
+            XCTAssertThrowsError(try RoomPreviewScreen.roomZoom(for: size))
+        }
+        for insets in [
+            EdgeInsets(top: -1, leading: 0, bottom: 0, trailing: 0),
+            EdgeInsets(top: 0, leading: .infinity, bottom: 0, trailing: 0),
+            EdgeInsets(top: 0, leading: 0, bottom: .nan, trailing: 0)
+        ] {
+            XCTAssertThrowsError(try RoomPreviewScreen.roomZoom(for: CGSize(width: 402, height: 874), safeAreaInsets: insets))
+        }
+        XCTAssertThrowsError(try RoomPreviewScreen.roomZoom(
+            for: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 874),
+            safeAreaInsets: EdgeInsets(top: 0, leading: .greatestFiniteMagnitude, bottom: 0, trailing: 0)
+        ))
+    }
+
     func testTheWebFontFamiliesAreRegisteredNatively() {
         XCTAssertNotNil(UIFont(name: "DMSans-9ptRegular_Regular", size: 16))
         XCTAssertNotNil(UIFont(name: "Baloo2-SemiBold", size: 26))

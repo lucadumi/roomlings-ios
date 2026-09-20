@@ -175,6 +175,15 @@ public struct AccountKitchenSession: Sendable, Codable, Equatable {
         try container.encode(memberID, forKey: .memberID)
         try container.encode(household, forKey: .household)
     }
+
+    public var viewer: HouseholdMember {
+        get throws {
+            guard let member = try HouseholdMember.projection(household.value).first(where: { $0.id == memberID }) else {
+                throw AccountError.invalidResponse
+            }
+            return member
+        }
+    }
 }
 
 public struct AccountState: Sendable, Codable, Equatable,

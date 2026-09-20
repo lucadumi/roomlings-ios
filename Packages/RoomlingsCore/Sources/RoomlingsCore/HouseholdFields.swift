@@ -22,6 +22,20 @@ public struct HouseholdMember: Sendable, Equatable, Identifiable {
     }
 }
 
+public struct HouseholdMemberColor: Sendable, Equatable {
+    public let rgb: UInt32
+
+    public init?(hex: String) {
+        guard hex.hasPrefix("#") else { return nil }
+        let digits = hex.dropFirst()
+        guard [3, 6].contains(digits.count),
+              digits.allSatisfy({ $0.isASCII && $0.isHexDigit }) else { return nil }
+        let expanded = digits.count == 3 ? digits.map { "\($0)\($0)" }.joined() : String(digits)
+        guard let rgb = UInt32(expanded, radix: 16) else { return nil }
+        self.rgb = rgb
+    }
+}
+
 enum HouseholdValidation {
     static let maximumInteger: Int64 = 9_007_199_254_740_991
 

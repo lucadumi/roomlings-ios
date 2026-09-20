@@ -124,7 +124,7 @@ struct MoneySheet: View {
     @ViewBuilder private var feedback: some View {
         if model.busy {
             HStack {
-                RoomLoadingIcon()
+                RoomBrandMark()
                 Text(pending == nil ? "Refreshing money..." : "Saving to the ledger...")
             }
             .accessibilityIdentifier("money-progress")

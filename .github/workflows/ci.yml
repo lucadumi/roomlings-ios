@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  WEB_REVISION: 1fdeeb7e3a9c9fca7686cef2060b331a684117ce
+  WEB_REVISION: 62145846b8e03899214940b2fa5a428f6ded5ae3
   ROOMLINGS_WEB_ROOT: ../roomlings
 
 defaults:

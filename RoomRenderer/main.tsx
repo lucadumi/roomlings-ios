@@ -21,7 +21,7 @@ const stateSchema = z.object({
   type: z.literal('state'),
   paused: z.boolean(),
   roomStyle: roomStyleSchema,
-  roomZoom: z.number().min(1).max(1.5).default(1),
+  roomZoom: z.number().min(0.3).max(1.5).default(1),
   householdId: z.string().uuid().nullable().default(null),
   choresEnabled: z.boolean().default(false),
   shoppingEnabled: z.boolean().default(false),
@@ -109,32 +109,55 @@ function openMoney() {
 function Room() {
   const current = useSyncExternalStore(subscribe, () => state)
   const currentStatus = useSyncExternalStore(subscribe, () => status)
+  const viewport = useRef<HTMLElement>(null)
   const dock = useRef<HTMLElement>(null)
+  const [landscape, setLandscape] = useState(false)
   const [dockSpace, setDockSpace] = useState(0)
+  const [dockWidth, setDockWidth] = useState(0)
+  const [dockHeight, setDockHeight] = useState(0)
   const hasChores = current.choresEnabled && current.householdId !== null
   const hasShopping = current.shoppingEnabled && current.householdId !== null
   const hasMoney = current.moneyEnabled && current.householdId !== null
   const hasTools = hasChores || hasShopping || hasMoney
   useLayoutEffect(() => {
-    const element = dock.current
-    if (!element) { setDockSpace(0); return }
-    const measure = () => setDockSpace(element.getBoundingClientRect().height + 32)
+    const element = viewport.current
+    if (!element) return
+    const measure = () => setLandscape(element.clientWidth > element.clientHeight)
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     measure()
     return () => observer.disconnect()
-  }, [hasTools])
-  const viewportStyle: CSSProperties & Record<`--native-${'top' | 'right' | 'bottom' | 'left' | 'dock-space'}`, string> = {
+  }, [])
+  useLayoutEffect(() => {
+    const tools = dock.current
+    const actions = viewport.current?.querySelector('.world-quick-actions')
+    const measure = () => {
+      const bounds = tools?.getBoundingClientRect()
+      const actionHeight = landscape ? actions?.getBoundingClientRect().height ?? 0 : 0
+      setDockSpace(hasTools || landscape ? Math.max(bounds?.height ?? 0, actionHeight) + 32 : 0)
+      setDockWidth(bounds?.width ?? 0)
+      setDockHeight(bounds?.height ?? 0)
+    }
+    const observer = new ResizeObserver(measure)
+    if (tools) observer.observe(tools)
+    if (actions) observer.observe(actions)
+    measure()
+    return () => observer.disconnect()
+  }, [hasTools, landscape, currentStatus])
+  const viewportStyle: CSSProperties & Record<`--native-${'top' | 'right' | 'bottom' | 'left' | 'dock-space' | 'dock-width' | 'dock-height'}`, string> = {
     '--native-top': `${current.viewportInsets.top}px`,
     '--native-right': `${current.viewportInsets.right}px`,
     '--native-bottom': `${current.viewportInsets.bottom}px`,
     '--native-left': `${current.viewportInsets.left}px`,
-    '--native-dock-space': `${hasTools ? dockSpace : 0}px`,
+    '--native-dock-space': `${dockSpace}px`,
+    '--native-dock-width': `${hasTools ? dockWidth : 0}px`,
+    '--native-dock-height': `${hasTools ? dockHeight : 0}px`,
   }
-  return <main className="game-home native-room" aria-label={current.householdId ? 'Shared household kitchen' : 'Roomlings kitchen preview'}
-    data-household-id={current.householdId ?? ''} style={viewportStyle}>
+  return <main ref={viewport} className="game-home native-room" aria-label={current.householdId ? 'Shared household kitchen' : 'Roomlings kitchen preview'}
+    data-household-id={current.householdId ?? ''} data-landscape={landscape} data-has-tools={hasTools} style={viewportStyle}>
     <PreviewBoundary key={current.householdId ?? 'preview'} onFailure={() => reportStatus('unavailable')}>
       <KitchenPreview roomStyle={current.roomStyle} roomZoom={current.roomZoom} paused={current.paused} onStatus={reportStatus}
+        wholeRoomView={false} cameraToolsInQuickActions={landscape}
         onComponentSelect={hasChores ? openChores : undefined}
         components={getRoomComponents({ roomComponents: current.roomComponents })} />
     </PreviewBoundary>

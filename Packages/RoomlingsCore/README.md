@@ -69,7 +69,7 @@ All operations are explicit, asynchronous and throwing:
 - The household access GET returns invitation metadata, not reusable codes. Creation returns a case-sensitive code once and a seven-day expiry. Used links remain pending until revoked or expired. Invitation timestamps are validated UTC dates.
 - Create and revoke send the household `version`. These routes have no mutation receipt or automatic retry. After a conflict or uncertain response, refresh before another change. If a creation response was lost, revoke that pending invitation and create a new one; its original code cannot be retrieved.
 - `AccountInvitationCode` reuses the existing local fragment parser and redacts descriptions and mirrors. Incoming app links must match the configured invitation origin. Manually pasted links still extract only the code; requests always go to the configured native API, never the pasted host.
-- **Account** uses the system share sheet. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.
+- **Account** shares the invitation as a single URL, so the system **Copy** action pastes the full link without a separate message. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.
 - Incoming invitations stay in memory through native sign-in, recovery and failed joins. Joining always requires confirmation. Another room sheet can finish before the invitation opens. If the process closes, reopen the original link.
 
 ### Local use

@@ -11,6 +11,8 @@ final class AccountModel {
     private(set) var restored = false
     private(set) var room = RoomVisualState.preview
     private(set) var roomFailure: String?
+    private(set) var viewer: HouseholdMember?
+    private(set) var viewerFailure: String?
     private(set) var chores: HouseholdChores?
     private(set) var choreCatalog: ChoreCatalog?
     private(set) var choreObjects: [ChoreObject] = []
@@ -36,11 +38,21 @@ final class AccountModel {
     private let client: AccountSession?
     private var deletionBlocked = false
     private var sharedInvitationID: UUID?
+    private var requestFailed = false
 
     var signedIn: Bool { state?.isSignedIn == true }
     var deletionPending: Bool { deletionBlocked || state?.deletionPending == true }
     var householdName: String? { deletionPending ? nil : state?.session?.household.name }
+    var viewerColor: HouseholdMemberColor? { viewer.flatMap { HouseholdMemberColor(hex: $0.color) } }
     var canUseAccount: Bool { signedIn && !deletionPending }
+    var headerStatus: HeaderStatus {
+        if busy { return .updating }
+        if requestFailed || setupError != nil || deletionPending || viewerFailure != nil
+            || roomFailure != nil || choresFailure != nil || shoppingFailure != nil || ledgerFailure != nil {
+            return .needsAttention
+        }
+        return householdName == nil ? .preview : .loaded
+    }
     var invitationSetupError: String? {
         invitationOrigin == nil
             ? "Invitation links are not configured in this build. Set the Roomlings invitation origin in Xcode."
@@ -54,6 +66,19 @@ final class AccountModel {
 
     enum HouseholdSaveFailure {
         case none, retrySameChange, refreshRequired
+    }
+
+    enum HeaderStatus {
+        case preview, updating, loaded, needsAttention
+
+        var label: String {
+            switch self {
+            case .preview: "Kitchen preview"
+            case .updating: "Updating account"
+            case .loaded: "Household loaded"
+            case .needsAttention: "Account needs attention"
+            }
+        }
     }
 
     init(client: AccountSession, invitationOrigin: APIConfiguration? = nil) {
@@ -423,7 +448,7 @@ final class AccountModel {
         }
     }
 
-    private func publish(_ next: AccountState?) -> Bool {
+    private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true {
             invitations = nil
@@ -433,7 +458,10 @@ final class AccountModel {
             invitationNeedsRefresh = true
         }
         state = next
+        self.requestFailed = requestFailed
         roomFailure = nil
+        viewer = nil
+        viewerFailure = nil
         chores = nil
         choreObjects = []
         choreCalendar = nil
@@ -442,9 +470,18 @@ final class AccountModel {
         shoppingFailure = nil
         ledger = nil
         ledgerFailure = nil
-        guard !deletionPending, let household = next?.session?.household else {
+        guard !deletionPending, let session = next?.session else {
             room = .preview
             return true
+        }
+        let household = session.household
+        do {
+            viewer = try session.viewer
+            if viewerColor == nil {
+                viewerFailure = "Your saved member colour could not be displayed. Refresh your account."
+            }
+        } catch {
+            viewerFailure = "Your household member could not be displayed. Refresh your account."
         }
         do {
             shopping = try HouseholdShopping(household: household)
@@ -485,7 +522,7 @@ final class AccountModel {
         }
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
-        _ = publish(latest)
+        _ = publish(latest, requestFailed: true)
         if action.isChore || action == .shopping || action == .ledger {
             let failure: HouseholdSaveFailure
             switch error {
