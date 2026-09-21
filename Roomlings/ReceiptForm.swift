@@ -62,7 +62,7 @@ struct ReceiptForm: View {
                 .environment(\.timeZone, calendar.timeZone)
                 .accessibilityIdentifier("receipt-date")
             split
-            if let error { Text(error).foregroundStyle(RoomTheme.error).accessibilityIdentifier("receipt-form-error") }
+            if let error { RoomFeedback(error, identifier: "receipt-form-error") }
             Button("Record receipt") { submit() }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
                 .accessibilityIdentifier("record-receipt")

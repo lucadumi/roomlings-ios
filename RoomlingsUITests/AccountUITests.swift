@@ -317,6 +317,7 @@ final class AccountUITests: XCTestCase {
         XCTAssertTrue(loader.waitForExistence(timeout: Wait.control))
         _ = try await fixture("_fixture/loading", body: ["hold": false])
         XCTAssertTrue(app.staticTexts["account-error"].waitForExistence(timeout: Wait.control))
+        attachHeaderScreenshot("Native account error matches shared web feedback")
         try tap(app.buttons["Done"], in: app)
         XCTAssertEqual(app.buttons["household-entry"].value as? String, "Account needs attention")
         attachHeaderScreenshot("Native account status after a failed request")

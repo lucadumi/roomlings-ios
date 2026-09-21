@@ -1,6 +1,6 @@
 # RoomlingsCore
 
-Local Swift 6 package for native accounts, household chores, shopping, the shared money ledger and notification contracts. iOS 18 is the minimum; macOS is declared only to run host tests. No UI, provider SDK, browser authentication or local ledger arithmetic beyond the shared split preview is included.
+Local Swift 6 package for native accounts, household chores, shopping, the shared money ledger, notifications and retention events. iOS 18 is the minimum; macOS is declared only to run host tests. No UI, provider SDK, browser authentication or local ledger arithmetic beyond the shared split preview is included.
 
 Link the `RoomlingsCore` library from `Packages/RoomlingsCore` in the Xcode project:
 
@@ -38,6 +38,7 @@ All operations are explicit, asynchronous and throwing:
 | `saveNotificationSettings(_:householdID:)` | `PUT /api/account/households/<id>/notifications` |
 | `registerPushDevice(installationID:token:environment:)` | `PUT /api/account/push-devices` |
 | `unregisterPushDevice(installationID:)` | `DELETE /api/account/push-devices/<installationId>` |
+| `recordAnalytics(_:context:)` | `POST /api/account/households/<id>/analytics` |
 | `addChore(_:householdID:version:mutationID:)` | `POST /api/chores` |
 | `completeChore(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/<id>/complete` |
 | `undoChoreCompletion(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/completions/<id>/undo` |
@@ -54,11 +55,11 @@ All operations are explicit, asynchronous and throwing:
 
 `state` starts as `nil`; successful state-returning operations validate and update it. Read `state`, `selectedHousehold` and `isBusy` with `await`.
 
-- Share one coordinator per Keychain entry. Overlapping operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Nothing automatically retries mutations.
+- Share one coordinator per Keychain entry. Overlapping account operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Analytics uses a separate non-mutating path so it cannot block those operations. Nothing automatically retries mutations.
 - Creation takes integer cents. Reuse the same `requestID` and details for an explicit retry.
 - Invitations accept raw account codes or web links containing `#account-invite=<encoded code>`. Links are parsed locally, never opened.
 - A replacement bearer is saved before a new signed-in state is published. Verification and recovery include the current bearer so only that device rotates.
-- Confirmed signed-out account responses and `401 ACCOUNT_SESSION_REQUIRED` clear the credential. The latter clears `state` to `nil` and still throws the server error. Network failures, invalid input/responses, other HTTP errors, reauthentication requirements and pending deletion do not erase the credential.
+- Confirmed signed-out account responses and `401 ACCOUNT_SESSION_REQUIRED` from account operations clear the credential. The latter clears `state` to `nil` and still throws the server error. Analytics failures never alter credentials. Network failures, invalid input/responses, other HTTP errors, reauthentication requirements and pending deletion do not erase the credential.
 - `deletionPending` states contain no household access. A `409` or `503 ACCOUNT_DELETION_PENDING` is a failure, not completed deletion. After such a failure, an explicit `restore()` obtains the server's deletion-only state. This initial package does not implement deletion.
 - Failed credential operations throw. Do not present a caught error as success. A failed replacement leaves the previous Keychain item intact, but that old server session may already have rotated; obtain a fresh email or unused recovery code rather than replaying a consumed code.
 - `AccountError.server(status:code:)` retains only the status and a known `AccountServerCode`, never server messages. `KeychainError.status(operation:status:)` retains the failing OSStatus. Unknown storage/transport errors are sanitized.
@@ -66,6 +67,33 @@ All operations are explicit, asynchronous and throwing:
 `Account`, `AccountMembership`, `AccountDevice`, `AccountKitchenSession`, `AccountState` and `HouseholdSnapshot` are Sendable/Codable values. Timestamps retain validated UTC ISO 8601 strings. The household's `value: JSONValue` preserves supplied data without synthesizing empty collections. Metadata and collection envelopes are checked, not the complete TypeScript ledger schema. Integer values use `Int64`; out-of-range integral JSON fails rather than silently rounding through floating point. `csrfToken` is validated and private, and `session.token` must be null. State encoding preserves the backend contract, so do not send an entire encoded account state to JavaScript. Give a renderer only its intended household/room data.
 
 `APIConfiguration` accepts only origin URLs, HTTPS or exact loopback HTTP. `URLSessionTransport` is ephemeral, disables cookies, credentials and cache, has finite timeouts, and rejects every redirect. Requests always identify the native client and never use browser/CSRF headers. Bearers exist only in native requests and `SessionTokenStore`.
+
+## Retention analytics
+
+The server already timestamps chore, expense and repayment mutations. Its session `last_used_at` is overwritten, so it cannot reconstruct historical app opens. The native client sends only these missing signals to Roomlings' own endpoint:
+
+| Event | Recorded when |
+| --- | --- |
+| `app_opened` | The app enters the foreground and an authenticated household is available, once per account/device/selected household in that visit. Returning from an inactive system overlay or refreshing a sheet does not count again. |
+| `notification_opened` | A notification tap finishes authentication, household authorization and successful navigation to an existing target. Receiving a push, a rejected target or an unfinished sign-in does not count. |
+| `invite_shared` | The system share sheet confirms a completed action, including Copy. Opening or cancelling the sheet does not count. |
+| `invite_accepted` | The server confirms joining a household that was not already in the account's memberships. Failed joins and reopening an already-accepted link do not count. |
+
+`AnalyticsEvent` encodes only `kind`, UTC `occurredAt` and Gregorian `localDate` in the device's time zone. Household identity is in the request path; the server derives the member from its authenticated session. `AnalyticsContext` binds pending work to the account, current account-session/device, household and member but is never serialized. No names, amounts, invitation links, notification contents, device tokens or credentials enter event bodies, logs or the room bridge.
+
+Delivery is best effort and does not block sign-in, sign-out, household changes or ledger saves. Only in-memory work is kept, capped at 50 in-flight events and cancelled when its identity changes. There is no disk queue or automatic retry. The server aggregates daily members but increments occurrences for every accepted request, so retrying an uncertain response could overcount. Failures are logged with a fixed diagnostic category, never shown as failed household actions, and never clear or replace a credential.
+
+The server retains per-member/kind/day aggregates for 30 days. For a known test household and day-7 date, the operator can count opens without exporting identities:
+
+```sql
+SELECT COUNT(DISTINCT member_id)
+FROM analytics_events
+WHERE household_id = :household_id AND kind = 'app_opened' AND local_date = :day_7;
+```
+
+These are observed opens, not proof of every visit: offline or unconfirmed requests can be missed. The isolated tests exercise real persisted aggregates and a simulated week; they do not replace collecting a real cohort's week of events.
+
+Use the web revision pinned in CI for both build and test harness. The analytics API requires the server's schema-5-compatible build; this client does not migrate or restart any shared database. An older server's missing endpoint is a logged analytics failure, not a reason to hide the household tools.
 
 ## Notifications
 
@@ -94,7 +122,7 @@ All operations are explicit, asynchronous and throwing:
 - The household access GET returns invitation metadata, not reusable codes. Creation returns a case-sensitive code once and a seven-day expiry. Used links remain pending until revoked or expired. Invitation timestamps are validated UTC dates.
 - Create and revoke send the household `version`. These routes have no mutation receipt or automatic retry. After a conflict or uncertain response, refresh before another change. If a creation response was lost, revoke that pending invitation and create a new one; its original code cannot be retrieved.
 - `AccountInvitationCode` reuses the existing local fragment parser and redacts descriptions and mirrors. Incoming app links must match the configured invitation origin. Manually pasted links still extract only the code; requests always go to the configured native API, never the pasted host.
-- **Account** shares the invitation as a single URL, so the system **Copy** action pastes the full link without a separate message. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.
+- **Account** shares the invitation as a single URL through `UIActivityViewController`, so the system **Copy** action pastes the full link without a separate message. Completion is observed for analytics without inspecting the destination or returned items. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.
 - Incoming invitations stay in memory through native sign-in, recovery and failed joins. Joining always requires confirmation. Another room sheet can finish before the invitation opens. If the process closes, reopen the original link.
 
 ### Local use

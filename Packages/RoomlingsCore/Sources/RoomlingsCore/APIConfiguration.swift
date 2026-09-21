@@ -55,6 +55,7 @@ enum APIEndpoint: Equatable {
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
+    case recordAnalytics(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
@@ -88,6 +89,7 @@ enum APIEndpoint: Equatable {
             "api/account/households/\(id.uuidString.lowercased())/notifications"
         case .registerPushDevice: "api/account/push-devices"
         case .unregisterPushDevice(let id): "api/account/push-devices/\(id.uuidString.lowercased())"
+        case .recordAnalytics(let id): "api/account/households/\(id.uuidString.lowercased())/analytics"
         case .addChore: "api/chores"
         case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         case .undoChoreCompletion(let id): "api/chores/completions/\(id.uuidString.lowercased())/undo"

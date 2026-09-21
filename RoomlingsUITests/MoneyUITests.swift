@@ -83,7 +83,7 @@ extension AccountUITests {
     }
 
     @MainActor
-    private func openMoney(_ app: XCUIApplication) throws {
+    func openMoney(_ app: XCUIApplication) throws {
         let room = app.webViews["room-renderer"]
         XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
         let button = room.descendants(matching: .any).matching(identifier: "Money").firstMatch

@@ -65,9 +65,10 @@ struct AccountNotificationsSection: View {
                     .foregroundStyle(RoomTheme.muted)
             }
             if let error = notifications.error {
-                Text(error).foregroundStyle(RoomTheme.error)
-                    .accessibilityIdentifier("notifications-error")
-                Button("Retry notifications") { Task { await notifications.retry() } }
+                RoomFeedback(error, identifier: "notifications-error") {
+                    Button("Retry notifications") { Task { await notifications.retry() } }
+                        .buttonStyle(RoomButtonStyle(kind: .secondary))
+                }
             }
             Button("Refresh notifications") { Task { await notifications.refreshSettings() } }
                 .buttonStyle(RoomButtonStyle(kind: .text))

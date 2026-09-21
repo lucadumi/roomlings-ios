@@ -6,6 +6,31 @@ import UIKit
 
 final class RoomBridgeTests: XCTestCase {
     @MainActor
+    func testErrorBannersWrapAtAccessibleSizesWithoutGrowingPastTheSheet() {
+        let message = String(repeating: "This change could not be saved. Refresh your household before trying again. ", count: 3)
+        func measure(_ size: DynamicTypeSize) -> CGSize {
+            let controller = UIHostingController(rootView: RoomFeedback(message)
+                .environment(\.dynamicTypeSize, size).frame(width: 320))
+            return controller.sizeThatFits(in: CGSize(width: 320, height: 3000))
+        }
+        let standard = measure(.large)
+        let accessible = measure(.accessibility5)
+        XCTAssertEqual(standard.width, 320, accuracy: 0.5)
+        XCTAssertEqual(accessible.width, 320, accuracy: 0.5)
+        XCTAssertGreaterThan(accessible.height, standard.height)
+        XCTAssertLessThan(accessible.height, 3000)
+    }
+
+    @MainActor
+    func testFeedbackActionsKeepTheSharedSecondaryStyleAndMinimumTouchHeight() {
+        let controller = UIHostingController(rootView: Button("Retry connection") {}
+            .buttonStyle(RoomButtonStyle(kind: .secondary)).frame(width: 250))
+        let size = controller.sizeThatFits(in: CGSize(width: 250, height: 1000))
+        XCTAssertEqual(size.width, 250, accuracy: 0.5)
+        XCTAssertGreaterThanOrEqual(size.height, 44)
+    }
+
+    @MainActor
     func testPortraitRoomFramingUsesTheFullWebViewportIncludingSafeAreas() throws {
         let full = try RoomPreviewScreen.roomZoom(for: CGSize(width: 402, height: 874))
         let measured = try RoomPreviewScreen.roomZoom(

@@ -5,6 +5,14 @@ struct AccountInvitationsSection: View {
     @Bindable var model: AccountModel
     @State private var revoking: HouseholdInvitation?
     @State private var confirmingRevocation = false
+    @State private var sharing: InvitationShare?
+
+    private struct InvitationShare: Identifiable {
+        let id = UUID()
+        let link: URL
+        let subject: String
+        let context: AnalyticsContext?
+    }
 
     var body: some View {
         AccountSection("Invitations") {
@@ -39,6 +47,14 @@ struct AccountInvitationsSection: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("account-invitations")
+        .sheet(item: $sharing) { invitation in
+            InvitationShareSheet(link: invitation.link, subject: invitation.subject) { completed, failed in
+                model.invitationSharingFinished(context: invitation.context, completed: completed, failed: failed)
+                sharing = nil
+            }
+        }
+        .onChange(of: model.state?.account?.id) { _, _ in sharing = nil }
+        .onChange(of: model.state?.session?.household.id) { _, _ in sharing = nil }
     }
 
     private func ownerInvitations(_ access: HouseholdInvitationAccess, at date: Date) -> some View {
@@ -46,7 +62,7 @@ struct AccountInvitationsSection: View {
             Text("Invite a flatmate with a seven-day link. They will need to sign in to a Roomlings account.")
                 .foregroundStyle(RoomTheme.muted)
             if let error = model.invitationSetupError {
-                Text(error).foregroundStyle(RoomTheme.error)
+                RoomFeedback(error)
             } else {
                 Button("Create seven-day invitation") {
                     Task {
@@ -57,7 +73,11 @@ struct AccountInvitationsSection: View {
                 .disabled(model.invitationNeedsRefresh)
             }
             if model.canShareInvitation(at: date), let link = model.invitationLink {
-                ShareLink(item: link, subject: Text("Join \(access.household.name)")) {
+                Button {
+                    sharing = InvitationShare(
+                        link: link, subject: "Join \(access.household.name)", context: model.analyticsContext
+                    )
+                } label: {
                     Label("Share invitation", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
@@ -72,8 +92,7 @@ struct AccountInvitationsSection: View {
                     .foregroundStyle(RoomTheme.muted)
             }
             if model.invitationNeedsRefresh {
-                Text("Refresh invitations before creating, sharing or revoking another link.")
-                    .foregroundStyle(RoomTheme.error)
+                RoomFeedback("Refresh invitations before creating, sharing or revoking another link.")
             }
             let pending = access.invitations.filter { $0.isPending(at: date) }
             Text("Pending invitations").font(RoomTheme.body().weight(.semibold))

@@ -15,9 +15,7 @@ struct RoomBrandMark: View {
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         } else {
-            Text("The Roomlings logo is missing. Rebuild the app with the shared web source.")
-                .font(RoomTheme.body(14))
-                .foregroundStyle(RoomTheme.error)
+            RoomFeedback("The Roomlings logo is missing. Rebuild the app with the shared web source.")
         }
     }
 }

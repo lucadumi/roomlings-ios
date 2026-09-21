@@ -11,6 +11,7 @@ public actor AccountSession {
     private let ledgerAPI: LedgerAPI
     private let invitationAPI: InvitationAPI
     private let notificationAPI: NotificationAPI
+    private let analyticsAPI: AnalyticsAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
 
@@ -27,6 +28,7 @@ public actor AccountSession {
         ledgerAPI = LedgerAPI(client: client)
         invitationAPI = InvitationAPI(client: client)
         notificationAPI = NotificationAPI(client: client)
+        analyticsAPI = AnalyticsAPI(client: client)
         self.tokenStore = tokenStore
     }
 
@@ -175,6 +177,27 @@ public actor AccountSession {
     public func unregisterPushDevice(installationID: UUID) async throws {
         try await withNotificationAccount { [notificationAPI] token, _ in
             try await notificationAPI.unregister(installationID: installationID, token: token)
+        }
+    }
+
+    /// Telemetry must not acquire the account mutation gate or change state/credentials,
+    /// including when an expired request finishes after a new sign-in.
+    public func recordAnalytics(_ event: AnalyticsEvent, context: AnalyticsContext) async throws {
+        try Task.checkCancellation()
+        try requireAnalyticsContext(context)
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        try requireAnalyticsContext(context)
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        try await analyticsAPI.record(event, householdID: context.householdID, token: token)
+        try Task.checkCancellation()
+        try requireAnalyticsContext(context)
+        guard stateToken == token else { throw AccountError.accountStateRequired }
+    }
+
+    private func requireAnalyticsContext(_ expected: AnalyticsContext) throws {
+        guard let state, try AnalyticsContext(state: state) == expected else {
+            throw AccountError.accountStateRequired
         }
     }
 

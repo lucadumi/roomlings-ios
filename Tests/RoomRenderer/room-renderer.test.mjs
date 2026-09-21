@@ -17,6 +17,25 @@ const { defaultRoomComponents, componentCatalog, componentChoreArea } = await im
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
 const { cameraFraming } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
 
+test('native error colours are generated from the shared feedback rule', async () => {
+  const css = requireWeb('postcss').parse(await readFile(join(web, 'src/style.css'), 'utf8'))
+  const variables = new Map()
+  const error = new Map()
+  css.walkRules(':root', (rule) => rule.walkDecls((declaration) => variables.set(declaration.prop, declaration.value)))
+  css.walkRules('.feedback-error', (rule) => rule.walkDecls((declaration) => error.set(declaration.prop, declaration.value)))
+  const resolveColor = (value) => {
+    const variable = /^var\((--[\w-]+)\)$/.exec(value)
+    return variable ? resolveColor(variables.get(variable[1])) : value
+  }
+  const generated = await readFile(join(project, 'Build/Generated/WebThemeValues.swift'), 'utf8')
+  for (const [native, property] of [['errorFill', '--feedback-surface'], ['surface', '--feedback-ink']]) {
+    const color = resolveColor(error.get(property))
+    assert.match(color, /^#[\da-f]{6}$/i)
+    assert.match(generated, new RegExp(`static let ${native}: UInt32 = 0x${color.slice(1)}`, 'i'))
+  }
+  assert.equal(resolveColor(error.get('--feedback-border')), resolveColor(error.get('--feedback-surface')))
+})
+
 test('the native chore catalog is generated from the shared rooms and object definitions', async () => {
   const catalog = JSON.parse(await readFile(join(project, 'Build/RoomRenderer/chores.json'), 'utf8'))
   assert.equal(catalog.version, 1)

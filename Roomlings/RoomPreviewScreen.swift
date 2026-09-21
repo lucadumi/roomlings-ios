@@ -156,7 +156,9 @@ struct RoomPreviewScreen: View {
         .onChange(of: openingNotification) { _, opening in
             if !opening { presentPendingContent() }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active { accounts.analyticsBecameActive() }
+            if phase == .background { accounts.analyticsEnteredBackground() }
             if phase == .active && accounts.restored && !accounts.busy {
                 Task {
                     await accounts.refresh()
@@ -241,6 +243,7 @@ struct RoomPreviewScreen: View {
                 moneyDestination = .repayment(id)
                 presentedSheet = .money
             }
+            accounts.recordNotificationOpened(householdID: destination.householdID, at: pending.receivedAt)
             notifications.finishOpening(pending.id)
         }
     }

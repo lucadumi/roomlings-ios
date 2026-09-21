@@ -73,6 +73,7 @@ extension AccountUITests {
         copy.tap()
         let copied = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: copy)
         XCTAssertEqual(XCTWaiter.wait(for: [copied], timeout: Wait.control), .completed)
+        try await waitForAnalytics("invite_shared", count: 1, homes: [home])
         try tap(owner.buttons["Done"], in: owner)
         owner.terminate()
 
@@ -101,10 +102,13 @@ extension AccountUITests {
         XCTAssertEqual(member.textFields["Your name in this household"].value as? String, "Ada")
         let conflicted = try await invitationState(email: email, home: home)
         XCTAssertEqual(conflicted.invitations.first { $0.id == invitation.id }?.uses, 0)
+        let unjoined = try await analyticsState([home])
+        XCTAssertEqual(unjoined.occurrences("invite_accepted"), 0)
         try fill(member.textFields["Your name in this household"], "Sam")
         try tap(member.buttons["Join household"], in: member)
         XCTAssertTrue(member.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(member.buttons["account-entry"].value as? String, "Playing as Sam")
+        try await waitForAnalytics("invite_accepted", count: 1, homes: [home])
         attachHeaderScreenshot("Native saved invited-member header, portrait")
         try openAccount(member)
         XCTAssertTrue(member.staticTexts["Only the household owner can create or revoke invitations. Ask them to share a link."]
@@ -210,5 +214,7 @@ extension AccountUITests {
         let after = try await invitationState(email: ownerEmail, home: home)
         XCTAssertEqual(after.invitations.first?.uses, 1)
         XCTAssertEqual(after.version, before.version)
+        let analytics = try await analyticsState([home])
+        XCTAssertEqual(analytics.occurrences("invite_accepted"), 0)
     }
 }

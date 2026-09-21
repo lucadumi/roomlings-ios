@@ -16,7 +16,7 @@ concurrency:
 
 env:
   WEB_REPOSITORY: lucadumi/roomlings
-  WEB_REVISION: 979e97e78cfe409c8aac7303bef2edcabaeea774
+  WEB_REVISION: b06cd70d216eb0242af3238dcc18ccd577112f97
   ROOMLINGS_WEB_ROOT: ../roomlings
 
 defaults:

@@ -27,7 +27,8 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 - The branded header opens **Account** from the household name or your avatar.
 - **Account > Notifications** saves chore and money preferences. Enable push explicitly on each account/device; delivery requires the server and Apple signing setup in the [native guide](Packages/RoomlingsCore/README.md).
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
-- Shared web fonts, colours, graphics and static logo loaders; sessions stay in the native Keychain.
+- Shared web fonts, colours, error banners, graphics and static logo loaders; sessions stay in the native Keychain.
+- Minimal [retention events](Packages/RoomlingsCore/README.md#retention-analytics) go only to Roomlings, without message content or a third-party SDK.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
 ## Contributing
@@ -45,5 +46,6 @@ Shopping flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testSho
 Receipt flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testBalancesMatchTheServerAndRepaymentsCanBeUndone`.
 Use `--ui-test TestClass/testMethod` to select individual UI flows.
 Notification flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration`.
+Analytics flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAnalyticsCountsForegroundVisitsButNotSheetRefreshes --ui-test AccountUITests/testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.
