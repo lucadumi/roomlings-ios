@@ -6,18 +6,26 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { buildTheme } from './build-theme.mjs'
+import { checkArchiveSettings, checkArchiveSource } from './check-release.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const { values } = parseArgs({ options: { 'web-root': { type: 'string' } } })
+const archiving = process.env.ACTION === 'install'
+if (archiving) checkArchiveSettings(process.env)
 const requestedSource = values['web-root'] ?? process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings'
 const source = await realpath(resolve(project, requestedSource))
 const requireWeb = createRequire(join(source, 'package.json'))
 const output = join(project, 'Build', 'RoomRenderer')
+const revision = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+const dirty = execFileSync('git', ['-C', source, 'status', '--porcelain', '--untracked-files=normal'], { encoding: 'utf8' }).trim() !== ''
+if (archiving) {
+  checkArchiveSource({
+    revision, dirty, workflow: await readFile(join(project, '.github/workflows/ci.yml'), 'utf8'),
+  })
+}
 await buildTheme({ source, project, requireWeb })
 const { build } = await import(pathToFileURL(requireWeb.resolve('vite')).href)
 const react = (await import(pathToFileURL(requireWeb.resolve('@vitejs/plugin-react')).href)).default
-const revision = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-const dirty = execFileSync('git', ['-C', source, 'status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim() !== ''
 const lockfile = await readFile(join(source, 'package-lock.json'))
 const ts = requireWeb('typescript')
 const typeRoot = dirname(dirname(requireWeb.resolve('@types/react/package.json')))

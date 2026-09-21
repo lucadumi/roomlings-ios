@@ -1,0 +1,17 @@
+// Copy to Release.local.xcconfig and fill in the approved distribution values.
+// Keep signing certificates and private keys in Xcode/Keychain, never this file.
+DEVELOPMENT_TEAM =
+ROOMLINGS_API_SCHEME = https
+ROOMLINGS_API_HOST =
+ROOMLINGS_INVITATION_SCHEME = https
+ROOMLINGS_INVITATION_HOST =
+ROOMLINGS_APNS_ENVIRONMENT = production
+
+// Keep the current version until a different one is agreed. Increase the build
+// number for every upload; both settings are written into the app's Info.plist.
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Optional machine-specific paths. The web checkout must match the CI pin.
+// NODE_BINARY = /opt/homebrew/bin/node
+// ROOMLINGS_WEB_ROOT = /absolute/path/to/a/clean/pinned/web-checkout
