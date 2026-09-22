@@ -4,6 +4,18 @@ public enum AccountRole: String, Sendable, Codable {
     case owner, admin, member
 }
 
+public enum AccountDeletionStatus: Sendable, Equatable {
+    case none, unconfirmed, pending, localCleanupRequired, completed
+
+    public var blocksAccountUse: Bool {
+        self == .unconfirmed || self == .pending || self == .localCleanupRequired
+    }
+
+    public var serverConfirmed: Bool {
+        self == .localCleanupRequired || self == .completed
+    }
+}
+
 public enum HouseholdCurrency: String, Sendable, Codable {
     case eur = "EUR"
     case usd = "USD"

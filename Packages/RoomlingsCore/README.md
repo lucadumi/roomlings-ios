@@ -25,9 +25,12 @@ All operations are explicit, asynchronous and throwing:
 | --- | --- |
 | `sendEmailCode(email:)` | `POST /api/account/code` |
 | `verifyEmailCode(email:code:name:deviceLabel:)` | `POST /api/account/verify` |
+| `reauthenticate(accountID:code:deviceLabel:)` | `POST /api/account/verify`, bound to the restored account |
 | `recover(email:recoveryCode:deviceLabel:)` | `POST /api/account/recover` |
 | `restore()` | `GET /api/account` |
 | `logout(allDevices:)` | `POST /api/account/logout` |
+| `deleteAccount(accountID:confirmation:)` | `DELETE /api/account` |
+| `finishAccountDeletionCleanup()` | Local credential cleanup only, no HTTP request |
 | `createHousehold(name:memberName:currency:budgetCents:requestID:)` | `POST /api/account/households` |
 | `acceptInvitation(code:memberName:)` | `POST /api/account/invitations/accept` |
 | `selectHousehold(id:)` | `POST /api/account/households/<id>/select` |
@@ -53,20 +56,44 @@ All operations are explicit, asynchronous and throwing:
 | `recordSettlement(from:to:amount:householdID:version:mutationID:)` | `POST /api/settlements` |
 | `removeSettlement(id:householdID:version:mutationID:)` | `DELETE /api/settlements/<id>` |
 
-`state` starts as `nil`; successful state-returning operations validate and update it. Read `state`, `selectedHousehold` and `isBusy` with `await`.
+`state` starts as `nil`; state-returning operations validate server responses before updating it. Read `state`, `selectedHousehold`, `deletionStatus` and `isBusy` with `await`. A confirmed remote deletion clears cached private state even if local credential cleanup still needs retry.
 
 - Share one coordinator per Keychain entry. Overlapping account operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Analytics uses a separate non-mutating path so it cannot block those operations. Nothing automatically retries mutations.
 - Creation takes integer cents. Reuse the same `requestID` and details for an explicit retry.
 - Invitations accept raw account codes or web links containing `#account-invite=<encoded code>`. Links are parsed locally, never opened.
 - A replacement bearer is saved before a new signed-in state is published. Verification and recovery include the current bearer so only that device rotates.
 - Confirmed signed-out account responses and `401 ACCOUNT_SESSION_REQUIRED` from account operations clear the credential. The latter clears `state` to `nil` and still throws the server error. Analytics failures never alter credentials. Network failures, invalid input/responses, other HTTP errors, reauthentication requirements and pending deletion do not erase the credential.
-- `deletionPending` states contain no household access. A `409` or `503 ACCOUNT_DELETION_PENDING` is a failure, not completed deletion. After such a failure, an explicit `restore()` obtains the server's deletion-only state. This initial package does not implement deletion.
+- `deletionPending` states contain no household access. A `409` or `503 ACCOUNT_DELETION_PENDING` is a failure, not completed deletion. An explicit `restore()` obtains the server's deletion-only state; the native deletion flow can retry it without reopening household access.
 - Failed credential operations throw. Do not present a caught error as success. A failed replacement leaves the previous Keychain item intact, but that old server session may already have rotated; obtain a fresh email or unused recovery code rather than replaying a consumed code.
 - `AccountError.server(status:code:)` retains only the status and a known `AccountServerCode`, never server messages. `KeychainError.status(operation:status:)` retains the failing OSStatus. Unknown storage/transport errors are sanitized.
 
 `Account`, `AccountMembership`, `AccountDevice`, `AccountKitchenSession`, `AccountState` and `HouseholdSnapshot` are Sendable/Codable values. Timestamps retain validated UTC ISO 8601 strings. The household's `value: JSONValue` preserves supplied data without synthesizing empty collections. Metadata and collection envelopes are checked, not the complete TypeScript ledger schema. Integer values use `Int64`; out-of-range integral JSON fails rather than silently rounding through floating point. `csrfToken` is validated and private, and `session.token` must be null. State encoding preserves the backend contract, so do not send an entire encoded account state to JavaScript. Give a renderer only its intended household/room data.
 
 `APIConfiguration` accepts only origin URLs, HTTPS or exact loopback HTTP. `URLSessionTransport` is ephemeral, disables cookies, credentials and cache, has finite timeouts, and rejects every redirect. Requests always identify the native client and never use browser/CSRF headers. Bearers exist only in native requests and `SessionTokenStore`.
+
+## Account deletion
+
+**Account > Account lifecycle > Delete my account** opens a confirmation page inside the existing sheet. The email must exactly match the restored account, with no trimming or case normalization. The request is bound to that account UUID and current native credential, not merely to whichever account happens to be signed in later.
+
+The server requires a sign-in within the last ten minutes and enforces ownership handoff. **Verify email again** sends a code to the current account and rotates only that native session. The response must still belong to the same account before its credential is saved. Verification never automatically sends deletion; the user reviews the warning and enters the email again. Push registration is renewed for the rotated session without losing account-bound consent.
+
+An owner with other active roommates must transfer ownership first through the existing web ownership settings. A sole owner can close household access. Deletion does not cancel debts, remove shared ledger records or scrub names embedded in descriptions. The server pseudonymizes former-roommate display names while retaining the financial references needed for correct balances.
+
+`AccountDeletionStatus` separates these outcomes:
+
+| Status | Native behavior |
+| --- | --- |
+| `none` | No unresolved deletion attempt. A rejected confirmation, recent-sign-in check or ownership handoff leaves the account usable. |
+| `unconfirmed` | A response was lost or unusable, or access ended without proof of deletion. Household tools and further deletion attempts stay blocked until an explicit account refresh. |
+| `pending` | The server has disabled access and is retrying provider deletion. Account shows **Check deletion status** and **Retry account deletion**, including after relaunch. |
+| `localCleanupRequired` | The server confirmed deletion, but Keychain cleanup failed or was interrupted. **Clear saved access** retries local cleanup without repeating the DELETE. A replacement credential is never erased. |
+| `completed` | The server acknowledged deletion and the session credential was cleared. The app also clears matching account-bound push consent before reporting the flow complete. |
+
+The client does not automatically repeat deletion requests. A signed-out refresh after an unconfirmed request proves only that access ended, not that the provider identity was deleted. Pending deletions continue on the server even if the user signs out.
+
+Deletion and reauthentication share the account operation gate. During unresolved deletion, `selectedHousehold` is unavailable and other account mutations and analytics cannot use stale household access. The app clears room projections, pending invitations and notification targets as appropriate; local cleanup failures remain visible rather than being reported as a successful save.
+
+All automated deletion journeys use an isolated in-memory server, a fake identity provider and separate test Keychain services. They never call deletion on the shared preview API or Supabase.
 
 ## Retention analytics
 

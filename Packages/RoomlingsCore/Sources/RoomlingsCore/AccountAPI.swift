@@ -50,6 +50,14 @@ struct AccountAPI: Sendable {
         return response.state
     }
 
+    func deleteAccount(confirmation: String, token: SessionToken) async throws -> AccountState {
+        let response: OrdinaryAccountResponse = try await client.request(
+            .deleteAccount, body: JSONEncoder().encode(DeleteAccountRequest(confirmation: confirmation)), token: token
+        )
+        guard !response.state.isSignedIn else { throw AccountError.invalidResponse }
+        return response.state
+    }
+
     func createHousehold(
         name: String, memberName: String, currency: HouseholdCurrency, budgetCents: Int64,
         requestID: UUID, token: SessionToken?
@@ -174,6 +182,7 @@ private struct EmailCodeRequest: Encodable { let email: String }
 private struct VerifyCodeRequest: Encodable { let email: String; let code: String; let name: String; let label: String }
 private struct RecoveryRequest: Encodable { let email: String; let code: String; let label: String }
 private struct LogoutRequest: Encodable { let all: Bool }
+private struct DeleteAccountRequest: Encodable { let confirmation: String }
 private struct CreateHouseholdRequest: Encodable {
     let name: String
     let memberName: String

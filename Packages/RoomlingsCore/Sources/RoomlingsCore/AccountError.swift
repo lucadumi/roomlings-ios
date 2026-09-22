@@ -2,7 +2,7 @@ import Foundation
 
 public enum AccountInputField: String, Sendable {
     case email, emailCode, name, deviceLabel, recoveryCode
-    case memberName, budgetCents, invitationCode
+    case memberName, budgetCents, invitationCode, confirmation
     case title, notes, roomID, area, componentID, dueDate, repeatDays, rotation, turn, version, choreVersion
     case quantity, itemVersion
     case expenseDescription = "description"
@@ -14,6 +14,7 @@ public enum AccountServerCode: String, Sendable, Codable {
     case accountSessionRequired = "ACCOUNT_SESSION_REQUIRED"
     case reauthenticationRequired = "REAUTHENTICATION_REQUIRED"
     case accountDeletionPending = "ACCOUNT_DELETION_PENDING"
+    case ownershipTransferRequired = "OWNERSHIP_TRANSFER_REQUIRED"
     case accountCreationConflict = "ACCOUNT_CREATION_CONFLICT"
     case authNotConfigured = "AUTH_NOT_CONFIGURED"
     case authProviderUnavailable = "AUTH_PROVIDER_UNAVAILABLE"

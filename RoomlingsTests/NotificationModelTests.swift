@@ -201,6 +201,62 @@ final class NotificationModelTests: XCTestCase {
         XCTAssertNil(setup.notifications.settings)
     }
 
+    func testConfirmedAccountDeletionDiscardsCachedConsentAndPendingNotificationTargets() async throws {
+        let installation = PushInstallation(id: UUID(), enabled: true, accountID: accountID)
+        let setup = try await make([fixture.state(signedIn: false)], installation: installation, permission: .allowed)
+        await setup.notifications.synchronize()
+        setup.notifications.receiveNotification(try JSONSerialization.data(withJSONObject: [
+            "version": 1, "kind": "chores", "householdId": fixture.householdID.uuidString
+        ]))
+        let deleted = await setup.account.deleteAccount(accountID: accountID, confirmation: "ada@example.test")
+        XCTAssertTrue(deleted)
+        setup.notifications.attach(to: setup.account)
+        XCTAssertNil(setup.notifications.installation)
+        XCTAssertNil(setup.notifications.pending)
+        XCTAssertFalse(setup.notifications.enabledOnDevice)
+        XCTAssertEqual(setup.system.unregistrations, 1)
+        let stored = await setup.store.value
+        XCTAssertNil(stored)
+    }
+
+    func testDelayedNotificationPermissionCannotRestoreConsentAfterAccountDeletion() async throws {
+        let setup = try await make([settings(), fixture.state(signedIn: false)], permission: .allowed)
+        let gate = InvitationModelSignal()
+        setup.system.permissionGate = gate
+        let enabling = Task { await setup.notifications.enable() }
+        await waitUntil { setup.notifications.settings != nil && !setup.account.busy }
+        let deleted = await setup.account.deleteAccount(accountID: accountID, confirmation: "ada@example.test")
+        XCTAssertTrue(deleted)
+        setup.notifications.attach(to: setup.account)
+        await gate.signal()
+        await enabling.value
+        XCTAssertEqual(setup.system.registrations, 0)
+        let stored = await setup.store.value
+        XCTAssertNotEqual(stored?.enabled, true)
+        XCTAssertNil(stored?.accountID)
+        XCTAssertNil(setup.notifications.error)
+    }
+
+    func testSameAccountReauthenticationRenewsTheSessionBoundPushRegistration() async throws {
+        let response = try fixture.state(token: true)
+        var fields = try XCTUnwrap(JSONSerialization.jsonObject(with: response.data) as? [String: Any])
+        var devices = try XCTUnwrap(fields["devices"] as? [[String: Any]])
+        devices[0]["id"] = UUID().uuidString
+        fields["devices"] = devices
+        let rotated = HTTPResponse(data: try JSONSerialization.data(withJSONObject: fields), statusCode: 200, url: fixture.api.origin)
+        let installation = PushInstallation(id: UUID(), enabled: true, accountID: accountID)
+        let setup = try await make([rotated], installation: installation, permission: .allowed)
+        await setup.notifications.synchronize()
+        XCTAssertEqual(setup.system.registrations, 1)
+        let verified = await setup.account.reauthenticate(accountID: accountID, code: "123456", label: "iPhone")
+        XCTAssertTrue(verified)
+        setup.notifications.attach(to: setup.account)
+        await setup.notifications.synchronize()
+        XCTAssertEqual(setup.system.registrations, 2)
+        XCTAssertTrue(setup.notifications.enabledOnDevice)
+        XCTAssertEqual(setup.system.unregistrations, 0)
+    }
+
     private func settings(chores: Bool = true, money: Bool = true, available: Bool = true) throws -> HTTPResponse {
         try response([
             "householdId": fixture.householdID.uuidString, "memberId": fixture.memberID,

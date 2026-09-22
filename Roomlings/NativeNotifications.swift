@@ -77,6 +77,7 @@ final class NativeNotifications {
     private let system: any NotificationSystem
     private let environment: APNsEnvironment?
     private var accountID: UUID?
+    private var sessionID: UUID?
     private var householdID: UUID?
     private var token: APNsDeviceToken?
     private var attemptedRegistration: Registration?
@@ -109,13 +110,15 @@ final class NativeNotifications {
     func attach(to account: AccountModel) {
         self.account = account
         let nextAccount = account.canUseAccount ? account.state?.account?.id : nil
+        let nextSession = account.canUseAccount ? account.state?.devices.first(where: \.current)?.id : nil
         let nextHousehold = account.state?.session?.household.id
-        if accountID != nextAccount {
-            if accountID != nil {
+        if accountID != nextAccount || sessionID != nextSession {
+            if accountID != nil && accountID != nextAccount {
                 system.unregister()
                 system.clearDelivered()
             }
             accountID = nextAccount
+            sessionID = nextSession
             attemptedRegistration = nil
             token = nil
             requestedAPNs = false
@@ -127,6 +130,15 @@ final class NativeNotifications {
         if householdID != nextHousehold {
             householdID = nextHousehold
             settings = nil
+        }
+        if account.deletionPending || account.accountDeletionConfirmed {
+            pending = nil
+            routingError = nil
+            error = nil
+        }
+        if account.accountDeletionConfirmed {
+            installation = nil
+            loadedInstallation = false
         }
         account.notificationFailure = error
     }
@@ -221,9 +233,14 @@ final class NativeNotifications {
                 permission = allowed ? .allowed : .denied
             }
             guard permission == .allowed else { throw PushFailure.permissionDenied }
+            guard account.canUseAccount, self.accountID == accountID else { throw AccountError.accountStateRequired }
             guard let installation, let store = account.notificationStore else { throw PushFailure.storageUnavailable }
             let enabled = PushInstallation(id: installation.id, enabled: true, accountID: accountID)
             try await store.save(enabled)
+            guard account.canUseAccount, self.accountID == accountID else {
+                if try await store.read() == enabled { try await store.clear() }
+                throw AccountError.accountStateRequired
+            }
             self.installation = enabled
             attemptedRegistration = nil
             requestedAPNs = false
@@ -231,7 +248,11 @@ final class NativeNotifications {
             try requestAPNs()
             try await uploadToken()
         } catch {
-            report(error)
+            if account.canUseAccount, self.accountID == accountID {
+                report(error)
+            } else {
+                notificationLog.error("Notification enable stopped because account access changed.")
+            }
         }
     }
 

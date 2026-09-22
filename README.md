@@ -26,6 +26,7 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 - Open **Money** for receipts, what each roommate owes or is owed, and repayments. Roomlings tracks money; it never moves it.
 - The branded header opens **Account** from the household name or your avatar.
 - **Account > Notifications** saves chore and money preferences. Enable push explicitly on each account/device; delivery requires the server and Apple signing setup in the [native guide](Packages/RoomlingsCore/README.md).
+- **Account > Account lifecycle** offers native account deletion with exact email confirmation, re-verification and pending-deletion recovery. [What deletion keeps](Packages/RoomlingsCore/README.md#account-deletion).
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
 - Shared web fonts, colours, error banners, graphics and static logo loaders; sessions stay in the native Keychain.
 - Minimal [retention events](Packages/RoomlingsCore/README.md#retention-analytics) go only to Roomlings, without message content or a third-party SDK.
@@ -47,5 +48,6 @@ Receipt flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testBala
 Use `--ui-test TestClass/testMethod` to select individual UI flows.
 Notification flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration`.
 Analytics flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAnalyticsCountsForegroundVisitsButNotSheetRefreshes --ui-test AccountUITests/testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools`.
+Deletion flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAccountDeletionRequiresExactConfirmationAndKeepsTheSharedLedger --ui-test AccountUITests/testAccountDeletionPendingSurvivesRelaunchAndOffersANativeRetry`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.
