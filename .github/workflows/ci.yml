@@ -75,6 +75,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: roomlings/package-lock.json
+      - name: Check release archive safeguards
+        run: node --test Tests/Release/release.test.mjs
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - name: Check the preinstalled browser version
         run: |
@@ -137,15 +139,24 @@ jobs:
           echo "device=$device" >> "$GITHUB_OUTPUT"
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - run: swift test --package-path Packages/RoomlingsCore
-      - name: Build the release app
+      - name: Build the unsigned device release and verify its metadata
         if: matrix.name == 'iPhone'
         run: |
           xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
-            -configuration Release -destination 'generic/platform=iOS Simulator' \
+            -configuration Release -destination 'generic/platform=iOS' \
             -derivedDataPath Build/Release -quiet build \
             NODE_BINARY="$(command -v node)" \
             ROOMLINGS_WEB_ROOT="$GITHUB_WORKSPACE/roomlings" \
+            MARKETING_VERSION=0.1.0 CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            ROOMLINGS_API_HOST=api.release-check.invalid \
+            ROOMLINGS_INVITATION_HOST=release-check.invalid \
             CODE_SIGNING_ALLOWED=NO
+          info=Build/Release/Build/Products/Release-iphoneos/Roomlings.app/Info.plist
+          test "$(plutil -extract CFBundleShortVersionString raw "$info")" = 0.1.0
+          test "$(plutil -extract CFBundleVersion raw "$info")" = "$GITHUB_RUN_NUMBER"
+          test "$(plutil -extract RoomlingsAPIOrigin raw "$info")" = https://api.release-check.invalid
+          test "$(plutil -extract RoomlingsInvitationOrigin raw "$info")" = https://release-check.invalid
+          test "$(plutil -extract RoomlingsAPNsEnvironment raw "$info")" = production
       - name: Wait for the simulator
         env:
           DEVICE: ${{ steps.simulator.outputs.device }}

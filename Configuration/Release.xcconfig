@@ -4,4 +4,4 @@ ROOMLINGS_API_HOST =
 ROOMLINGS_INVITATION_SCHEME = https
 ROOMLINGS_INVITATION_HOST =
 ROOMLINGS_APNS_ENVIRONMENT = production
-#include? "Local.xcconfig"
+#include? "Release.local.xcconfig"

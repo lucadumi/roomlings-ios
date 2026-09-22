@@ -162,7 +162,7 @@ The default `http://localhost:5173` link is for the same Mac and its simulators,
 
 **The public domain is not chosen yet.** The native URL handler is implemented, but no Associated Domains entitlement or deployed `apple-app-site-association` file is configured. Setting an origin alone does not enable Universal Links.
 
-`ROOMLINGS_INVITATION_SCHEME` and `ROOMLINGS_INVITATION_HOST` configure the web origin in `Configuration/Local.xcconfig`. Debug defaults to `http://localhost:5173`; Release leaves the host blank. Missing configuration is shown explicitly, and no new share link is offered. The web origin may differ from the API origin.
+`ROOMLINGS_INVITATION_SCHEME` and `ROOMLINGS_INVITATION_HOST` configure the web origin in `Configuration/Local.xcconfig` for Debug or `Configuration/Release.local.xcconfig` for Release. Debug defaults to `http://localhost:5173`; Release leaves the host blank. Missing configuration is shown explicitly, and no new share link is offered. The web origin may differ from the API origin. Distribution archives require both public HTTPS origins; see the [TestFlight guide](../../docs/testflight.md).
 
 After choosing the HTTPS domain and signing identity:
 

@@ -15,7 +15,8 @@ open Roomlings.xcodeproj
 
 Run the **Roomlings** scheme on a simulator. Physical devices need your signing team.
 Keep `npm --prefix ../roomlings run preview:local` running for local sign-in.
-Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `ROOMLINGS_API_HOST` in `Configuration/Local.xcconfig`.
+Debug overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `ROOMLINGS_API_HOST` in `Configuration/Local.xcconfig`.
+Release uses its own `Configuration/Release.local.xcconfig`. See the [TestFlight guide](docs/testflight.md) for archive safeguards and outstanding prerequisites.
 
 ## Usage
 
@@ -36,6 +37,7 @@ Local overrides: `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME`, `R
 
 ```sh
 swift test --package-path Packages/RoomlingsCore
+node --test Tests/Release/release.test.mjs
 node Scripts/build-room.mjs
 node --test Tests/RoomRenderer/room-renderer.test.mjs
 node Scripts/test-accounts.mjs
