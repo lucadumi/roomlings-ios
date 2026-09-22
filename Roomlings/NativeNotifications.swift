@@ -179,6 +179,10 @@ final class NativeNotifications {
     }
 
     func refreshSettings() async {
+        guard !Task.isCancelled else {
+            notificationLog.debug("Notification settings view closed before its read started.")
+            return
+        }
         guard let account, account.canUseAccount else {
             setError("Sign in and open your household before using notifications.")
             return
@@ -187,12 +191,15 @@ final class NativeNotifications {
             refreshRequested = true
             return
         }
-        guard begin() else { return }
+        guard begin(clearError: false) else { return }
         defer { finishWork() }
         do {
             try await loadInstallation()
             permission = await system.permission()
             try await loadPreferences()
+            setError(nil)
+        } catch is CancellationError where Task.isCancelled {
+            notificationLog.debug("Notification settings read cancelled because its view closed.")
         } catch {
             report(error)
         }
@@ -351,13 +358,13 @@ final class NativeNotifications {
         }
     }
 
-    private func begin() -> Bool {
+    private func begin(clearError: Bool = true) -> Bool {
         guard !busy, let account, !account.busy, account.canUseAccount else {
             setError("Wait for the current account action, then open your household and retry notifications.")
             return false
         }
         busy = true
-        setError(nil)
+        if clearError { setError(nil) }
         return true
     }
 

@@ -35,6 +35,85 @@ final class NotificationModelTests: XCTestCase {
         XCTAssertEqual(setup.system.registrations, 0)
     }
 
+    func testCancellingTheSettingsReadWhenAccountClosesDoesNotLeaveTheHeaderInError() async throws {
+        let setup = try await make([settings(), settings(chores: false)], holdIndex: 1)
+        let reading = Task { await setup.notifications.refreshSettings() }
+        await setup.transport.started.wait()
+        XCTAssertTrue(setup.account.busy)
+        reading.cancel()
+        await setup.transport.finish.signal()
+        await reading.value
+        XCTAssertNil(setup.notifications.settings)
+        XCTAssertNil(setup.notifications.error)
+        XCTAssertNil(setup.account.notificationFailure)
+        XCTAssertEqual(setup.account.headerStatus, .loaded)
+        XCTAssertFalse(setup.account.busy)
+        XCTAssertFalse(setup.notifications.busy)
+        await setup.notifications.refreshSettings()
+        XCTAssertEqual(setup.notifications.settings?.preferences, NotificationPreferences(chores: false, money: true))
+        let requests = await setup.transport.requests
+        XCTAssertEqual(requests.count, 3)
+    }
+
+    func testAnAlreadyCancelledViewTaskCannotStartOrDeferASettingsRead() async throws {
+        let setup = try await make([])
+        let start = InvitationModelSignal()
+        let reading = Task {
+            await start.wait()
+            await setup.notifications.refreshSettings()
+        }
+        reading.cancel()
+        await start.signal()
+        await reading.value
+        await setup.notifications.synchronize()
+        let requests = await setup.transport.requests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertNil(setup.notifications.error)
+        XCTAssertNil(setup.account.notificationFailure)
+        XCTAssertEqual(setup.account.headerStatus, .loaded)
+    }
+
+    func testAnActualSettingsReadFailureStillMakesTheHeaderNeedAttention() async throws {
+        let setup = try await make([fixture.failure(503)])
+        await setup.notifications.refreshSettings()
+        XCTAssertNil(setup.notifications.settings)
+        XCTAssertNotNil(setup.notifications.error)
+        XCTAssertNotNil(setup.account.notificationFailure)
+        XCTAssertEqual(setup.account.headerStatus, .needsAttention)
+    }
+
+    func testCancelledPreferenceWritesStillReportAnUnconfirmedChange() async throws {
+        let setup = try await make([settings(chores: false)], holdIndex: 1)
+        let writing = Task {
+            await setup.notifications.savePreferences(NotificationPreferences(chores: false, money: true))
+        }
+        await setup.transport.started.wait()
+        writing.cancel()
+        await setup.transport.finish.signal()
+        await writing.value
+        XCTAssertNil(setup.notifications.settings)
+        XCTAssertNotNil(setup.notifications.error)
+        XCTAssertEqual(setup.account.headerStatus, .needsAttention)
+        let requests = await setup.transport.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.last?.httpMethod, "PUT")
+    }
+
+    func testCancelledSettingsReadsCannotClearAnEarlierUnconfirmedWrite() async throws {
+        let setup = try await make([fixture.failure(503), settings(chores: false)], holdIndex: 2)
+        await setup.notifications.savePreferences(NotificationPreferences(chores: false, money: true))
+        let failure = try XCTUnwrap(setup.notifications.error)
+        let reading = Task { await setup.notifications.refreshSettings() }
+        await setup.transport.started.wait()
+        reading.cancel()
+        await setup.transport.finish.signal()
+        await reading.value
+        XCTAssertEqual(setup.notifications.error, failure)
+        XCTAssertEqual(setup.account.notificationFailure, failure)
+        XCTAssertEqual(setup.account.headerStatus, .needsAttention)
+        XCTAssertNil(setup.notifications.settings)
+    }
+
     func testExplicitEnableBindsOptInToTheAccountAndUploadsRefreshedTokens() async throws {
         let setup = try await make([settings(), response(["registered": true]), response(["registered": true])])
         await setup.notifications.enable()
@@ -278,10 +357,10 @@ final class NotificationModelTests: XCTestCase {
 
     private func make(
         _ responses: [HTTPResponse], installation: PushInstallation? = nil,
-        permission: NotificationPermission = .notDetermined
+        permission: NotificationPermission = .notDetermined, holdIndex: Int? = nil
     ) async throws -> (notifications: NativeNotifications, account: AccountModel, store: NotificationInstallationDouble,
                        system: NotificationSystemDouble, transport: InvitationModelTransport) {
-        let transport = InvitationModelTransport(responses: try [fixture.state()] + responses, holdIndex: nil)
+        let transport = InvitationModelTransport(responses: try [fixture.state()] + responses, holdIndex: holdIndex)
         let credential = InvitationModelStore(token: try SessionToken(String(repeating: "a", count: 43)))
         let client = AccountSession(configuration: fixture.api, tokenStore: credential, transport: transport)
         let store = NotificationInstallationDouble(value: installation)

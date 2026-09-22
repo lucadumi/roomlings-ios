@@ -141,6 +141,7 @@ Use the web revision pinned in CI for both build and test harness. The analytics
 - `RoomlingsAPNsEnvironment` reads `ROOMLINGS_APNS_ENVIRONMENT`: `development` in Debug maps to APNs sandbox, while `production` in Release uses production APNs. TestFlight uses production.
 - The app target has the **Push Notifications** capability. `Roomlings/Roomlings.entitlements` is applied only for the iPhoneOS SDK. Provisioned signing must include the corresponding push entitlement and APNs topic `com.roomlings.app`.
 - Startup registers fresh tokens only for the matching opted-in account. APNs tokens are never stored on disk; the installation Keychain entry stores only the installation UUID, `enabled` flag and `accountID`.
+- Closing Account cancels its notification-preference read without marking the household as failed. Genuine read failures and unconfirmed preference writes still show an error; cancelling a read neither claims the settings were loaded nor clears an earlier failure.
 - Delivery needs a reachable notification backend with APNs credentials. Mocks and injected payloads verify app flows and contracts, not real APNs delivery. Some newer Apple Silicon simulator runtimes support APNs, but issue acceptance explicitly requires proof on a properly provisioned real device.
 
 ## Invitations

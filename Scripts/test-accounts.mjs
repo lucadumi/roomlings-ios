@@ -550,7 +550,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = 73 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 32)
+    const expected = 78 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 32)
       + (values['include-room'] ? 2 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
