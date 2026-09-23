@@ -51,7 +51,7 @@ public struct APIConfiguration: Sendable, Equatable {
 }
 
 enum APIEndpoint: Equatable {
-    case account, code, verify, recover, logout
+    case account, code, verify, recover, logout, deleteAccount
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
@@ -66,14 +66,14 @@ enum APIEndpoint: Equatable {
         case .account, .householdInvitations, .notificationSettings: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
         case .editShoppingItem: "PATCH"
-        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice: "DELETE"
+        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice, .deleteAccount: "DELETE"
         default: "POST"
         }
     }
 
     var path: String {
         switch self {
-        case .account: "api/account"
+        case .account, .deleteAccount: "api/account"
         case .code: "api/account/code"
         case .verify: "api/account/verify"
         case .recover: "api/account/recover"

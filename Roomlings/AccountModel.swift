@@ -30,6 +30,8 @@ final class AccountModel {
     private(set) var invitationNeedsRefresh = false
     private(set) var pendingInvitation: AccountInvitationCode?
     private(set) var incomingInvitationError: String?
+    private(set) var deletionStatus = AccountDeletionStatus.none
+    private(set) var deletionRequiresReauthentication = false
     var message: String?
     var notice: String?
     var notificationFailure: String?
@@ -42,16 +44,22 @@ final class AccountModel {
     private var deletionBlocked = false
     private var sharedInvitationID: UUID?
     private var requestFailed = false
+    private var deletionCleanupAccountID: UUID?
 
     var signedIn: Bool { state?.isSignedIn == true }
-    var deletionPending: Bool { deletionBlocked || state?.deletionPending == true }
-    var householdName: String? { deletionPending ? nil : state?.session?.household.name }
+    var deletionPending: Bool { deletionBlocked || state?.deletionPending == true || deletionStatus == .pending }
+    var deletionNeedsRefresh: Bool { deletionStatus == .unconfirmed }
+    var deletionCleanupRequired: Bool {
+        deletionStatus == .localCleanupRequired || (deletionStatus.serverConfirmed && deletionCleanupAccountID != nil)
+    }
+    var accountDeletionConfirmed: Bool { deletionStatus.serverConfirmed }
+    var householdName: String? { canUseAccount ? state?.session?.household.name : nil }
     var viewerColor: HouseholdMemberColor? { viewer.flatMap { HouseholdMemberColor(hex: $0.color) } }
-    var canUseAccount: Bool { signedIn && !deletionPending }
+    var canUseAccount: Bool { signedIn && !deletionPending && !deletionNeedsRefresh && !deletionCleanupRequired }
     var analyticsContext: AnalyticsContext? { analytics?.context }
     var headerStatus: HeaderStatus {
         if busy { return .updating }
-        if requestFailed || setupError != nil || deletionPending || viewerFailure != nil
+        if requestFailed || setupError != nil || deletionPending || deletionNeedsRefresh || deletionCleanupRequired || viewerFailure != nil
             || roomFailure != nil || choresFailure != nil || shoppingFailure != nil || ledgerFailure != nil
             || notificationFailure != nil {
             return .needsAttention
@@ -205,6 +213,76 @@ final class AccountModel {
         let signedOut = await perform(.logout) { try await $0.logout() }
         if signedOut { dismissInvitation() }
         return signedOut
+    }
+
+    func reauthenticate(accountID: UUID, code: String, label: String) async -> Bool {
+        let verified = await perform(.reauthenticate) {
+            try await $0.reauthenticate(accountID: accountID, code: code, deviceLabel: label)
+        }
+        if verified {
+            deletionRequiresReauthentication = false
+            notice = "Email verified. Review the deletion warning and enter your email again to continue."
+        }
+        return verified
+    }
+
+    func deleteAccount(accountID: UUID, confirmation: String) async -> Bool {
+        guard let account = state?.account, account.id == accountID,
+              !deletionNeedsRefresh, !deletionCleanupRequired else {
+            message = "Check account deletion status before trying another deletion."
+            return false
+        }
+        guard confirmation == account.email else {
+            message = "Enter your exact account email to confirm deletion."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        deletionCleanupAccountID = accountID
+        deletionRequiresReauthentication = false
+        deletionStatus = .unconfirmed
+        _ = publish(state)
+        do {
+            let next = try await client.deleteAccount(accountID: accountID, confirmation: confirmation)
+            deletionStatus = await client.deletionStatus
+            try await clearDeletedNotificationAccess()
+            deletionBlocked = false
+            _ = publish(next)
+            dismissInvitation()
+            notice = "Account deleted. Shared ledger history kept."
+            return true
+        } catch {
+            await failed(error, action: .deleteAccount, client: client)
+            return false
+        }
+    }
+
+    func finishAccountDeletionCleanup() async -> Bool {
+        guard let client, deletionCleanupRequired, begin() else { return false }
+        defer { busy = false }
+        do {
+            if deletionStatus == .localCleanupRequired {
+                _ = try await client.finishAccountDeletionCleanup()
+            }
+            deletionStatus = await client.deletionStatus
+            try await clearDeletedNotificationAccess()
+            deletionBlocked = false
+            _ = publish(await client.state)
+            dismissInvitation()
+            notice = "Account deleted. Shared ledger history kept."
+            return true
+        } catch {
+            await failed(error, action: .deleteAccount, client: client)
+            return false
+        }
+    }
+
+    private func clearDeletedNotificationAccess() async throws {
+        if let deletionCleanupAccountID, let installation = try await notificationStore?.read(),
+           installation.accountID == deletionCleanupAccountID {
+            try await notificationStore?.clear()
+        }
+        deletionCleanupAccountID = nil
     }
 
     func analyticsBecameActive() { analytics?.becameActive() }
@@ -494,10 +572,22 @@ final class AccountModel {
         if action.isChore { choreSaveFailure = .none }
         if action == .shopping { shoppingSaveFailure = .none }
         if action == .ledger { ledgerSaveFailure = .none }
+        let previousDeletion = deletionStatus
         do {
             let next = try await operation(client)
+            deletionStatus = await client.deletionStatus
+            if deletionStatus == .none { deletionCleanupAccountID = nil }
+            if action == .verify || action == .recover || action == .reauthenticate {
+                deletionRequiresReauthentication = false
+            }
+            if deletionStatus.serverConfirmed, deletionCleanupAccountID != nil {
+                try await clearDeletedNotificationAccess()
+            }
             deletionBlocked = next.deletionPending
             let published = publish(next)
+            if action == .refresh, !next.isSignedIn, previousDeletion == .unconfirmed || previousDeletion == .pending {
+                notice = "Account access has ended. Pending deletions continue on the server."
+            }
             if action.isChore, let choresFailure {
                 message = choresFailure
                 choreSaveFailure = .retrySameChange
@@ -521,7 +611,7 @@ final class AccountModel {
     }
 
     private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
-        defer { analytics?.updateAccount(deletionPending ? nil : state) }
+        defer { analytics?.updateAccount(canUseAccount ? state : nil) }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true {
             invitations = nil
@@ -543,7 +633,7 @@ final class AccountModel {
         shoppingFailure = nil
         ledger = nil
         ledgerFailure = nil
-        guard !deletionPending, let session = next?.session else {
+        guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
         }
@@ -590,6 +680,12 @@ final class AccountModel {
     }
 
     private func failed(_ error: Error, action: Action, client: AccountSession) async {
+        deletionStatus = await client.deletionStatus
+        if deletionStatus == .none { deletionCleanupAccountID = nil }
+        if action == .deleteAccount {
+            deletionRequiresReauthentication = error as? AccountError == .server(status: 401, code: .reauthenticationRequired)
+            if deletionStatus.serverConfirmed || deletionStatus == .pending { dismissInvitation() }
+        }
         if case AccountError.server(_, .some(.accountDeletionPending)) = error {
             deletionBlocked = true
         }
@@ -614,11 +710,13 @@ final class AccountModel {
             else if action == .shopping { shoppingSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
-        message = Self.message(for: error, action: action)
+        message = deletionCleanupRequired
+            ? "Your account was deleted, but saved access could not be cleared from this device. Unlock the device, then clear saved access below."
+            : Self.message(for: error, action: action)
     }
 
     private enum Action {
-        case refresh, sendCode, verify, recover, create, join, select, logout
+        case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, completeChore, undoChore, shopping, ledger
         case invitationLoad, invitationCreate, invitationRevoke
 
@@ -680,6 +778,26 @@ final class AccountModel {
 
     private static func message(for error: Error, action: Action) -> String {
         if let resource = action.resource { return mutationMessage(for: error, resource: resource) }
+        if action == .deleteAccount {
+            switch error {
+            case AccountError.invalidInput(.confirmation), AccountError.server(400, _):
+                return "Enter your exact account email to confirm deletion."
+            case AccountError.server(_, .some(.ownershipTransferRequired)):
+                return "Transfer ownership of any household with other active roommates before deleting your account. Ownership settings are available on the web."
+            case AccountError.server(_, .some(.reauthenticationRequired)):
+                return "Verify your email again before deleting your account."
+            case AccountError.server(_, .some(.accountDeletionPending)):
+                return "Account deletion is pending. Access is disabled while the server retries. Check status or retry deletion below."
+            case AccountError.server(_, .some(.accountSessionRequired)):
+                return "Account access has ended. Check deletion status before signing in again."
+            case is KeychainError, AccountError.credentialStorage:
+                return "Saved access could not be read securely. Unlock the device and try again."
+            case AccountError.operationInProgress:
+                return "Another account action is still running."
+            default:
+                return "Could not confirm account deletion. Check deletion status before trying again."
+            }
+        }
         if error is CancellationError {
             return action.isInvitationMutation
                 ? "The invitation change could not be confirmed. Refresh invitations before making another change."
@@ -698,7 +816,7 @@ final class AccountModel {
             }
             return "Could not reach Roomlings. Your saved access is unchanged. Try again."
         case .server(let status, let code):
-            if code == .accountDeletionPending { return "Account deletion is pending. Finish it on the web, or sign out here." }
+            if code == .accountDeletionPending { return "Account deletion is pending. Check its status or retry deletion here." }
             if code == .authNotConfigured { return "Account access is not configured on this server." }
             if code == .authProviderUnavailable { return "Email sign-in is unavailable right now. Try again or use an unused recovery code." }
             if code == .accountSessionRequired { return "Your session has expired. Sign in again." }
@@ -753,7 +871,7 @@ final class AccountModel {
         case AccountError.server(_, .some(.accountSessionRequired)):
             return "Your session has expired. Sign in again."
         case AccountError.server(_, .some(.accountDeletionPending)):
-            return "Account deletion is pending. Finish it on the web, or sign out here."
+            return "Account deletion is pending. Open Account to check its status or retry deletion."
         case AccountError.server(_, .some(.reauthenticationRequired)):
             return "Sign in again before changing \(name)."
         case AccountError.server(409, let code):

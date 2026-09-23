@@ -45,6 +45,8 @@
 		A00000000000000000000024 /* InvitationShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002C /* InvitationShareSheet.swift */; };
 		A00000000000000000000025 /* AnalyticsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002D /* AnalyticsModelTests.swift */; };
 		A00000000000000000000026 /* AnalyticsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002E /* AnalyticsUITests.swift */; };
+		A00000000000000000000027 /* AccountDeletionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002F /* AccountDeletionModelTests.swift */; };
+		A00000000000000000000028 /* AccountDeletionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000030 /* AccountDeletionUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +106,8 @@
 		B0000000000000000000002C /* InvitationShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationShareSheet.swift; sourceTree = "<group>"; };
 		B0000000000000000000002D /* AnalyticsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsModelTests.swift; sourceTree = "<group>"; };
 		B0000000000000000000002E /* AnalyticsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsUITests.swift; sourceTree = "<group>"; };
+		B0000000000000000000002F /* AccountDeletionModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionModelTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000030 /* AccountDeletionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -184,6 +188,7 @@
 				B00000000000000000000023 /* InvitationModelTests.swift */,
 				B00000000000000000000028 /* NotificationModelTests.swift */,
 				B0000000000000000000002D /* AnalyticsModelTests.swift */,
+				B0000000000000000000002F /* AccountDeletionModelTests.swift */,
 			);
 			path = RoomlingsTests;
 			sourceTree = "<group>";
@@ -198,6 +203,7 @@
 				B00000000000000000000024 /* InvitationUITests.swift */,
 				B00000000000000000000029 /* NotificationUITests.swift */,
 				B0000000000000000000002E /* AnalyticsUITests.swift */,
+				B00000000000000000000030 /* AccountDeletionUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
@@ -391,6 +397,7 @@
 				A0000000000000000000001C /* InvitationModelTests.swift in Sources */,
 				A00000000000000000000020 /* NotificationModelTests.swift in Sources */,
 				A00000000000000000000025 /* AnalyticsModelTests.swift in Sources */,
+				A00000000000000000000027 /* AccountDeletionModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +412,7 @@
 				A0000000000000000000001D /* InvitationUITests.swift in Sources */,
 				A00000000000000000000021 /* NotificationUITests.swift in Sources */,
 				A00000000000000000000026 /* AnalyticsUITests.swift in Sources */,
+				A00000000000000000000028 /* AccountDeletionUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

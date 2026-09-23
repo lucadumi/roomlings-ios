@@ -94,7 +94,7 @@ jobs:
     name: Native (${{ matrix.name }})
     needs: web-revision
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -162,7 +162,8 @@ jobs:
           DEVICE: ${{ steps.simulator.outputs.device }}
         run: xcrun simctl bootstatus "$DEVICE" -b
       - name: Run native account and room flows
-        timeout-minutes: 60
+        # The expanded account suite plus room coverage exceeds an hour on the iPad runner.
+        timeout-minutes: 75
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
         run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room

@@ -129,7 +129,9 @@ final class AccountUITests: XCTestCase {
             if canScroll && keyboard.exists {
                 let keyboardFrame = keyboard.frame
                 if keyboardFrame.minY > area.minY + 44 && keyboardFrame.intersects(area) {
-                    area.size.height = min(area.height, keyboardFrame.minY - area.minY - 44)
+                    // The whole control must clear the keyboard. Extra space makes the last
+                    // visible row unreachable when the form is already at its scroll limit.
+                    area.size.height = min(area.height, keyboardFrame.minY - area.minY)
                 }
             }
             // Asking XCTest for offscreen hit points can fail before scrolling ever starts.
@@ -221,14 +223,16 @@ final class AccountUITests: XCTestCase {
         }
     }
 
-    // Signing in only settles the account. The household loads after it, so sampling the
-    // status here races that load instead of waiting for the state under test.
+    // Account refreshes and notification work can outlive the UI event that started them.
     @MainActor
-    private func expectHeaderStatus(_ app: XCUIApplication, _ status: String) {
+    func expectHeaderStatus(
+        _ app: XCUIApplication, _ status: String, file: StaticString = #filePath, line: UInt = #line
+    ) {
         let entry = app.buttons["household-entry"]
         let matched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", status), object: entry)
         if XCTWaiter.wait(for: [matched], timeout: Wait.control) != .completed {
-            XCTFail("The header status stayed \(entry.value as? String ?? "unset") instead of reaching \(status).")
+            XCTFail("The header status stayed \(entry.value as? String ?? "unset") instead of reaching \(status).",
+                    file: file, line: line)
         }
     }
 

@@ -4,7 +4,10 @@ import Foundation
 public actor AccountSession {
     public private(set) var state: AccountState?
     public private(set) var isBusy = false
-    public var selectedHousehold: HouseholdSnapshot? { state?.session?.household }
+    public private(set) var deletionStatus = AccountDeletionStatus.none
+    public var selectedHousehold: HouseholdSnapshot? {
+        deletionStatus.blocksAccountUse ? nil : state?.session?.household
+    }
 
     private let api: AccountAPI
     private let shoppingAPI: ShoppingAPI
@@ -34,16 +37,25 @@ public actor AccountSession {
 
     @discardableResult
     public func restore() async throws -> AccountState {
-        try beginOperation()
+        try beginOperation(allowDeletion: true)
         defer { isBusy = false }
         let token = try await readCredential()
+        let previousDeletion = deletionStatus
         do {
             let response = try await api.restore(token: token)
-            if !response.isSignedIn, token != nil { try await clearCredential() }
+            if !response.isSignedIn, token != nil {
+                if previousDeletion != .none {
+                    try await clearCredential(matching: token)
+                } else {
+                    try await clearCredential()
+                }
+            }
             // A native signed-in response without a stored bearer cannot establish a session.
             guard !response.isSignedIn || token != nil else { throw AccountError.invalidResponse }
             state = response
             stateToken = response.isSignedIn ? token : nil
+            deletionStatus = response.deletionPending ? .pending
+                : previousDeletion.serverConfirmed && !response.isSignedIn ? .completed : .none
             return response
         } catch {
             try await handleConfirmedExpiry(error)
@@ -70,6 +82,7 @@ public actor AccountSession {
         try await saveCredential(response.token)
         state = response.state
         stateToken = response.token
+        deletionStatus = .none
         return response.state
     }
 
@@ -86,12 +99,13 @@ public actor AccountSession {
         try await saveCredential(response.token)
         state = response.state
         stateToken = response.token
+        deletionStatus = .none
         return response.state
     }
 
     @discardableResult
     public func logout(allDevices: Bool = false) async throws -> AccountState {
-        try beginOperation()
+        try beginOperation(allowDeletion: true)
         defer { isBusy = false }
         let token = try await readCredential()
         do {
@@ -99,11 +113,92 @@ public actor AccountSession {
             try await clearCredential()
             state = response
             stateToken = nil
+            deletionStatus = .none
             return response
         } catch {
             try await handleConfirmedExpiry(error)
             throw error
         }
+    }
+
+    @discardableResult
+    public func reauthenticate(accountID: UUID, code: String, deviceLabel: String) async throws -> AccountState {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, let account = original.account, account.id == accountID,
+              !original.deletionPending else { throw AccountError.accountStateRequired }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        let response = try await api.verifyEmailCode(
+            email: account.email, code: code, name: account.name, deviceLabel: deviceLabel, token: token
+        )
+        try Task.checkCancellation()
+        guard response.state.account?.id == accountID, response.state.account?.email == account.email,
+              !response.state.deletionPending else { throw AccountError.invalidResponse }
+        try await confirmAccountIdentity(original, token: token)
+        try Task.checkCancellation()
+        try await saveCredential(response.token)
+        state = response.state
+        stateToken = response.token
+        return response.state
+    }
+
+    @discardableResult
+    public func deleteAccount(accountID: UUID, confirmation: String) async throws -> AccountState {
+        try beginOperation(allowDeletion: true)
+        defer { isBusy = false }
+        guard deletionStatus != .unconfirmed, deletionStatus != .localCleanupRequired,
+              let account = state?.account, account.id == accountID else {
+            throw AccountError.accountStateRequired
+        }
+        // Destructive confirmation is deliberately not trimmed or case-normalized.
+        guard confirmation == account.email, AccountValidation.email(confirmation) == confirmation else {
+            throw AccountError.invalidInput(.confirmation)
+        }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        deletionStatus = .unconfirmed
+        do {
+            let response = try await api.deleteAccount(confirmation: confirmation, token: token)
+            state = response
+            deletionStatus = .localCleanupRequired
+            try Task.checkCancellation()
+            try await clearCredential(matching: token)
+            stateToken = nil
+            deletionStatus = .completed
+            return response
+        } catch {
+            if !deletionStatus.serverConfirmed {
+                if case AccountError.server(_, .some(.accountDeletionPending)) = error {
+                    deletionStatus = .pending
+                } else if case AccountError.server(let status, _) = error, (400..<500).contains(status) {
+                    deletionStatus = .none
+                    if error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
+                        // Lost access is not proof that the account was deleted.
+                        deletionStatus = .unconfirmed
+                        try await clearCredential(matching: token)
+                        state = nil
+                        stateToken = nil
+                    }
+                }
+            }
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func finishAccountDeletionCleanup() async throws -> AccountState {
+        try beginOperation(allowDeletion: true)
+        defer { isBusy = false }
+        guard deletionStatus == .localCleanupRequired, let state, !state.isSignedIn else {
+            throw AccountError.accountStateRequired
+        }
+        try await clearCredential(matching: stateToken)
+        stateToken = nil
+        deletionStatus = .completed
+        return state
     }
 
     @discardableResult
@@ -196,7 +291,7 @@ public actor AccountSession {
     }
 
     private func requireAnalyticsContext(_ expected: AnalyticsContext) throws {
-        guard let state, try AnalyticsContext(state: state) == expected else {
+        guard !deletionStatus.blocksAccountUse, let state, try AnalyticsContext(state: state) == expected else {
             throw AccountError.accountStateRequired
         }
     }
@@ -421,19 +516,19 @@ public actor AccountSession {
         do {
             let response = try await operation(token, memberID)
             try Task.checkCancellation()
-            try await confirmNotificationIdentity(original, token: token)
+            try await confirmAccountIdentity(original, token: token)
             try Task.checkCancellation()
             return response
         } catch {
             if error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
-                try await confirmNotificationIdentity(original, token: token)
+                try await confirmAccountIdentity(original, token: token)
                 try await handleConfirmedExpiry(error)
             }
             throw error
         }
     }
 
-    private func confirmNotificationIdentity(_ original: AccountState, token: SessionToken) async throws {
+    private func confirmAccountIdentity(_ original: AccountState, token: SessionToken) async throws {
         let stored = try await readCredential()
         guard state == original, stateToken == token else { throw AccountError.invalidResponse }
         guard stored == token else { throw AccountError.accountStateRequired }
@@ -457,9 +552,10 @@ public actor AccountSession {
         }
     }
 
-    private func beginOperation() throws {
+    private func beginOperation(allowDeletion: Bool = false) throws {
         guard !isBusy else { throw AccountError.operationInProgress }
         try Task.checkCancellation()
+        guard allowDeletion || !deletionStatus.blocksAccountUse else { throw AccountError.accountStateRequired }
         isBusy = true
     }
 
@@ -469,6 +565,7 @@ public actor AccountSession {
         try await clearCredential()
         state = nil
         stateToken = nil
+        deletionStatus = deletionStatus.serverConfirmed ? .completed : .none
     }
 
     private func readCredential() async throws -> SessionToken? {
@@ -505,5 +602,13 @@ public actor AccountSession {
         } catch {
             throw AccountError.credentialStorage
         }
+
+    }
+
+    private func clearCredential(matching expected: SessionToken?) async throws {
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard stored == nil || stored == expected else { throw AccountError.accountStateRequired }
+        try await clearCredential()
     }
 }

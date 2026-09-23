@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { createRequire } from 'node:module'
@@ -22,7 +22,7 @@ const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
 const { SQLiteDatabase } = await import(pathToFileURL(join(web, 'server/database.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
 const { getRoomComponents, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
-const { balances, billingDate, choreSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { balances, billingDate, choreSchema, expenseSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { accountEmailSchema } = await import(pathToFileURL(join(web, 'shared/accounts.ts')).href)
 const express = requireWeb('express')
 const { z } = requireWeb('zod')
@@ -37,6 +37,11 @@ const analyticsRequests = []
 const identities = new Map()
 const pendingCodes = new Set()
 let failDelivery = false
+let failDeletion = false
+let deletionFailure = null
+let deletionAttempts = 0
+const deletionRequests = []
+const verificationRequests = []
 let choreFailure = null
 const choreRequests = []
 let shoppingFailure = null
@@ -70,6 +75,8 @@ const provider = {
     return identity(email)
   },
   async deleteUser(providerId) {
+    deletionAttempts++
+    if (failDeletion) throw new Error('Test deletion provider unavailable.')
     for (const [email, id] of identities) if (id === providerId) identities.delete(email)
   },
 }
@@ -149,6 +156,12 @@ observeMutations(invitationRoute, invitationRequests, () => {
   invitationFailure = null
   return failure
 })
+observeMutations(/^\/api\/account$/, deletionRequests, () => {
+  const failure = deletionFailure
+  deletionFailure = null
+  return failure
+})
+observeMutations('/api/account/verify', verificationRequests, () => null)
 app.post(/^\/api\/account\/households\/[^/]+\/analytics$/, express.json(), (request, response, next) => {
   const observed = {
     householdId: request.path.split('/')[4],
@@ -181,6 +194,53 @@ app.post(/^\/api\/account\/households\/[^/]+\/analytics$/, express.json(), (requ
 })
 app.use(createApp(store, { provider, appOrigin: 'http://localhost:5173' }))
 app.get('/_fixture', (_request, response) => response.json({ roomlingsTest: true }))
+app.post('/_fixture/deletion/failure', express.json(), (request, response) => {
+  const mode = z.enum(['provider', 'lost-response', 'none']).parse(request.body.mode)
+  failDeletion = mode === 'provider'
+  deletionFailure = mode === 'lost-response' ? mode : null
+  response.json({ configured: true })
+})
+app.post('/_fixture/deletion/age-session', express.json(), async (request, response) => {
+  const email = accountEmailSchema.parse(request.body.email)
+  const account = await database.prepare('SELECT id FROM accounts WHERE email = ?').get(email)
+  if (!account) throw new Error('The deletion fixture account is missing.')
+  await database.prepare('UPDATE account_sessions SET created_at = ? WHERE account_id = ?')
+    .run(new Date(Date.now() - 11 * 60_000).toISOString(), account.id)
+  response.json({ aged: true })
+})
+app.post('/_fixture/deletion/receipt', express.json(), async (request, response) => {
+  const household = await store.get(z.string().uuid().parse(request.body.householdId))
+  const member = household?.members.find((member) => !member.inactive)
+  if (!household || !member) throw new Error('The deletion fixture household is missing.')
+  household.expenses.push(expenseSchema.parse({
+    id: randomUUID(), createdAt: new Date().toISOString(), description: 'Retained receipt', amount: 1250,
+    paidBy: member.id, participants: [member.id], category: 'other', date: billingDate(household.billingTimeZone),
+  }))
+  household.version++
+  await store.save(household)
+  response.json({ recorded: true })
+})
+app.post('/_fixture/deletion/state', express.json(), async (request, response) => {
+  const input = z.object({
+    email: accountEmailSchema, householdIds: z.array(z.string().uuid()).min(1).max(50),
+  }).parse(request.body)
+  const account = await database.prepare('SELECT deleting FROM accounts WHERE email = ?').get(input.email)
+  const households = []
+  for (const id of input.householdIds) {
+    const household = await store.get(id)
+    if (!household) throw new Error('The deletion fixture household was not retained.')
+    households.push({
+      id, members: household.members, expenses: household.expenses.length,
+      ledgerDigest: createHash('sha256').update(JSON.stringify({
+        expenses: household.expenses, settlements: household.settlements, bills: household.bills,
+      })).digest('hex'),
+    })
+  }
+  response.json({
+    accountExists: !!account, pending: !!account?.deleting, households, requests: deletionRequests,
+    deletionAttempts, verificationRequests: verificationRequests.length,
+  })
+})
 app.post('/_fixture/analytics/state', express.json(), async (request, response) => {
   const { householdIds } = z.object({ householdIds: z.array(z.string().uuid()).min(1).max(50) }).parse(request.body)
   const rows = await database.prepare(`SELECT household_id, member_id, kind, local_date, occurrences
@@ -215,6 +275,11 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
   releaseAccountLoad()
   analyticsFailure = null
   analyticsRequests.length = 0
+  failDeletion = false
+  deletionFailure = null
+  deletionAttempts = 0
+  deletionRequests.length = 0
+  verificationRequests.length = 0
   failDelivery = false
   choreFailure = null
   choreRequests.length = 0
@@ -485,7 +550,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = 60 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 26)
+    const expected = 78 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 32)
       + (values['include-room'] ? 2 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)

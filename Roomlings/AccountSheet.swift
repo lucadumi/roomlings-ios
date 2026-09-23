@@ -20,8 +20,9 @@ struct AccountSheet: View {
     @State private var confirmingSignOut = false
     @State private var contentHeight: CGFloat = 320
     @State private var headerHeight: CGFloat = 64
+    @State private var deletionConfirmation = ""
 
-    private enum Page { case email, verify, recover, account, create, join }
+    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate }
     @State private var invitation = ""
     private let currencies: [HouseholdCurrency] = [.eur, .usd, .gbp, .ron]
 
@@ -39,15 +40,19 @@ struct AccountSheet: View {
                     incomingNotification
                     if let setupError = model.setupError {
                         AccountSection { Text(setupError) }
-                    } else if model.deletionPending {
-                        AccountSection("Account deletion") {
-                            Text("Deletion is pending. Finish it on the web. Household access stays closed.")
-                        }
-                        accountActions
+                    } else if model.deletionCleanupRequired || model.deletionNeedsRefresh || model.deletionPending {
+                        deletionRecovery
                     } else if model.signedIn {
                         switch page {
                         case .create: createForm
                         case .join: joinForm
+                        case .deleteAccount:
+                            if let account = model.state?.account { deletionForm(account) }
+                        case .reauthenticate:
+                            if let account = model.state?.account,
+                               let device = model.state?.devices.first(where: \.current) {
+                                reauthenticationForm(account, device: device)
+                            }
                         default: households
                         }
                     } else if model.state?.configured == false {
@@ -107,9 +112,22 @@ struct AccountSheet: View {
             page = signedIn ? (model.pendingInvitation == nil ? .account : .join) : .email
             if signedIn { memberName = model.state?.account?.name ?? "" }
         }
+        .onChange(of: model.state?.account?.id) { _, _ in
+            deletionConfirmation = ""
+            emailCode = ""
+            if model.accountDeletionConfirmed {
+                email = ""
+                recoveryCode = ""
+                displayName = ""
+                memberName = ""
+                householdName = ""
+                invitation = ""
+            }
+            if page == .deleteAccount || page == .reauthenticate { page = .account }
+        }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
-            if pending != nil, model.signedIn { page = .join }
+            if pending != nil, model.canUseAccount, page != .deleteAccount, page != .reauthenticate { page = .join }
         }
         .onChange(of: model.incomingInvitationError) { _, error in
             if error != nil { invitation = "" }
@@ -156,11 +174,15 @@ struct AccountSheet: View {
     }
 
     private var title: String {
-        if model.deletionPending { return "Your account" }
+        if model.deletionCleanupRequired { return "Clear saved access" }
+        if model.deletionNeedsRefresh { return "Check account deletion" }
+        if model.deletionPending { return "Account deletion pending" }
         if model.signedIn {
             switch page {
             case .create: return "Create a household"
             case .join: return "Join a household"
+            case .deleteAccount: return "Delete your account"
+            case .reauthenticate: return "Verify your email"
             default: return "Your Roomlings account"
             }
         }
@@ -195,7 +217,8 @@ struct AccountSheet: View {
     }
 
     @ViewBuilder private var incomingInvitation: some View {
-        if model.pendingInvitation != nil || model.incomingInvitationError != nil {
+        if !model.deletionPending && !model.deletionNeedsRefresh && !model.deletionCleanupRequired,
+           model.pendingInvitation != nil || model.incomingInvitationError != nil {
             AccountSection("Household invitation") {
                 if let error = model.incomingInvitationError {
                     RoomFeedback(error, identifier: "invitation-link-error")
@@ -216,7 +239,7 @@ struct AccountSheet: View {
     }
 
     @ViewBuilder private var incomingNotification: some View {
-        if notifications.pending != nil {
+        if notifications.pending != nil && !model.deletionPending && !model.deletionNeedsRefresh && !model.deletionCleanupRequired {
             AccountSection("Notification") {
                 Text(model.signedIn
                      ? "Your notification is waiting. Finish here, then close Account to open it."
@@ -363,6 +386,118 @@ struct AccountSheet: View {
                     .id("notifications-\(householdID)")
             }
             accountActions
+            AccountSection("Account lifecycle") {
+                Text("Before deleting your account, transfer ownership of any household that still has other active roommates. Shared debts and ledger history stay.")
+                    .foregroundStyle(RoomTheme.muted)
+                Button("Delete my account", role: .destructive) {
+                    model.clearFeedback()
+                    deletionConfirmation = ""
+                    page = .deleteAccount
+                }
+                .accessibilityIdentifier("open-account-deletion")
+            }
+        }
+    }
+
+    private func deletionForm(_ account: Account) -> some View {
+        AccountSection("This cannot be undone") {
+            Text("This deletes your account and sign-in identity and revokes linked access. Shared ledger records keep former-roommate references so balances remain correct. Names written in expense descriptions are not automatically removed. Export any ledgers you need first.")
+                .foregroundStyle(RoomTheme.muted)
+            Text("Enter \(account.email) to confirm.")
+            RoomField("Account email to confirm deletion", text: $deletionConfirmation)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("account-deletion-email")
+            Text("Deletion requires a sign-in within the last ten minutes.")
+                .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
+            Button("Verify email again") {
+                model.clearFeedback()
+                emailCode = ""
+                deletionConfirmation = ""
+                page = .reauthenticate
+            }
+            .accessibilityIdentifier("reauthenticate-account")
+            Button("Delete my account", role: .destructive) {
+                Task {
+                    if await model.deleteAccount(accountID: account.id, confirmation: deletionConfirmation) {
+                        deletionConfirmation = ""
+                        page = .email
+                    }
+                }
+            }
+            .accessibilityIdentifier("confirm-account-deletion")
+            .disabled(deletionConfirmation != account.email || model.deletionRequiresReauthentication || notifications.busy)
+            Button("Cancel") {
+                deletionConfirmation = ""
+                model.clearFeedback()
+                page = .account
+            }
+            .buttonStyle(RoomButtonStyle(kind: .text))
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("account-deletion-form")
+    }
+
+    private func reauthenticationForm(_ account: Account, device: AccountDevice) -> some View {
+        AccountSection("Verify before deleting") {
+            Text(account.email)
+            Text("Verification only refreshes your sign-in. You will review and confirm deletion again afterwards.")
+                .foregroundStyle(RoomTheme.muted)
+            Button("Send verification code") { Task { await model.sendCode(email: account.email) } }
+                .accessibilityIdentifier("send-deletion-verification")
+            RoomField("Email sign-in code", text: $emailCode)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+            Button("Verify email") {
+                Task {
+                    if await model.reauthenticate(accountID: account.id, code: emailCode, label: device.label) {
+                        emailCode = ""
+                        deletionConfirmation = ""
+                        page = .deleteAccount
+                    }
+                }
+            }
+            .buttonStyle(RoomButtonStyle(kind: .primary))
+            .accessibilityIdentifier("verify-deletion-email")
+            .disabled(emailCode.isEmpty)
+            Button("Cancel") {
+                emailCode = ""
+                model.clearFeedback()
+                page = .account
+            }
+            .buttonStyle(RoomButtonStyle(kind: .text))
+        }
+    }
+
+    @ViewBuilder private var deletionRecovery: some View {
+        if model.deletionCleanupRequired {
+            AccountSection("Finish clearing this device") {
+                Text("Your account was deleted. Saved access on this device still needs to be cleared before you continue.")
+                Button("Clear saved access") { Task { await model.finishAccountDeletionCleanup() } }
+                    .accessibilityIdentifier("clear-deleted-account-access")
+                Button("Refresh account") { Task { await model.refresh() } }
+            }
+        } else if model.deletionPending {
+            AccountSection("Deletion is not complete yet") {
+                Text("Account access is disabled while deletion finishes. The server retries automatically. This is not a completed deletion yet.")
+                Button("Check deletion status") { Task { await model.refresh() } }
+                    .accessibilityIdentifier("check-account-deletion")
+                if let account = model.state?.account {
+                    Button("Retry account deletion", role: .destructive) {
+                        Task { await model.deleteAccount(accountID: account.id, confirmation: account.email) }
+                    }
+                    .accessibilityIdentifier("retry-account-deletion")
+                    .disabled(notifications.busy)
+                }
+                Button("Sign out", role: .destructive) { confirmingSignOut = true }
+            }
+        } else {
+            AccountSection("Deletion could not be confirmed") {
+                Text("The request may have reached the server. Household access stays closed until you check its status.")
+                Button("Check deletion status") { Task { await model.refresh() } }
+                    .accessibilityIdentifier("check-account-deletion")
+            }
         }
     }
 

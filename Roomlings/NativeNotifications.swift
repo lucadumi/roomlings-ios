@@ -77,6 +77,7 @@ final class NativeNotifications {
     private let system: any NotificationSystem
     private let environment: APNsEnvironment?
     private var accountID: UUID?
+    private var sessionID: UUID?
     private var householdID: UUID?
     private var token: APNsDeviceToken?
     private var attemptedRegistration: Registration?
@@ -109,13 +110,15 @@ final class NativeNotifications {
     func attach(to account: AccountModel) {
         self.account = account
         let nextAccount = account.canUseAccount ? account.state?.account?.id : nil
+        let nextSession = account.canUseAccount ? account.state?.devices.first(where: \.current)?.id : nil
         let nextHousehold = account.state?.session?.household.id
-        if accountID != nextAccount {
-            if accountID != nil {
+        if accountID != nextAccount || sessionID != nextSession {
+            if accountID != nil && accountID != nextAccount {
                 system.unregister()
                 system.clearDelivered()
             }
             accountID = nextAccount
+            sessionID = nextSession
             attemptedRegistration = nil
             token = nil
             requestedAPNs = false
@@ -127,6 +130,15 @@ final class NativeNotifications {
         if householdID != nextHousehold {
             householdID = nextHousehold
             settings = nil
+        }
+        if account.deletionPending || account.accountDeletionConfirmed {
+            pending = nil
+            routingError = nil
+            error = nil
+        }
+        if account.accountDeletionConfirmed {
+            installation = nil
+            loadedInstallation = false
         }
         account.notificationFailure = error
     }
@@ -167,6 +179,10 @@ final class NativeNotifications {
     }
 
     func refreshSettings() async {
+        guard !Task.isCancelled else {
+            notificationLog.debug("Notification settings view closed before its read started.")
+            return
+        }
         guard let account, account.canUseAccount else {
             setError("Sign in and open your household before using notifications.")
             return
@@ -175,12 +191,15 @@ final class NativeNotifications {
             refreshRequested = true
             return
         }
-        guard begin() else { return }
+        guard begin(clearError: false) else { return }
         defer { finishWork() }
         do {
             try await loadInstallation()
             permission = await system.permission()
             try await loadPreferences()
+            setError(nil)
+        } catch is CancellationError where Task.isCancelled {
+            notificationLog.debug("Notification settings read cancelled because its view closed.")
         } catch {
             report(error)
         }
@@ -221,9 +240,14 @@ final class NativeNotifications {
                 permission = allowed ? .allowed : .denied
             }
             guard permission == .allowed else { throw PushFailure.permissionDenied }
+            guard account.canUseAccount, self.accountID == accountID else { throw AccountError.accountStateRequired }
             guard let installation, let store = account.notificationStore else { throw PushFailure.storageUnavailable }
             let enabled = PushInstallation(id: installation.id, enabled: true, accountID: accountID)
             try await store.save(enabled)
+            guard account.canUseAccount, self.accountID == accountID else {
+                if try await store.read() == enabled { try await store.clear() }
+                throw AccountError.accountStateRequired
+            }
             self.installation = enabled
             attemptedRegistration = nil
             requestedAPNs = false
@@ -231,7 +255,11 @@ final class NativeNotifications {
             try requestAPNs()
             try await uploadToken()
         } catch {
-            report(error)
+            if account.canUseAccount, self.accountID == accountID {
+                report(error)
+            } else {
+                notificationLog.error("Notification enable stopped because account access changed.")
+            }
         }
     }
 
@@ -330,13 +358,13 @@ final class NativeNotifications {
         }
     }
 
-    private func begin() -> Bool {
+    private func begin(clearError: Bool = true) -> Bool {
         guard !busy, let account, !account.busy, account.canUseAccount else {
             setError("Wait for the current account action, then open your household and retry notifications.")
             return false
         }
         busy = true
-        setError(nil)
+        if clearError { setError(nil) }
         return true
     }
 
