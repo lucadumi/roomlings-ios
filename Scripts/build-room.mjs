@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { buildTheme } from './build-theme.mjs'
+import { checkBrandAssets } from './build-brand-assets.mjs'
 import { checkArchiveSettings, checkArchiveSource } from './check-release.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -23,6 +24,7 @@ if (archiving) {
     revision, dirty, workflow: await readFile(join(project, '.github/workflows/ci.yml'), 'utf8'),
   })
 }
+await checkBrandAssets({ source, project, requireWeb })
 await buildTheme({ source, project, requireWeb })
 const { build } = await import(pathToFileURL(requireWeb.resolve('vite')).href)
 const react = (await import(pathToFileURL(requireWeb.resolve('@vitejs/plugin-react')).href)).default

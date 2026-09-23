@@ -1,7 +1,7 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-export async function buildTheme({ source, project, requireWeb }) {
+export async function readSharedTheme({ source, requireWeb }) {
   const postcss = requireWeb('postcss')
   const css = postcss.parse(await readFile(join(source, 'src/style.css'), 'utf8'))
   const properties = new Map()
@@ -13,6 +13,11 @@ export async function buildTheme({ source, project, requireWeb }) {
     const reference = /^var\((--[\w-]+)\)$/.exec(value)
     return reference ? resolve(reference[1], new Set([...visited, name])) : value
   }
+  return resolve
+}
+
+export async function buildTheme({ source, project, requireWeb }) {
+  const resolve = await readSharedTheme({ source, requireWeb })
   const names = {
     paper: '--paper', ink: '--ink', muted: '--muted', sage: '--sage', line: '--line',
     surface: '--control-surface', border: '--control-border', hover: '--control-hover',
