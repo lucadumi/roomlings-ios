@@ -77,6 +77,8 @@ jobs:
           cache-dependency-path: roomlings/package-lock.json
       - name: Check release archive safeguards
         run: node --test Tests/Release/release.test.mjs
+      - name: Check native shard coverage
+        run: node --test Tests/CI/native-test-plan.test.mjs
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - name: Check the preinstalled browser version
         run: |
@@ -93,13 +95,15 @@ jobs:
       - run: node --test Tests/RoomRenderer/room-renderer.test.mjs
 
   native:
-    name: Native (${{ matrix.name }})
+    name: Native (${{ matrix.name }}, ${{ matrix.shard }}/2)
     needs: web-revision
     runs-on: macos-26
-    timeout-minutes: 105
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
+        name: [iPhone, iPad]
+        shard: [1, 2]
         include:
           - name: iPhone
             simulator: iPhone 17 Pro
@@ -141,8 +145,9 @@ jobs:
           echo "device=$device" >> "$GITHUB_OUTPUT"
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - run: swift test --package-path Packages/RoomlingsCore
+        if: matrix.shard == 1
       - name: Build the unsigned device release and verify its metadata
-        if: matrix.name == 'iPhone'
+        if: matrix.name == 'iPhone' && matrix.shard == 1
         run: |
           xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
             -configuration Release -destination 'generic/platform=iOS' \
@@ -170,17 +175,19 @@ jobs:
         env:
           DEVICE: ${{ steps.simulator.outputs.device }}
         run: xcrun simctl bootstatus "$DEVICE" -b
-      - name: Run native account and room flows
-        # Leave room for the ownership flows beyond the existing 75-minute iPad suite.
-        timeout-minutes: 90
+      - name: Run the native account and room shard
+        timeout-minutes: 60
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
-        run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room
+          SHARD: ${{ matrix.shard }}
+        run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room --shard "$SHARD/2"
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && failure() }}
         with:
-          name: native-failure-${{ matrix.name }}
-          path: roomlings-ios/Build/*.xcresult
+          name: native-failure-${{ matrix.name }}-${{ matrix.shard }}
+          path: |
+            roomlings-ios/Build/*.xcresult
+            roomlings-ios/Build/Test-enumeration-*.json
           if-no-files-found: ignore
           retention-days: 7
 

@@ -56,3 +56,5 @@ Deletion flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAcc
 Ownership flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testOwnershipTransferConfirmsTheNamedMemberAndPreservesTheLedger --ui-test AccountUITests/testAnUnconfirmedOwnershipTransferMustBeRefreshedWithoutRepeatingIt`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.
+Each device's UI coverage is split into two isolated jobs using Xcode's compiled test inventory. Model tests run once per device, on shard 1; the result bundle must contain exactly the assigned tests, all passing without skips.
+To reproduce a CI shard, add `--include-room --shard 1/2` or `--include-room --shard 2/2` to `Scripts/test-accounts.mjs`. Run local shards sequentially because they share build output. Ordinary unsharded runs and individual `--ui-test` selectors are unchanged.
