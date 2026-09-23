@@ -54,6 +54,7 @@ enum APIEndpoint: Equatable {
     case account, code, verify, recover, logout, deleteAccount
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
+    case transferOwnership(UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case recordAnalytics(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
@@ -85,6 +86,7 @@ enum APIEndpoint: Equatable {
         case .createInvitation(let id): "api/account/households/\(id.uuidString.lowercased())/invitations"
         case .revokeInvitation(let household, let invitation):
             "api/account/households/\(household.uuidString.lowercased())/invitations/\(invitation.uuidString.lowercased())"
+        case .transferOwnership(let id): "api/account/households/\(id.uuidString.lowercased())/owner"
         case .notificationSettings(let id), .saveNotificationSettings(let id):
             "api/account/households/\(id.uuidString.lowercased())/notifications"
         case .registerPushDevice: "api/account/push-devices"

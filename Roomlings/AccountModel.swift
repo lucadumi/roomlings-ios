@@ -367,17 +367,57 @@ final class AccountModel {
 
     @discardableResult
     func loadInvitations() async -> Bool {
+        await loadHouseholdAccess(forInvitations: true)
+    }
+
+    @discardableResult
+    func loadHouseholdAccess() async -> Bool {
+        await loadHouseholdAccess(forInvitations: false)
+    }
+
+    private func loadHouseholdAccess(forInvitations: Bool) async -> Bool {
         guard canUseAccount, let householdID = state?.session?.household.id else {
-            message = "Open your household before loading its invitations."
+            message = forInvitations ? "Open your household before loading its invitations."
+                : "Open your household before loading its members."
             return false
         }
         guard let client, begin() else { return false }
         defer { busy = false }
         do {
-            let access = try await client.loadInvitations(householdID: householdID)
+            let access = try await client.loadHouseholdAccess(householdID: householdID)
             return acceptInvitations(access, state: await client.state)
         } catch {
-            await failed(error, action: .invitationLoad, client: client)
+            await failed(error, action: forInvitations ? .invitationLoad : .householdAccessLoad, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
+    func transferOwnership(to memberID: UUID, householdID: UUID, version: Int64, accountID: UUID) async -> Bool {
+        guard canUseAccount, state?.account?.id == accountID,
+              let selected = state?.session, selected.household.id == householdID,
+              let access = invitations, access.household.id == householdID, access.memberID == selected.memberID,
+              access.household.version == version, selected.household.version == version,
+              !invitationNeedsRefresh else {
+            message = "Refresh household members and review the current ownership before transferring it."
+            return false
+        }
+        guard access.role == .owner, access.ownershipCandidates.contains(where: { $0.id == memberID }) else {
+            message = "Only the owner can transfer ownership to another active account-linked roommate."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        clearInvitationLink()
+        do {
+            let result = try await client.transferOwnership(
+                to: memberID, householdID: householdID, version: version, accountID: accountID
+            )
+            let published = acceptInvitations(result, state: await client.state)
+            if published { notice = "Ownership transferred. You are still a household member." }
+            return published
+        } catch {
+            await failed(error, action: .ownershipTransfer, client: client)
             invitationNeedsRefresh = true
             return false
         }
@@ -719,6 +759,7 @@ final class AccountModel {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, completeChore, undoChore, shopping, ledger
         case invitationLoad, invitationCreate, invitationRevoke
+        case householdAccessLoad, ownershipTransfer
 
         var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
         var isInvitation: Bool { self == .invitationLoad || isInvitationMutation }
@@ -783,7 +824,7 @@ final class AccountModel {
             case AccountError.invalidInput(.confirmation), AccountError.server(400, _):
                 return "Enter your exact account email to confirm deletion."
             case AccountError.server(_, .some(.ownershipTransferRequired)):
-                return "Transfer ownership of any household with other active roommates before deleting your account. Ownership settings are available on the web."
+                return "Transfer ownership of any household with other active roommates before deleting your account. Open Household members in Account."
             case AccountError.server(_, .some(.reauthenticationRequired)):
                 return "Verify your email again before deleting your account."
             case AccountError.server(_, .some(.accountDeletionPending)):
@@ -796,6 +837,28 @@ final class AccountModel {
                 return "Another account action is still running."
             default:
                 return "Could not confirm account deletion. Check deletion status before trying again."
+            }
+        }
+        if action == .householdAccessLoad || action == .ownershipTransfer {
+            switch error {
+            case is KeychainError, AccountError.credentialStorage:
+                return "Saved access could not be read securely. Unlock this device and try again."
+            case AccountError.server(_, .some(.accountSessionRequired)):
+                return "Your session has expired. Sign in again."
+            case AccountError.server(_, .some(.accountDeletionPending)):
+                return "Account deletion is pending. Check its status or retry deletion here."
+            case AccountError.server(403, _), AccountError.server(404, _):
+                return "Your household access changed. Refresh Account before managing its members."
+            case AccountError.server(409, _), AccountError.invalidInput(.version):
+                return "The household changed elsewhere. Refresh household members and review ownership before continuing."
+            case AccountError.server(400, _), AccountError.invalidInput(.memberID):
+                return "Choose another active roommate with a linked Roomlings account."
+            case AccountError.operationInProgress:
+                return "Another account action is still running."
+            default:
+                return action == .ownershipTransfer
+                    ? "Ownership transfer could not be confirmed. Refresh household members before trying again."
+                    : "Household members could not be loaded. Refresh them to try again."
             }
         }
         if error is CancellationError {

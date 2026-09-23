@@ -67,6 +67,14 @@ public struct AccountMembership: Sendable, Codable, Equatable {
         currency = try container.decode(HouseholdCurrency.self, forKey: .currency)
         role = try container.decode(AccountRole.self, forKey: .role)
     }
+
+    fileprivate init(replacing original: AccountMembership, household: HouseholdSnapshot, role: AccountRole) {
+        householdID = original.householdID
+        householdName = household.name
+        memberID = original.memberID
+        currency = household.currency
+        self.role = role
+    }
 }
 
 public struct AccountDevice: Sendable, Codable, Equatable, Identifiable {
@@ -254,21 +262,24 @@ public struct AccountState: Sendable, Codable, Equatable,
         }
     }
 
-    func replacingHousehold(_ household: HouseholdSnapshot) throws -> AccountState {
+    func replacingHousehold(_ household: HouseholdSnapshot, role: AccountRole? = nil) throws -> AccountState {
         guard isSignedIn, !deletionPending, let session,
               session.household.id == household.id, household.memberIDs.contains(session.memberID),
               memberships.contains(where: { $0.householdID == household.id && $0.memberID == session.memberID }) else {
             throw AccountError.invalidResponse
         }
         return AccountState(
-            replacing: self, session: AccountKitchenSession(memberID: session.memberID, household: household)
+            replacing: self, session: AccountKitchenSession(memberID: session.memberID, household: household), role: role
         )
     }
 
-    private init(replacing original: AccountState, session: AccountKitchenSession) {
+    private init(replacing original: AccountState, session: AccountKitchenSession, role: AccountRole?) {
         configured = original.configured
         account = original.account
-        memberships = original.memberships
+        memberships = original.memberships.map { membership in
+            guard let role, membership.householdID == session.household.id else { return membership }
+            return AccountMembership(replacing: membership, household: session.household, role: role)
+        }
         devices = original.devices
         self.session = session
         deletionPending = original.deletionPending

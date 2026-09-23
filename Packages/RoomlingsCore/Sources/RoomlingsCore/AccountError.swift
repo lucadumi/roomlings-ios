@@ -2,7 +2,7 @@ import Foundation
 
 public enum AccountInputField: String, Sendable {
     case email, emailCode, name, deviceLabel, recoveryCode
-    case memberName, budgetCents, invitationCode, confirmation
+    case memberName, memberID, budgetCents, invitationCode, confirmation
     case title, notes, roomID, area, componentID, dueDate, repeatDays, rotation, turn, version, choreVersion
     case quantity, itemVersion
     case expenseDescription = "description"

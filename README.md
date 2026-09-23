@@ -26,6 +26,7 @@ Release uses its own `Configuration/Release.local.xcconfig`. See the [TestFlight
 - Open **Shopping** to add, edit, claim and pick up items without creating debt, then record a paid receipt that splits it in the shared ledger.
 - Open **Money** for receipts, what each roommate owes or is owed, and repayments. Roomlings tracks money; it never moves it.
 - The branded header opens **Account** from the household name or your avatar.
+- **Account > Household members** shows the current roster and lets the owner confirm a handoff to another active account-linked roommate, without changing shared balances.
 - **Account > Notifications** saves chore and money preferences. Enable push explicitly on each account/device; delivery requires the server and Apple signing setup in the [native guide](Packages/RoomlingsCore/README.md).
 - **Account > Account lifecycle** offers native account deletion with exact email confirmation, re-verification and pending-deletion recovery. [What deletion keeps](Packages/RoomlingsCore/README.md#account-deletion).
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
@@ -51,5 +52,6 @@ Use `--ui-test TestClass/testMethod` to select individual UI flows.
 Notification flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration`.
 Analytics flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAnalyticsCountsForegroundVisitsButNotSheetRefreshes --ui-test AccountUITests/testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools`.
 Deletion flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAccountDeletionRequiresExactConfirmationAndKeepsTheSharedLedger --ui-test AccountUITests/testAccountDeletionPendingSurvivesRelaunchAndOffersANativeRetry`.
+Ownership flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testOwnershipTransferConfirmsTheNamedMemberAndPreservesTheLedger --ui-test AccountUITests/testAnUnconfirmedOwnershipTransferMustBeRefreshedWithoutRepeatingIt`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.

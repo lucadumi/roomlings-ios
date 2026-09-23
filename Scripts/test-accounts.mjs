@@ -53,6 +53,9 @@ let invitationFailure = null
 const invitationRequests = []
 const invitationCodes = new Map()
 const invitationBrowsers = new Map()
+const ownershipRequests = []
+const ownershipFixtures = new Map()
+let ownershipFailure = null
 let nextAccountLoad = null
 let activeAccountLoad = null
 function releaseAccountLoad() {
@@ -96,6 +99,7 @@ function observeMutations(path, requests, consumeFailure) {
     if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) { next(); return }
     requests.push({
       path: request.originalUrl, method: request.method, version: request.body.version, itemVersion: request.body.itemVersion,
+      memberId: request.body.memberId,
       mutationId: request.body.mutationId, mutationVersion: request.body.mutationVersion,
       native: request.get('X-Roomlings-Client') === 'ios',
       browserHeaders: ['origin', 'cookie', 'x-csrf-token', 'sec-fetch-site'].some((name) => request.get(name) !== undefined),
@@ -154,6 +158,11 @@ app.use(invitationRoute, (request, response, next) => {
 observeMutations(invitationRoute, invitationRequests, () => {
   const failure = invitationFailure
   invitationFailure = null
+  return failure
+})
+observeMutations(/^\/api\/account\/households\/[^/]+\/owner$/, ownershipRequests, () => {
+  const failure = ownershipFailure
+  ownershipFailure = null
   return failure
 })
 observeMutations(/^\/api\/account$/, deletionRequests, () => {
@@ -241,6 +250,59 @@ app.post('/_fixture/deletion/state', express.json(), async (request, response) =
     deletionAttempts, verificationRequests: verificationRequests.length,
   })
 })
+app.post('/_fixture/ownership/seed', express.json(), async (request, response) => {
+  const input = z.object({
+    email: accountEmailSchema, householdId: z.string().uuid(), invitation: z.string(), peerEmail: accountEmailSchema,
+  }).parse(request.body)
+  const peer = await store.accounts.signIn(identity(input.peerEmail), 'Sam', 'Ownership fixture')
+  try {
+    const joined = await store.accounts.accept(peer.session, input.invitation, 'Sam')
+    if (joined.session?.household.id !== input.householdId) throw new Error('Ownership fixture joined a different household.')
+    const peerID = joined.session.memberId
+    const browserID = randomUUID()
+    const formerID = randomUUID()
+    await asInvitationOwner(input.email, async (session) => {
+      const { household, memberId } = await store.accounts.household(session, input.householdId)
+      await store.accounts.setRoomRole(household, memberId, peerID, 'admin')
+      household.members.push(
+        { id: browserID, name: 'Browser roommate', color: '#81b29a' },
+        { id: formerID, name: 'Former roommate', color: '#81b29a', inactive: true },
+      )
+      household.expenses.push(expenseSchema.parse({
+        id: randomUUID(), createdAt: new Date().toISOString(), description: 'Shared ownership receipt',
+        amount: 1250, paidBy: memberId, participants: [memberId, peerID],
+        category: 'other', date: billingDate(household.billingTimeZone),
+      }))
+      household.version++
+      await store.save(household)
+      ownershipFixtures.set(input.householdId, { email: input.email, peerID })
+      response.json({ ownerId: memberId, peerId: peerID, browserId: browserID, formerId: formerID })
+    })
+  } finally {
+    await store.accounts.logout(peer.session, false)
+  }
+})
+app.post('/_fixture/ownership/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const fixture = ownershipFixtures.get(id)
+  const household = await store.get(id)
+  if (!fixture || !household) throw new Error('The ownership fixture is missing.')
+  const access = await store.accounts.roomAccess(household, fixture.peerID)
+  const originalAccount = await database.prepare('SELECT 1 FROM accounts WHERE email = ?').get(fixture.email)
+  response.json({
+    version: household.version, members: access.members, originalAccountExists: !!originalAccount,
+    requests: ownershipRequests.filter((entry) => entry.path === `/api/account/households/${id}/owner`),
+    ledgerDigest: createHash('sha256').update(JSON.stringify({
+      expenses: household.expenses, settlements: household.settlements, bills: household.bills,
+      shopping: household.shopping, chores: household.chores,
+    })).digest('hex'),
+    balances: Object.fromEntries(balances(household)),
+  })
+})
+app.post('/_fixture/ownership/failure', express.json(), (request, response) => {
+  ownershipFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
 app.post('/_fixture/analytics/state', express.json(), async (request, response) => {
   const { householdIds } = z.object({ householdIds: z.array(z.string().uuid()).min(1).max(50) }).parse(request.body)
   const rows = await database.prepare(`SELECT household_id, member_id, kind, local_date, occurrences
@@ -291,6 +353,9 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
   invitationRequests.length = 0
   invitationCodes.clear()
   invitationBrowsers.clear()
+  ownershipRequests.length = 0
+  ownershipFixtures.clear()
+  ownershipFailure = null
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
@@ -550,7 +615,7 @@ try {
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = 78 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 32)
+    const expected = 86 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 36)
       + (values['include-room'] ? 2 : 0)
     if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
       throw new Error(`Account flows did not all execute. Results: ${result}`)
