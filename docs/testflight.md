@@ -43,7 +43,7 @@ node --test Tests/Release/release.test.mjs
 | Production services | Select and deploy the public HTTPS API and invitation website. The current client expects the server's schema-5-compatible features. Deployment and any shared database migration require separate approval and a recovery plan. |
 | Icon, launch presentation and version | There is no app-icon asset catalog yet, and the launch screen is an empty system configuration. Obtain the owner's design approval before adding them or changing the version scheme. |
 | Account deletion | The native [Account lifecycle flow](../Packages/RoomlingsCore/README.md#account-deletion) provides confirmation, re-verification and pending-deletion recovery. Owners with other active roommates can first transfer ownership in **Account > Household members**. Verify the deployed provider and recovery path before review. |
-| Privacy | Prepare the privacy policy, App Store privacy answers and appropriate [privacy manifest](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files). Review the actual data inventory: names/email, account/member/device-installation identifiers, household content, expenses/repayments and retention events. Do not declare that no data is collected. |
+| Privacy | The app bundles `PrivacyInfo.xcprivacy` with its current first-party data declarations. Review the [data inventory](privacy.md), generate the signed archive's privacy report, publish the privacy policy and enter matching App Store privacy answers for the deployed services. Do not declare that no data is collected. |
 | Review information | Provide a beta description, test instructions, working sign-in access and review contact details through App Store Connect. |
 | Cohort | The owner still needs to choose a private tester list or an external public link. External access requires Beta App Review. Do not enable the marketing site's TestFlight link before that access exists. |
 
@@ -60,6 +60,6 @@ xcodebuild -project Roomlings.xcodeproj -scheme Roomlings \
   NODE_BINARY="$(command -v node)" archive
 ```
 
-Inspect the archived app's `Info.plist` and `RoomRenderer/source.json`, then use Organizer to validate and upload the approved archive. No repository script uploads a build or changes Apple credentials.
+Inspect the archived app's `Info.plist`, `PrivacyInfo.xcprivacy` and `RoomRenderer/source.json`, then use Organizer to generate the privacy report, validate and upload the approved archive. No repository script uploads a build or changes Apple credentials.
 
 Follow [Apple's upload instructions](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/) and current [upload requirements](https://developer.apple.com/news/upcoming-requirements/). Once processing and review finish, verify on real devices that a tester can sign in, join a household and use its chores, shopping and money. Keep #9 open until a real due-chore push arrives and #10 open until a real week's retention events can be reported.

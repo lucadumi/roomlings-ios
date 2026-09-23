@@ -32,6 +32,7 @@ Release uses its own `Configuration/Release.local.xcconfig`. See the [TestFlight
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
 - Shared web fonts, colours, error banners, graphics and static logo loaders; sessions stay in the native Keychain.
 - Minimal [retention events](Packages/RoomlingsCore/README.md#retention-analytics) go only to Roomlings, without message content or a third-party SDK.
+- The app bundles privacy declarations; see the [native data inventory](docs/privacy.md) before distribution.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
 ## Contributing

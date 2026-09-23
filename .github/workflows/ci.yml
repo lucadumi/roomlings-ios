@@ -157,6 +157,10 @@ jobs:
           test "$(plutil -extract RoomlingsAPIOrigin raw "$info")" = https://api.release-check.invalid
           test "$(plutil -extract RoomlingsInvitationOrigin raw "$info")" = https://release-check.invalid
           test "$(plutil -extract RoomlingsAPNsEnvironment raw "$info")" = production
+          privacy=Build/Release/Build/Products/Release-iphoneos/Roomlings.app/PrivacyInfo.xcprivacy
+          plutil -lint "$privacy"
+          test "$(plutil -convert json -o - "$privacy" | jq -Sc .)" = \
+            "$(plutil -convert json -o - Roomlings/PrivacyInfo.xcprivacy | jq -Sc .)"
       - name: Wait for the simulator
         env:
           DEVICE: ${{ steps.simulator.outputs.device }}

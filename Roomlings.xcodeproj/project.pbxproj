@@ -50,6 +50,8 @@
 		A00000000000000000000029 /* AccountHouseholdMembersSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000031 /* AccountHouseholdMembersSection.swift */; };
 		A0000000000000000000002A /* OwnershipModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000032 /* OwnershipModelTests.swift */; };
 		A0000000000000000000002B /* OwnershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000033 /* OwnershipUITests.swift */; };
+		A0000000000000000000002C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000034 /* PrivacyInfo.xcprivacy */; };
+		A0000000000000000000002D /* PrivacyManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000035 /* PrivacyManifestTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +116,8 @@
 		B00000000000000000000031 /* AccountHouseholdMembersSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHouseholdMembersSection.swift; sourceTree = "<group>"; };
 		B00000000000000000000032 /* OwnershipModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnershipModelTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000033 /* OwnershipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnershipUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000034 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B00000000000000000000035 /* PrivacyManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyManifestTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +164,7 @@
 				B00000000000000000000002 /* RoomPreviewScreen.swift */,
 				B00000000000000000000003 /* RoomWebView.swift */,
 				B00000000000000000000004 /* Info.plist */,
+				B00000000000000000000034 /* PrivacyInfo.xcprivacy */,
 				B0000000000000000000000B /* AccountModel.swift */,
 				B0000000000000000000000C /* AccountSheet.swift */,
 				B0000000000000000000000D /* RoomVisualState.swift */,
@@ -197,6 +202,7 @@
 				B0000000000000000000002D /* AnalyticsModelTests.swift */,
 				B0000000000000000000002F /* AccountDeletionModelTests.swift */,
 				B00000000000000000000032 /* OwnershipModelTests.swift */,
+				B00000000000000000000035 /* PrivacyManifestTests.swift */,
 			);
 			path = RoomlingsTests;
 			sourceTree = "<group>";
@@ -342,6 +348,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A0000000000000000000000D /* Resources/Fonts in Resources */,
+				A0000000000000000000002C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,6 +416,7 @@
 				A00000000000000000000025 /* AnalyticsModelTests.swift in Sources */,
 				A00000000000000000000027 /* AccountDeletionModelTests.swift in Sources */,
 				A0000000000000000000002A /* OwnershipModelTests.swift in Sources */,
+				A0000000000000000000002D /* PrivacyManifestTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
