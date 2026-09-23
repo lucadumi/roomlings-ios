@@ -12,7 +12,7 @@ public actor AccountSession {
     private let api: AccountAPI
     private let shoppingAPI: ShoppingAPI
     private let ledgerAPI: LedgerAPI
-    private let invitationAPI: InvitationAPI
+    private let householdAccessAPI: HouseholdAccessAPI
     private let notificationAPI: NotificationAPI
     private let analyticsAPI: AnalyticsAPI
     private let tokenStore: any SessionTokenStore
@@ -29,7 +29,7 @@ public actor AccountSession {
         api = AccountAPI(client: client)
         shoppingAPI = ShoppingAPI(client: client)
         ledgerAPI = LedgerAPI(client: client)
-        invitationAPI = InvitationAPI(client: client)
+        householdAccessAPI = HouseholdAccessAPI(client: client)
         notificationAPI = NotificationAPI(client: client)
         analyticsAPI = AnalyticsAPI(client: client)
         self.tokenStore = tokenStore
@@ -228,20 +228,43 @@ public actor AccountSession {
     }
 
     public func loadInvitations(householdID: UUID) async throws -> HouseholdInvitationAccess {
-        try await withInvitations(householdID: householdID) { [invitationAPI] token in
-            try await invitationAPI.load(householdID: householdID, token: token)
+        try await loadHouseholdAccess(householdID: householdID)
+    }
+
+    public func loadHouseholdAccess(householdID: UUID) async throws -> HouseholdInvitationAccess {
+        try await withHouseholdAccess(householdID: householdID) { [householdAccessAPI] token, _ in
+            try await householdAccessAPI.load(householdID: householdID, token: token)
         }
     }
 
     public func createInvitation(householdID: UUID, version: Int64) async throws -> CreatedHouseholdInvitation {
-        try await withInvitations(householdID: householdID) { [invitationAPI] token in
-            try await invitationAPI.create(householdID: householdID, version: version, token: token)
+        try await withHouseholdAccess(householdID: householdID) { [householdAccessAPI] token, _ in
+            try await householdAccessAPI.create(householdID: householdID, version: version, token: token)
         }
     }
 
     public func revokeInvitation(id: UUID, householdID: UUID, version: Int64) async throws -> HouseholdInvitationAccess {
-        try await withInvitations(householdID: householdID) { [invitationAPI] token in
-            try await invitationAPI.revoke(id: id, householdID: householdID, version: version, token: token)
+        try await withHouseholdAccess(householdID: householdID) { [householdAccessAPI] token, _ in
+            try await householdAccessAPI.revoke(id: id, householdID: householdID, version: version, token: token)
+        }
+    }
+
+    public func transferOwnership(
+        to memberID: UUID, householdID: UUID, version: Int64, accountID: UUID
+    ) async throws -> HouseholdInvitationAccess {
+        try await withHouseholdAccess(householdID: householdID) { [householdAccessAPI] token, original in
+            guard original.account?.id == accountID, let selected = original.session,
+                  original.memberships.contains(where: { $0.householdID == householdID && $0.role == .owner }) else {
+                throw AccountError.accountStateRequired
+            }
+            guard selected.household.version == version else { throw AccountError.invalidInput(.version) }
+            guard selected.memberID != memberID,
+                  try HouseholdMember.projection(selected.household.value).contains(where: { $0.id == memberID && !$0.inactive }) else {
+                throw AccountError.invalidInput(.memberID)
+            }
+            return try await householdAccessAPI.transferOwnership(
+                to: memberID, householdID: householdID, version: version, token: token
+            )
         }
     }
 
@@ -464,19 +487,20 @@ public actor AccountSession {
         }
     }
 
-    private func withInvitations<Response: HouseholdInvitationResponse>(
-        householdID: UUID, _ operation: @Sendable (SessionToken) async throws -> Response
+    private func withHouseholdAccess<Response: HouseholdAccessResponse>(
+        householdID: UUID, _ operation: @Sendable (SessionToken, AccountState) async throws -> Response
     ) async throws -> Response {
         try beginOperation()
         defer { isBusy = false }
         guard let original = state, original.isSignedIn, !original.deletionPending,
               let selected = original.session else { throw AccountError.accountStateRequired }
         guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
+        guard try !selected.viewer.inactive else { throw AccountError.accountStateRequired }
         let stored = try await readCredential()
         try Task.checkCancellation()
         guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
         do {
-            let response = try await operation(token)
+            let response = try await operation(token, original)
             try Task.checkCancellation()
             let access = response.access
             guard state == original, stateToken == token, access.household.id == householdID,
@@ -484,10 +508,15 @@ public actor AccountSession {
                   access.household.version >= selected.household.version else {
                 throw AccountError.invalidResponse
             }
-            state = try original.replacingHousehold(access.household)
+            try await confirmAccountIdentity(original, token: token)
+            try Task.checkCancellation()
+            state = try original.replacingHousehold(access.household, role: access.role)
             return response
         } catch {
-            try await handleConfirmedExpiry(error)
+            if error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
+                try await confirmAccountIdentity(original, token: token)
+                try await handleConfirmedExpiry(error)
+            }
             throw error
         }
     }

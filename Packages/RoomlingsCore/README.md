@@ -35,6 +35,8 @@ All operations are explicit, asynchronous and throwing:
 | `acceptInvitation(code:memberName:)` | `POST /api/account/invitations/accept` |
 | `selectHousehold(id:)` | `POST /api/account/households/<id>/select` |
 | `loadInvitations(householdID:)` | `GET /api/account/households/<id>` |
+| `loadHouseholdAccess(householdID:)` | The same household-access GET, including the member roster |
+| `transferOwnership(to:householdID:version:accountID:)` | `POST /api/account/households/<id>/owner` |
 | `createInvitation(householdID:version:)` | `POST /api/account/households/<id>/invitations` |
 | `revokeInvitation(id:householdID:version:)` | `DELETE /api/account/households/<id>/invitations/<id>` |
 | `loadNotificationSettings(householdID:)` | `GET /api/account/households/<id>/notifications` |
@@ -77,7 +79,7 @@ All operations are explicit, asynchronous and throwing:
 
 The server requires a sign-in within the last ten minutes and enforces ownership handoff. **Verify email again** sends a code to the current account and rotates only that native session. The response must still belong to the same account before its credential is saved. Verification never automatically sends deletion; the user reviews the warning and enters the email again. Push registration is renewed for the rotated session without losing account-bound consent.
 
-An owner with other active roommates must transfer ownership first through the existing web ownership settings. A sole owner can close household access. Deletion does not cancel debts, remove shared ledger records or scrub names embedded in descriptions. The server pseudonymizes former-roommate display names while retaining the financial references needed for correct balances.
+An owner with other active roommates must transfer ownership first in **Account > Household members**. **Manage household ownership** returns from the deletion form to Account, where the owner can select each household needing a handoff. A sole owner can close household access. Deletion does not cancel debts, remove shared ledger records or scrub names embedded in descriptions. The server pseudonymizes former-roommate display names while retaining the financial references needed for correct balances.
 
 `AccountDeletionStatus` separates these outcomes:
 
@@ -144,10 +146,26 @@ Use the web revision pinned in CI for both build and test harness. The analytics
 - Closing Account cancels its notification-preference read without marking the household as failed. Genuine read failures and unconfirmed preference writes still show an error; cancelling a read neither claims the settings were loaded nor clears an earlier failure.
 - Delivery needs a reachable notification backend with APNs credentials. Mocks and injected payloads verify app flows and contracts, not real APNs delivery. Some newer Apple Silicon simulator runtimes support APNs, but issue acceptance explicitly requires proof on a properly provisioned real device.
 
+## Household ownership
+
+**Account > Household members** loads the selected household's current roster. Each member retains their server ID, name, role, active status and account-link status. The existing `HouseholdInvitationAccess` response now validates this roster against the household snapshot; `loadInvitations` and `loadHouseholdAccess` use the same endpoint and cached model data.
+
+Only the owner sees **Make owner**, and only beside another active, account-linked roommate. Browser-only identities and former roommates remain visible but cannot receive ownership. A native confirmation names the recipient and explains that the current owner stays a member, that the ledger is unchanged, and that only the new owner can transfer ownership back. Native popovers can be cancelled by tapping outside them.
+
+The confirmation captures the account UUID, household, member and household version. Transferring sends only `{ memberId, version }` with the native bearer. The server rechecks current ownership, target eligibility and the optimistic version inside its transaction. Admin permissions never grant the ability to transfer ownership.
+
+A valid response must confirm the requested new owner, the previous owner's member role and the next household version. The native session updates both its household snapshot and matching membership role without replacing credentials or other households. Invitation links and owner-only invitation history are cleared when authority is lost. No balances are recalculated locally.
+
+After a conflict, denied access or uncertain response, refresh household members before another handoff. This endpoint has no replay receipt, and the client never automatically retries it. Refreshing after a lost response can reveal that the handoff already succeeded without falsely presenting the lost acknowledgment as a confirmed save.
+
+Switching accounts or households discards the cached roster and confirmation. Every operation shares the account gate and checks the credential again before publishing a response; a late response cannot clear a replacement credential. No domain setup, third-party service or new database schema is needed.
+
+Leaving a household and removing member access remain separate features; this screen does not show unfinished controls for them.
+
 ## Invitations
 
 - Invitation management remains **owner-only**, matching the shared server. Admins and members ask the owner for a link. Revoking a link never removes people who already joined.
-- The household access GET returns invitation metadata, not reusable codes. Creation returns a case-sensitive code once and a seven-day expiry. Used links remain pending until revoked or expired. Invitation timestamps are validated UTC dates.
+- The household access GET returns the member roster and invitation metadata, not reusable codes. Creation returns a case-sensitive code once and a seven-day expiry. Used links remain pending until revoked or expired. Invitation timestamps are validated UTC dates.
 - Create and revoke send the household `version`. These routes have no mutation receipt or automatic retry. After a conflict or uncertain response, refresh before another change. If a creation response was lost, revoke that pending invitation and create a new one; its original code cannot be retrieved.
 - `AccountInvitationCode` reuses the existing local fragment parser and redacts descriptions and mirrors. Incoming app links must match the configured invitation origin. Manually pasted links still extract only the code; requests always go to the configured native API, never the pasted host.
 - **Account** shares the invitation as a single URL through `UIActivityViewController`, so the system **Copy** action pastes the full link without a separate message. Completion is observed for analytics without inspecting the destination or returned items. Outgoing links are kept only in memory and discarded when Account closes, the household/account changes, or the link is revoked. Invitations and session credentials never enter the room renderer.

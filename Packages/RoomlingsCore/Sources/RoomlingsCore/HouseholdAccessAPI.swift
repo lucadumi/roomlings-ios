@@ -1,6 +1,6 @@
 import Foundation
 
-struct InvitationAPI: Sendable {
+struct HouseholdAccessAPI: Sendable {
     let client: NativeAPIClient
 
     func load(householdID: UUID, token: SessionToken) async throws -> HouseholdInvitationAccess {
@@ -26,6 +26,21 @@ struct InvitationAPI: Sendable {
         guard access.role == .owner,
               access.household.version == version || access.household.version == version + 1,
               access.invitations.contains(where: { $0.id == id && $0.revokedAt != nil }) else {
+            throw AccountError.invalidResponse
+        }
+        return access
+    }
+
+    func transferOwnership(
+        to memberID: UUID, householdID: UUID, version: Int64, token: SessionToken
+    ) async throws -> HouseholdInvitationAccess {
+        try validate(version: version)
+        let body: [String: JSONValue] = ["memberId": .string(memberID.uuidString.lowercased()), "version": .integer(version)]
+        let access: HouseholdInvitationAccess = try await client.request(
+            .transferOwnership(householdID), body: JSONEncoder().encode(body), token: token
+        )
+        guard access.household.version == version + 1, access.role == .member,
+              access.members.contains(where: { $0.id == memberID && $0.role == .owner && $0.active && $0.linked }) else {
             throw AccountError.invalidResponse
         }
         return access

@@ -22,7 +22,7 @@ struct AccountSheet: View {
     @State private var headerHeight: CGFloat = 64
     @State private var deletionConfirmation = ""
 
-    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate }
+    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers }
     @State private var invitation = ""
     private let currencies: [HouseholdCurrency] = [.eur, .usd, .gbp, .ron]
 
@@ -46,6 +46,10 @@ struct AccountSheet: View {
                         switch page {
                         case .create: createForm
                         case .join: joinForm
+                        case .householdMembers:
+                            AccountHouseholdMembersSection(model: model)
+                            Button("Back to account") { page = .account }
+                                .buttonStyle(RoomButtonStyle(kind: .text))
                         case .deleteAccount:
                             if let account = model.state?.account { deletionForm(account) }
                         case .reauthenticate:
@@ -123,7 +127,7 @@ struct AccountSheet: View {
                 householdName = ""
                 invitation = ""
             }
-            if page == .deleteAccount || page == .reauthenticate { page = .account }
+            if page == .deleteAccount || page == .reauthenticate || page == .householdMembers { page = .account }
         }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
@@ -183,6 +187,7 @@ struct AccountSheet: View {
             case .join: return "Join a household"
             case .deleteAccount: return "Delete your account"
             case .reauthenticate: return "Verify your email"
+            case .householdMembers: return "Household members"
             default: return "Your Roomlings account"
             }
         }
@@ -380,6 +385,14 @@ struct AccountSheet: View {
                 }
             }
             if let householdID = model.state?.session?.household.id {
+                AccountSection {
+                    Button("Household members") {
+                        Task {
+                            if await model.loadHouseholdAccess() { page = .householdMembers }
+                        }
+                    }
+                    .accessibilityIdentifier("manage-household-members")
+                }
                 AccountInvitationsSection(model: model)
                     .id(householdID)
                 AccountNotificationsSection(model: model)
@@ -404,6 +417,13 @@ struct AccountSheet: View {
             Text("This deletes your account and sign-in identity and revokes linked access. Shared ledger records keep former-roommate references so balances remain correct. Names written in expense descriptions are not automatically removed. Export any ledgers you need first.")
                 .foregroundStyle(RoomTheme.muted)
             Text("Enter \(account.email) to confirm.")
+            if model.state?.memberships.contains(where: { $0.role == .owner }) == true {
+                Button("Manage household ownership") {
+                    deletionConfirmation = ""
+                    page = .account
+                }
+                .accessibilityIdentifier("manage-ownership-before-deletion")
+            }
             RoomField("Account email to confirm deletion", text: $deletionConfirmation)
                 .keyboardType(.emailAddress)
                 .textInputAutocapitalization(.never)

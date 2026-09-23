@@ -437,6 +437,10 @@ extension Fixtures {
         household["version"] = .integer(version)
         return [
             "household": .object(household), "memberId": .string(memberID), "role": .string(role),
+            "members": .array([.object([
+                "memberId": .string(memberID), "name": .string("Roommate"), "role": .string(role),
+                "linked": .bool(true), "active": .bool(true)
+            ])]),
             "invitations": .array((invitations ?? [invitation()]).map(JSONValue.object))
         ]
     }

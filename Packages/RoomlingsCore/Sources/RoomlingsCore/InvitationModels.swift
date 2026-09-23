@@ -85,9 +85,14 @@ public struct HouseholdInvitationAccess: Sendable, Decodable, Equatable {
     public let memberID: UUID
     public let role: AccountRole
     public let invitations: [HouseholdInvitation]
+    public let members: [HouseholdAccessMember]
+
+    public var ownershipCandidates: [HouseholdAccessMember] {
+        role == .owner ? members.filter { $0.id != memberID && $0.active && $0.linked } : []
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case household, role, invitations, accessToken
+        case household, role, invitations, members, accessToken
         case memberID = "memberId"
     }
 
@@ -98,10 +103,36 @@ public struct HouseholdInvitationAccess: Sendable, Decodable, Equatable {
         memberID = try container.decode(UUID.self, forKey: .memberID)
         role = try container.decode(AccountRole.self, forKey: .role)
         invitations = try container.decode([HouseholdInvitation].self, forKey: .invitations)
-        let members = try HouseholdMember.projection(household.value)
-        guard members.contains(where: { $0.id == memberID && !$0.inactive }),
+        members = try container.decode([HouseholdAccessMember].self, forKey: .members)
+        let roster = try HouseholdMember.projection(household.value)
+        guard Set(members.map(\.id)).count == members.count,
+              Set(members.map(\.id)) == Set(roster.map(\.id)),
+              members.filter({ $0.role == .owner }).count <= 1,
+              members.allSatisfy({ member in
+                  roster.contains { $0.id == member.id && $0.name == member.name && (!member.active || !$0.inactive) }
+                      && (member.active || member.role == .member)
+              }),
+              members.contains(where: { $0.id == memberID && $0.active && $0.linked && $0.role == role }),
               Set(invitations.map(\.id)).count == invitations.count,
               role == .owner || invitations.isEmpty else { throw AccountError.invalidResponse }
+    }
+}
+
+public struct HouseholdAccessMember: Sendable, Decodable, Equatable, Identifiable {
+    public let id: UUID
+    public let name: String
+    public let role: AccountRole
+    public let linked: Bool
+    public let active: Bool
+
+    public init(from decoder: any Decoder) throws {
+        let fields = try HouseholdFields(JSONValue(from: decoder))
+        id = try fields.uuid("memberId")
+        name = try fields.text("name", length: 1...50)
+        guard let role = AccountRole(rawValue: try fields.string("role")) else { throw AccountError.invalidResponse }
+        self.role = role
+        linked = try fields.bool("linked")
+        active = try fields.bool("active")
     }
 }
 
@@ -130,12 +161,12 @@ public struct CreatedHouseholdInvitation: Sendable, Decodable, Equatable,
     public var customMirror: Mirror { Mirror(self, children: ["id": invitation.id]) }
 }
 
-protocol HouseholdInvitationResponse: Sendable {
+protocol HouseholdAccessResponse: Sendable {
     var access: HouseholdInvitationAccess { get }
 }
 
-extension HouseholdInvitationAccess: HouseholdInvitationResponse {
+extension HouseholdInvitationAccess: HouseholdAccessResponse {
     var access: HouseholdInvitationAccess { self }
 }
 
-extension CreatedHouseholdInvitation: HouseholdInvitationResponse {}
+extension CreatedHouseholdInvitation: HouseholdAccessResponse {}

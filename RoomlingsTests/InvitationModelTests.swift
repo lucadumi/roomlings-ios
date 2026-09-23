@@ -483,6 +483,7 @@ struct InvitationModelFixture {
     func accessFields(version: Int = 18, revoked: Bool = false, owner: Bool = true) -> [String: Any] {
         [
             "household": household(id: householdID, version: version), "memberId": memberID,
+            "members": [["memberId": memberID, "name": "Ada", "role": owner ? "owner" : "member", "linked": true, "active": true]],
             "role": owner ? "owner" : "member", "invitations": owner ? [invitation(revoked: revoked)] : []
         ]
     }
