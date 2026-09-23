@@ -69,8 +69,18 @@ extension AccountUITests {
         let refreshed = try await analyticsState(seed.homes)
         XCTAssertEqual(refreshed.occurrences("app_opened"), 1)
         XCUIDevice.shared.press(.home)
+        addTeardownBlock { @MainActor in
+            _ = try await self.fixture("_fixture/loading", body: ["hold": false])
+        }
+        _ = try await fixture("_fixture/loading", body: ["hold": true])
         app.activate()
         let second = try await waitForAnalytics("app_opened", count: 2, homes: seed.homes)
+        let refreshing = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Updating account"), object: app.buttons["household-entry"]
+        )
+        let refreshStarted = await XCTWaiter.fulfillment(of: [refreshing], timeout: Wait.control)
+        _ = try await fixture("_fixture/loading", body: ["hold": false])
+        XCTAssertEqual(refreshStarted, .completed, "Analytics must arrive while the independent account refresh is still held.")
         XCTAssertTrue(second.rows.allSatisfy { $0.memberId == first.rows[0].memberId })
         XCTAssertEqual(second.requests.count, 2)
         let days = Set(second.requests.flatMap(\.events).map(\.localDate))
@@ -92,7 +102,7 @@ extension AccountUITests {
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             XCTAssertNotNil(formatter.date(from: event.occurredAt))
         }
-        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+        expectHeaderStatus(app, "Household loaded")
     }
 
     @MainActor
@@ -116,6 +126,6 @@ extension AccountUITests {
         let state = try await analyticsState(seed.homes)
         XCTAssertEqual(state.requests.count, 1)
         XCTAssertEqual(state.occurrences("app_opened"), 1)
-        XCTAssertEqual(app.buttons["household-entry"].value as? String, "Household loaded")
+        expectHeaderStatus(app, "Household loaded")
     }
 }
