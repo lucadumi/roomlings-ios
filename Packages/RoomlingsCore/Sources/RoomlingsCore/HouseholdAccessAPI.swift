@@ -46,6 +46,33 @@ struct HouseholdAccessAPI: Sendable {
         return access
     }
 
+    func removeMember(
+        id: UUID, householdID: UUID, version: Int64, token: SessionToken
+    ) async throws -> HouseholdInvitationAccess {
+        try validate(version: version)
+        let access: HouseholdInvitationAccess = try await client.request(
+            .removeHouseholdMember(householdID, id), body: JSONEncoder().encode(["version": version]), token: token
+        )
+        guard access.household.version == version + 1, access.role == .owner,
+              access.members.contains(where: { $0.id == id && !$0.active }),
+              try HouseholdMember.projection(access.household.value).contains(where: { $0.id == id && $0.inactive }) else {
+            throw AccountError.invalidResponse
+        }
+        return access
+    }
+
+    func leave(householdID: UUID, version: Int64, token: SessionToken) async throws -> AccountState {
+        try validate(version: version)
+        let result: OrdinaryAccountResponse = try await client.request(
+            .leaveHousehold(householdID), body: JSONEncoder().encode(["version": version]), token: token
+        )
+        guard result.state.isSignedIn, !result.state.deletionPending, result.state.session == nil,
+              !result.state.memberships.contains(where: { $0.householdID == householdID }) else {
+            throw AccountError.invalidResponse
+        }
+        return result.state
+    }
+
     private func validate(version: Int64) throws {
         guard (0..<HouseholdValidation.maximumInteger).contains(version) else {
             throw AccountError.invalidInput(.version)

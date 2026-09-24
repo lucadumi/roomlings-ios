@@ -165,7 +165,7 @@ struct NativeSignInResponse: Decodable, Sendable {
     }
 }
 
-private struct OrdinaryAccountResponse: Decodable, Sendable {
+struct OrdinaryAccountResponse: Decodable, Sendable {
     let state: AccountState
 
     private enum CodingKeys: String, CodingKey { case accessToken }

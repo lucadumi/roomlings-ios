@@ -336,6 +336,44 @@ final class NotificationModelTests: XCTestCase {
         XCTAssertEqual(setup.system.unregistrations, 0)
     }
 
+    func testLosingOneHouseholdDiscardsItsPendingTapWithoutDisablingTheAccountDevice() async throws {
+        let installation = PushInstallation(id: UUID(), enabled: true, accountID: accountID)
+        let setup = try await make([fixture.state(selectedHousehold: false)], installation: installation, permission: .allowed)
+        await setup.notifications.synchronize()
+        setup.notifications.receiveNotification(try JSONSerialization.data(withJSONObject: [
+            "version": 1, "kind": "chores", "householdId": fixture.householdID.uuidString
+        ]))
+        XCTAssertNotNil(setup.notifications.pending)
+        let refreshed = await setup.account.refresh()
+        XCTAssertTrue(refreshed)
+        setup.notifications.attach(to: setup.account)
+        XCTAssertNil(setup.notifications.pending)
+        XCTAssertTrue(setup.notifications.enabledOnDevice)
+        XCTAssertEqual(setup.system.unregistrations, 0)
+        let stored = await setup.store.value
+        XCTAssertEqual(stored, installation)
+    }
+
+    func testADeferredReadForTheDepartedHouseholdDoesNotBecomeAnAccountError() async throws {
+        let setup = try await make([fixture.state(selectedHousehold: false)])
+        let gate = InvitationModelSignal()
+        setup.system.permissionGate = gate
+        let startup = Task { await setup.notifications.synchronize() }
+        await waitUntil { setup.notifications.busy }
+        await setup.notifications.refreshSettings()
+        let refreshed = await setup.account.refresh()
+        XCTAssertTrue(refreshed)
+        setup.notifications.attach(to: setup.account)
+        await gate.signal()
+        await startup.value
+        await setup.notifications.synchronize()
+        let requests = await setup.transport.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertNil(setup.notifications.settings)
+        XCTAssertNil(setup.notifications.error)
+        XCTAssertEqual(setup.account.headerStatus, .preview)
+    }
+
     private func settings(chores: Bool = true, money: Bool = true, available: Bool = true) throws -> HTTPResponse {
         try response([
             "householdId": fixture.householdID.uuidString, "memberId": fixture.memberID,

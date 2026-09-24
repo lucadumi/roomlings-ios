@@ -79,6 +79,7 @@ final class NativeNotifications {
     private var accountID: UUID?
     private var sessionID: UUID?
     private var householdID: UUID?
+    private var knownHouseholds: Set<UUID> = []
     private var token: APNsDeviceToken?
     private var attemptedRegistration: Registration?
     private var removalPending = false
@@ -109,6 +110,12 @@ final class NativeNotifications {
 
     func attach(to account: AccountModel) {
         self.account = account
+        let households = Set(account.state?.memberships.map(\.householdID) ?? [])
+        if account.signedIn, let pending, knownHouseholds.contains(pending.destination.householdID),
+           !households.contains(pending.destination.householdID) {
+            self.pending = nil
+        }
+        knownHouseholds = households
         let nextAccount = account.canUseAccount ? account.state?.account?.id : nil
         let nextSession = account.canUseAccount ? account.state?.devices.first(where: \.current)?.id : nil
         let nextHousehold = account.state?.session?.household.id
@@ -130,6 +137,7 @@ final class NativeNotifications {
         if householdID != nextHousehold {
             householdID = nextHousehold
             settings = nil
+            refreshRequested = false
         }
         if account.deletionPending || account.accountDeletionConfirmed {
             pending = nil
@@ -196,6 +204,7 @@ final class NativeNotifications {
         do {
             try await loadInstallation()
             permission = await system.permission()
+            try Task.checkCancellation()
             try await loadPreferences()
             setError(nil)
         } catch is CancellationError where Task.isCancelled {
