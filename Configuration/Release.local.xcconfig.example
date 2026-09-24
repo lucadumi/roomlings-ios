@@ -7,6 +7,11 @@ ROOMLINGS_INVITATION_SCHEME = https
 ROOMLINGS_INVITATION_HOST =
 ROOMLINGS_APNS_ENVIRONMENT = production
 
+// Leave links disabled until the invitation website, association file and
+// provisioning are ready. Use the signed app's actual App ID prefix.
+ROOMLINGS_UNIVERSAL_LINKS = NO
+ROOMLINGS_APP_ID_PREFIX =
+
 // Keep the current version until a different one is agreed. Increase the build
 // number for every upload; both settings are written into the app's Info.plist.
 MARKETING_VERSION = 0.1.0

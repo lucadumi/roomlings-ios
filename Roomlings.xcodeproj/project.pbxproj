@@ -128,6 +128,7 @@
 		B00000000000000000000038 /* BrandAssetsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAssetsTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000039 /* MembershipModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipModelTests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003A /* MembershipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipUITests.swift; sourceTree = "<group>"; };
+		B0000000000000000000003B /* RoomlingsLinks.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RoomlingsLinks.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -201,6 +202,7 @@
 				B00000000000000000000025 /* NativeNotifications.swift */,
 				B00000000000000000000026 /* AccountNotificationsSection.swift */,
 				B00000000000000000000027 /* Roomlings.entitlements */,
+				B0000000000000000000003B /* RoomlingsLinks.entitlements */,
 			);
 			path = Roomlings;
 			sourceTree = "<group>";

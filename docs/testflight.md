@@ -64,7 +64,7 @@ node --test Tests/Release/release.test.mjs
 | Review information | Provide a beta description, test instructions, working sign-in access and review contact details through App Store Connect. |
 | Cohort | The owner still needs to choose a private tester list or an external public link. External access requires Beta App Review. Do not enable the marketing site's TestFlight link before that access exists. |
 
-Universal Links remain a separate domain-association task. Until then, use the existing share/copy and explicit paste-to-join flow. Configuring an HTTPS invitation origin alone does not enable app-opening links.
+Universal Links have [opt-in configuration](invitations.md), but remain disabled until a public domain, hosted association file and matching provisioning are ready. An HTTPS invitation origin alone does not enable app-opening links. Until then, use share/copy and paste-to-join. Without the app, the approved flow is to join on the website and later sign into the same native account.
 
 ## Archive and distribute
 

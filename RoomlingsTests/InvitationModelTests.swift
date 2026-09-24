@@ -132,6 +132,23 @@ final class InvitationModelTests: XCTestCase {
         XCTAssertNil(model.invitations)
     }
 
+    func testIncomingAccountAndRecoveryURLsCannotBeTreatedAsInvitations() async throws {
+        let (model, transport, _) = try makeModel([])
+        for suffix in [
+            "/recover#account-invite=\(fixture.code)",
+            "/?code=private#account-invite=\(fixture.code)",
+            "/#account-invite=\(fixture.code)&recovery=private"
+        ] {
+            model.receiveInvitation(try XCTUnwrap(URL(string: "\(fixture.origin.origin)\(suffix)")))
+            XCTAssertNil(model.pendingInvitation)
+            let error = try XCTUnwrap(model.incomingInvitationError)
+            XCTAssertFalse(error.contains(fixture.code))
+            XCTAssertFalse(error.contains("private"))
+        }
+        let requests = await transport.requests
+        XCTAssertTrue(requests.isEmpty)
+    }
+
     func testAnUncertainCreationRequiresRefreshInsteadOfOfferingAnotherSave() async throws {
         let (model, transport, _) = try makeModel([fixture.state(), fixture.failure(503), fixture.access()])
         await model.start()

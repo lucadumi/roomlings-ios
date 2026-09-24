@@ -1,6 +1,6 @@
 import { isIP } from 'node:net'
 
-function isPublicHTTPSOrigin(scheme, host) {
+export function isPublicHTTPSOrigin(scheme, host) {
   if (scheme !== 'https' || typeof host !== 'string'
       || !/^[A-Za-z0-9.-]+(?::[0-9]+)?$/.test(host)) return false
   let url
