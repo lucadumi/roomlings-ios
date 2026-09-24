@@ -32,6 +32,7 @@ final class AccountModel {
     private(set) var incomingInvitationError: String?
     private(set) var deletionStatus = AccountDeletionStatus.none
     private(set) var deletionRequiresReauthentication = false
+    private(set) var pendingHouseholdDeparture: UUID?
     var message: String?
     var notice: String?
     var notificationFailure: String?
@@ -53,13 +54,17 @@ final class AccountModel {
         deletionStatus == .localCleanupRequired || (deletionStatus.serverConfirmed && deletionCleanupAccountID != nil)
     }
     var accountDeletionConfirmed: Bool { deletionStatus.serverConfirmed }
+    var membershipNeedsRefresh: Bool { pendingHouseholdDeparture != nil }
     var householdName: String? { canUseAccount ? state?.session?.household.name : nil }
     var viewerColor: HouseholdMemberColor? { viewer.flatMap { HouseholdMemberColor(hex: $0.color) } }
-    var canUseAccount: Bool { signedIn && !deletionPending && !deletionNeedsRefresh && !deletionCleanupRequired }
+    var canUseAccount: Bool {
+        signedIn && !deletionPending && !deletionNeedsRefresh && !deletionCleanupRequired && !membershipNeedsRefresh
+    }
     var analyticsContext: AnalyticsContext? { analytics?.context }
     var headerStatus: HeaderStatus {
         if busy { return .updating }
-        if requestFailed || setupError != nil || deletionPending || deletionNeedsRefresh || deletionCleanupRequired || viewerFailure != nil
+        if requestFailed || setupError != nil || deletionPending || deletionNeedsRefresh || deletionCleanupRequired
+            || membershipNeedsRefresh || viewerFailure != nil
             || roomFailure != nil || choresFailure != nil || shoppingFailure != nil || ledgerFailure != nil
             || notificationFailure != nil {
             return .needsAttention
@@ -394,12 +399,7 @@ final class AccountModel {
     }
 
     func transferOwnership(to memberID: UUID, householdID: UUID, version: Int64, accountID: UUID) async -> Bool {
-        guard canUseAccount, state?.account?.id == accountID,
-              let selected = state?.session, selected.household.id == householdID,
-              let access = invitations, access.household.id == householdID, access.memberID == selected.memberID,
-              access.household.version == version, selected.household.version == version,
-              !invitationNeedsRefresh else {
-            message = "Refresh household members and review the current ownership before transferring it."
+        guard let access = currentHouseholdAccess(householdID: householdID, version: version, accountID: accountID) else {
             return false
         }
         guard access.role == .owner, access.ownershipCandidates.contains(where: { $0.id == memberID }) else {
@@ -421,6 +421,64 @@ final class AccountModel {
             invitationNeedsRefresh = true
             return false
         }
+    }
+
+    private func currentHouseholdAccess(householdID: UUID, version: Int64, accountID: UUID) -> HouseholdInvitationAccess? {
+        guard !busy else {
+            message = "Another account action is still running."
+            return nil
+        }
+        guard canUseAccount, state?.account?.id == accountID,
+              let selected = state?.session, selected.household.id == householdID,
+              let access = invitations, access.household.id == householdID, access.memberID == selected.memberID,
+              access.household.version == version, selected.household.version == version,
+              !invitationNeedsRefresh else {
+            message = "Refresh household members and review the current access before changing it."
+            return nil
+        }
+        return access
+    }
+
+    func removeHouseholdMember(id: UUID, householdID: UUID, version: Int64, accountID: UUID) async -> Bool {
+        guard let access = currentHouseholdAccess(householdID: householdID, version: version, accountID: accountID) else {
+            return false
+        }
+        guard access.removalCandidates.contains(where: { $0.id == id }) else {
+            message = "Only the owner can remove another active roommate's household access."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        clearInvitationLink()
+        do {
+            let result = try await client.removeHouseholdMember(
+                id: id, householdID: householdID, version: version, accountID: accountID
+            )
+            let published = acceptInvitations(result, state: await client.state)
+            if published { notice = "Roommate access removed. Shared debts and history kept." }
+            return published
+        } catch {
+            await failed(error, action: .removeMember, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
+    func leaveHousehold(householdID: UUID, version: Int64, accountID: UUID) async -> Bool {
+        guard let access = currentHouseholdAccess(householdID: householdID, version: version, accountID: accountID) else {
+            return false
+        }
+        guard access.canLeave else {
+            message = "Transfer ownership to another active account-linked roommate before leaving this household."
+            return false
+        }
+        clearInvitationLink()
+        let left = await perform(.leaveHousehold) {
+            try await $0.leaveHousehold(householdID: householdID, version: version, accountID: accountID)
+        }
+        if left { notice = "You left the household. Shared debts and history remain." }
+        else { invitationNeedsRefresh = true }
+        return left
     }
 
     func createInvitation(householdID: UUID, version: Int64) async -> Bool {
@@ -613,9 +671,11 @@ final class AccountModel {
         if action == .shopping { shoppingSaveFailure = .none }
         if action == .ledger { ledgerSaveFailure = .none }
         let previousDeletion = deletionStatus
+        let previousDeparture = pendingHouseholdDeparture
         do {
             let next = try await operation(client)
             deletionStatus = await client.deletionStatus
+            pendingHouseholdDeparture = await client.pendingHouseholdDeparture
             if deletionStatus == .none { deletionCleanupAccountID = nil }
             if action == .verify || action == .recover || action == .reauthenticate {
                 deletionRequiresReauthentication = false
@@ -627,6 +687,10 @@ final class AccountModel {
             let published = publish(next)
             if action == .refresh, !next.isSignedIn, previousDeletion == .unconfirmed || previousDeletion == .pending {
                 notice = "Account access has ended. Pending deletions continue on the server."
+            }
+            if action == .refresh, let previousDeparture,
+               !next.memberships.contains(where: { $0.householdID == previousDeparture }) {
+                notice = "You no longer have access to that household. Shared debts and history remain."
             }
             if action.isChore, let choresFailure {
                 message = choresFailure
@@ -653,7 +717,7 @@ final class AccountModel {
     private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
         defer { analytics?.updateAccount(canUseAccount ? state : nil) }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
-            || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true {
+            || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true || membershipNeedsRefresh {
             invitations = nil
             invitationNeedsRefresh = false
             clearInvitationLink()
@@ -721,6 +785,7 @@ final class AccountModel {
 
     private func failed(_ error: Error, action: Action, client: AccountSession) async {
         deletionStatus = await client.deletionStatus
+        pendingHouseholdDeparture = await client.pendingHouseholdDeparture
         if deletionStatus == .none { deletionCleanupAccountID = nil }
         if action == .deleteAccount {
             deletionRequiresReauthentication = error as? AccountError == .server(status: 401, code: .reauthenticationRequired)
@@ -759,7 +824,7 @@ final class AccountModel {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, completeChore, undoChore, shopping, ledger
         case invitationLoad, invitationCreate, invitationRevoke
-        case householdAccessLoad, ownershipTransfer
+        case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
 
         var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
         var isInvitation: Bool { self == .invitationLoad || isInvitationMutation }
@@ -839,7 +904,7 @@ final class AccountModel {
                 return "Could not confirm account deletion. Check deletion status before trying again."
             }
         }
-        if action == .householdAccessLoad || action == .ownershipTransfer {
+        if action == .householdAccessLoad || action == .ownershipTransfer || action == .removeMember || action == .leaveHousehold {
             switch error {
             case is KeychainError, AccountError.credentialStorage:
                 return "Saved access could not be read securely. Unlock this device and try again."
@@ -847,18 +912,30 @@ final class AccountModel {
                 return "Your session has expired. Sign in again."
             case AccountError.server(_, .some(.accountDeletionPending)):
                 return "Account deletion is pending. Check its status or retry deletion here."
+            case AccountError.server(_, .some(.ownershipTransferRequired)):
+                return "Transfer ownership to another active account-linked roommate before leaving this household."
             case AccountError.server(403, _), AccountError.server(404, _):
                 return "Your household access changed. Refresh Account before managing its members."
             case AccountError.server(409, _), AccountError.invalidInput(.version):
-                return "The household changed elsewhere. Refresh household members and review ownership before continuing."
+                return action == .ownershipTransfer
+                    ? "The household changed elsewhere. Refresh household members and review ownership before continuing."
+                    : "The household changed elsewhere. Refresh household members and review access before continuing."
             case AccountError.server(400, _), AccountError.invalidInput(.memberID):
-                return "Choose another active roommate with a linked Roomlings account."
+                return action == .removeMember ? "Choose another active roommate to remove."
+                    : "Choose another active roommate with a linked Roomlings account."
             case AccountError.operationInProgress:
                 return "Another account action is still running."
             default:
-                return action == .ownershipTransfer
-                    ? "Ownership transfer could not be confirmed. Refresh household members before trying again."
-                    : "Household members could not be loaded. Refresh them to try again."
+                switch action {
+                case .ownershipTransfer:
+                    return "Ownership transfer could not be confirmed. Refresh household members before trying again."
+                case .removeMember:
+                    return "Removing access could not be confirmed. Refresh household members before trying again."
+                case .leaveHousehold:
+                    return "Leaving the household could not be confirmed. Refresh Account before trying again."
+                default:
+                    return "Household members could not be loaded. Refresh them to try again."
+                }
             }
         }
         if error is CancellationError {

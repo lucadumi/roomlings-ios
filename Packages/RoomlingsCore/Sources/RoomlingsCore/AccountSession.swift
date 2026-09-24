@@ -5,8 +5,9 @@ public actor AccountSession {
     public private(set) var state: AccountState?
     public private(set) var isBusy = false
     public private(set) var deletionStatus = AccountDeletionStatus.none
+    public private(set) var pendingHouseholdDeparture: UUID?
     public var selectedHousehold: HouseholdSnapshot? {
-        deletionStatus.blocksAccountUse ? nil : state?.session?.household
+        deletionStatus.blocksAccountUse || pendingHouseholdDeparture != nil ? nil : state?.session?.household
     }
 
     private let api: AccountAPI
@@ -37,14 +38,19 @@ public actor AccountSession {
 
     @discardableResult
     public func restore() async throws -> AccountState {
-        try beginOperation(allowDeletion: true)
+        try beginOperation(allowDeletion: true, allowMembershipRefresh: true)
         defer { isBusy = false }
         let token = try await readCredential()
         let previousDeletion = deletionStatus
         do {
             let response = try await api.restore(token: token)
+            if pendingHouseholdDeparture != nil {
+                let current = try await readCredential()
+                try Task.checkCancellation()
+                guard current == token else { throw AccountError.accountStateRequired }
+            }
             if !response.isSignedIn, token != nil {
-                if previousDeletion != .none {
+                if previousDeletion != .none || pendingHouseholdDeparture != nil {
                     try await clearCredential(matching: token)
                 } else {
                     try await clearCredential()
@@ -54,10 +60,19 @@ public actor AccountSession {
             guard !response.isSignedIn || token != nil else { throw AccountError.invalidResponse }
             state = response
             stateToken = response.isSignedIn ? token : nil
+            pendingHouseholdDeparture = nil
             deletionStatus = response.deletionPending ? .pending
                 : previousDeletion.serverConfirmed && !response.isSignedIn ? .completed : .none
             return response
         } catch {
+            if pendingHouseholdDeparture != nil,
+               error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
+                try await clearCredential(matching: token)
+                state = nil
+                stateToken = nil
+                pendingHouseholdDeparture = nil
+                throw error
+            }
             try await handleConfirmedExpiry(error)
             throw error
         }
@@ -105,7 +120,7 @@ public actor AccountSession {
 
     @discardableResult
     public func logout(allDevices: Bool = false) async throws -> AccountState {
-        try beginOperation(allowDeletion: true)
+        try beginOperation(allowDeletion: true, allowMembershipRefresh: true)
         defer { isBusy = false }
         let token = try await readCredential()
         do {
@@ -114,6 +129,7 @@ public actor AccountSession {
             state = response
             stateToken = nil
             deletionStatus = .none
+            pendingHouseholdDeparture = nil
             return response
         } catch {
             try await handleConfirmedExpiry(error)
@@ -268,6 +284,71 @@ public actor AccountSession {
         }
     }
 
+    public func removeHouseholdMember(
+        id: UUID, householdID: UUID, version: Int64, accountID: UUID
+    ) async throws -> HouseholdInvitationAccess {
+        try await withHouseholdAccess(householdID: householdID) { [householdAccessAPI] token, original in
+            guard original.account?.id == accountID, let selected = original.session,
+                  original.memberships.contains(where: { $0.householdID == householdID && $0.role == .owner }) else {
+                throw AccountError.accountStateRequired
+            }
+            guard selected.household.version == version else { throw AccountError.invalidInput(.version) }
+            guard selected.memberID != id,
+                  try HouseholdMember.projection(selected.household.value).contains(where: { $0.id == id && !$0.inactive }) else {
+                throw AccountError.invalidInput(.memberID)
+            }
+            let response = try await householdAccessAPI.removeMember(id: id, householdID: householdID, version: version, token: token)
+            guard ["budget", "currency", "expenses", "settlements", "bills"].allSatisfy({
+                response.household.value[$0] == selected.household.value[$0]
+            }) else { throw AccountError.invalidResponse }
+            return response
+        }
+    }
+
+    @discardableResult
+    public func leaveHousehold(householdID: UUID, version: Int64, accountID: UUID) async throws -> AccountState {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, original.account?.id == accountID, !original.deletionPending,
+              let selected = original.session, try !selected.viewer.inactive else {
+            throw AccountError.accountStateRequired
+        }
+        guard selected.household.id == householdID else { throw AccountError.householdSelectionChanged }
+        guard selected.household.version == version, (0..<HouseholdValidation.maximumInteger).contains(version) else {
+            throw AccountError.invalidInput(.version)
+        }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        pendingHouseholdDeparture = householdID
+        do {
+            let response = try await householdAccessAPI.leave(householdID: householdID, version: version, token: token)
+            try Task.checkCancellation()
+            guard response.account?.id == accountID,
+                  response.devices.first(where: \.current)?.id == original.devices.first(where: \.current)?.id else {
+                throw AccountError.invalidResponse
+            }
+            try await confirmAccountIdentity(original, token: token)
+            try Task.checkCancellation()
+            state = response
+            pendingHouseholdDeparture = nil
+            return response
+        } catch {
+            if case AccountError.server(_, .some(.accountDeletionPending)) = error {
+                pendingHouseholdDeparture = nil
+                deletionStatus = .pending
+            } else if case AccountError.server(let status, _) = error,
+                      (400..<500).contains(status), ![403, 404].contains(status) {
+                if error as? AccountError == .server(status: 401, code: .accountSessionRequired) {
+                    try await confirmAccountIdentity(original, token: token)
+                    try await handleConfirmedExpiry(error)
+                }
+                pendingHouseholdDeparture = nil
+            }
+            throw error
+        }
+    }
+
     public func loadNotificationSettings(householdID: UUID) async throws -> HouseholdNotificationSettings {
         try await withNotificationAccount(householdID: householdID) { [notificationAPI] token, memberID in
             guard let memberID else { throw AccountError.accountStateRequired }
@@ -314,7 +395,8 @@ public actor AccountSession {
     }
 
     private func requireAnalyticsContext(_ expected: AnalyticsContext) throws {
-        guard !deletionStatus.blocksAccountUse, let state, try AnalyticsContext(state: state) == expected else {
+        guard !deletionStatus.blocksAccountUse, pendingHouseholdDeparture == nil,
+              let state, try AnalyticsContext(state: state) == expected else {
             throw AccountError.accountStateRequired
         }
     }
@@ -581,10 +663,11 @@ public actor AccountSession {
         }
     }
 
-    private func beginOperation(allowDeletion: Bool = false) throws {
+    private func beginOperation(allowDeletion: Bool = false, allowMembershipRefresh: Bool = false) throws {
         guard !isBusy else { throw AccountError.operationInProgress }
         try Task.checkCancellation()
         guard allowDeletion || !deletionStatus.blocksAccountUse else { throw AccountError.accountStateRequired }
+        guard allowMembershipRefresh || pendingHouseholdDeparture == nil else { throw AccountError.accountStateRequired }
         isBusy = true
     }
 
@@ -594,6 +677,7 @@ public actor AccountSession {
         try await clearCredential()
         state = nil
         stateToken = nil
+        pendingHouseholdDeparture = nil
         deletionStatus = deletionStatus.serverConfirmed ? .completed : .none
     }
 

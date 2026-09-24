@@ -38,37 +38,7 @@ struct AccountSheet: View {
                     feedback
                     incomingInvitation
                     incomingNotification
-                    if let setupError = model.setupError {
-                        AccountSection { Text(setupError) }
-                    } else if model.deletionCleanupRequired || model.deletionNeedsRefresh || model.deletionPending {
-                        deletionRecovery
-                    } else if model.signedIn {
-                        switch page {
-                        case .create: createForm
-                        case .join: joinForm
-                        case .householdMembers:
-                            AccountHouseholdMembersSection(model: model)
-                            Button("Back to account") { page = .account }
-                                .buttonStyle(RoomButtonStyle(kind: .text))
-                        case .deleteAccount:
-                            if let account = model.state?.account { deletionForm(account) }
-                        case .reauthenticate:
-                            if let account = model.state?.account,
-                               let device = model.state?.devices.first(where: \.current) {
-                                reauthenticationForm(account, device: device)
-                            }
-                        default: households
-                        }
-                    } else if model.state?.configured == false {
-                        AccountSection { Text("Account access is not configured on this server.") }
-                        Button("Refresh account") { Task { await model.refresh() } }
-                    } else {
-                        switch page {
-                        case .verify: verifyForm
-                        case .recover: recoveryForm
-                        default: emailForm
-                        }
-                    }
+                    accountContent
                 }
                 .padding(24)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
@@ -129,6 +99,9 @@ struct AccountSheet: View {
             }
             if page == .deleteAccount || page == .reauthenticate || page == .householdMembers { page = .account }
         }
+        .onChange(of: model.state?.session?.household.id) { _, _ in
+            if page == .householdMembers { page = .account }
+        }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
             if pending != nil, model.canUseAccount, page != .deleteAccount, page != .reauthenticate { page = .join }
@@ -140,6 +113,50 @@ struct AccountSheet: View {
         .onChange(of: memberName) { creationID = UUID() }
         .onChange(of: currency) { creationID = UUID() }
         .onChange(of: budget) { creationID = UUID() }
+    }
+
+    @ViewBuilder private var accountContent: some View {
+        if let setupError = model.setupError {
+            AccountSection { Text(setupError) }
+        } else if model.deletionCleanupRequired || model.deletionNeedsRefresh || model.deletionPending {
+            deletionRecovery
+        } else if model.membershipNeedsRefresh {
+            AccountSection("Check household access") {
+                Text("The leave request may have reached the server. Household actions stay closed until you refresh your account.")
+                Button("Refresh account") { Task { await model.refresh(includeInvitations: true) } }
+                    .accessibilityIdentifier("refresh-membership-access")
+            }
+        } else if model.signedIn {
+            signedInContent
+        } else if model.state?.configured == false {
+            AccountSection { Text("Account access is not configured on this server.") }
+            Button("Refresh account") { Task { await model.refresh() } }
+        } else {
+            switch page {
+            case .verify: verifyForm
+            case .recover: recoveryForm
+            default: emailForm
+            }
+        }
+    }
+
+    @ViewBuilder private var signedInContent: some View {
+        switch page {
+        case .create: createForm
+        case .join: joinForm
+        case .householdMembers:
+            AccountHouseholdMembersSection(model: model)
+            Button("Back to account") { page = .account }
+                .buttonStyle(RoomButtonStyle(kind: .text))
+        case .deleteAccount:
+            if let account = model.state?.account { deletionForm(account) }
+        case .reauthenticate:
+            if let account = model.state?.account,
+               let device = model.state?.devices.first(where: \.current) {
+                reauthenticationForm(account, device: device)
+            }
+        default: households
+        }
     }
 
     private var header: some View {
@@ -181,6 +198,7 @@ struct AccountSheet: View {
         if model.deletionCleanupRequired { return "Clear saved access" }
         if model.deletionNeedsRefresh { return "Check account deletion" }
         if model.deletionPending { return "Account deletion pending" }
+        if model.membershipNeedsRefresh { return "Check household access" }
         if model.signedIn {
             switch page {
             case .create: return "Create a household"

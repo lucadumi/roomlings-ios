@@ -37,6 +37,8 @@ All operations are explicit, asynchronous and throwing:
 | `loadInvitations(householdID:)` | `GET /api/account/households/<id>` |
 | `loadHouseholdAccess(householdID:)` | The same household-access GET, including the member roster |
 | `transferOwnership(to:householdID:version:accountID:)` | `POST /api/account/households/<id>/owner` |
+| `removeHouseholdMember(id:householdID:version:accountID:)` | `DELETE /api/account/households/<id>/members/<memberId>` |
+| `leaveHousehold(householdID:version:accountID:)` | `DELETE /api/account/households/<id>/membership` |
 | `createInvitation(householdID:version:)` | `POST /api/account/households/<id>/invitations` |
 | `revokeInvitation(id:householdID:version:)` | `DELETE /api/account/households/<id>/invitations/<id>` |
 | `loadNotificationSettings(householdID:)` | `GET /api/account/households/<id>/notifications` |
@@ -58,7 +60,7 @@ All operations are explicit, asynchronous and throwing:
 | `recordSettlement(from:to:amount:householdID:version:mutationID:)` | `POST /api/settlements` |
 | `removeSettlement(id:householdID:version:mutationID:)` | `DELETE /api/settlements/<id>` |
 
-`state` starts as `nil`; state-returning operations validate server responses before updating it. Read `state`, `selectedHousehold`, `deletionStatus` and `isBusy` with `await`. A confirmed remote deletion clears cached private state even if local credential cleanup still needs retry.
+`state` starts as `nil`; state-returning operations validate server responses before updating it. Read `state`, `selectedHousehold`, `deletionStatus`, `pendingHouseholdDeparture` and `isBusy` with `await`. A confirmed remote deletion clears cached private state even if local credential cleanup still needs retry.
 
 - Share one coordinator per Keychain entry. Overlapping account operations throw `AccountError.operationInProgress`, including while credential storage is suspended. Analytics uses a separate non-mutating path so it cannot block those operations. Nothing automatically retries mutations.
 - Creation takes integer cents. Reuse the same `requestID` and details for an explicit retry.
@@ -160,7 +162,19 @@ After a conflict, denied access or uncertain response, refresh household members
 
 Switching accounts or households discards the cached roster and confirmation. Every operation shares the account gate and checks the credential again before publishing a response; a late response cannot clear a replacement credential. No domain setup, third-party service or new database schema is needed.
 
-Leaving a household and removing member access remain separate features; this screen does not show unfinished controls for them.
+### Leaving and removing access
+
+**Leave household** appears beneath the roster. Owners with other active roommates must transfer ownership first. A sole owner can close the household to new access. The confirmation names the household and explains that debts and history remain; leaving never deletes the Roomlings account.
+
+Only the owner sees **Remove access** beside other active roommates, including browser-only identities. The owner cannot remove themselves through that control. The confirmation names the roommate and distinguishes removing household access from deleting their account.
+
+Both requests capture the intended account UUID, selected household and optimistic version. Removal must return the same owner with the target still present but inactive and the next household version. Leaving must return the same account and native session with no membership in that household and no selected household. Other memberships and the stored account credential remain intact.
+
+The server retains financial records and member IDs, releases the departing member's shopping claims and basket flags, and revokes their household access through account membership, browser sessions and recovery codes. Existing invitations cannot restore a removed account membership; a new owner-issued invitation is required. Future bill participants still need review with the household.
+
+Failures are not treated as successful departures or removals. Stale or uncertain removals require a roster refresh. An interrupted or unusable leave response sets `pendingHouseholdDeparture`; the app hides the old room and household tools and offers **Refresh account**. Until that read resolves current membership, the coordinator rejects further changes and analytics against stale access. Refreshing resolves access without automatically repeating the DELETE or falsely claiming an acknowledgment was received.
+
+Successful leaving returns to Account to choose another household. Pending notification taps for a household whose membership ended are discarded, and deferred preference reads for that old selection are cancelled. The account's notification installation remains available for its other households.
 
 ## Invitations
 

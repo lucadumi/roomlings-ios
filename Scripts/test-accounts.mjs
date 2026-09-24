@@ -29,7 +29,7 @@ const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
 const { SQLiteDatabase } = await import(pathToFileURL(join(web, 'server/database.ts')).href)
 const { ApiError } = await import(pathToFileURL(join(web, 'server/errors.ts')).href)
 const { getRoomComponents, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
-const { balances, billingDate, choreSchema, expenseSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { balances, billingDate, choreSchema, expenseSchema, shoppingItemSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { accountEmailSchema } = await import(pathToFileURL(join(web, 'shared/accounts.ts')).href)
 const express = requireWeb('express')
 const { z } = requireWeb('zod')
@@ -63,6 +63,9 @@ const invitationBrowsers = new Map()
 const ownershipRequests = []
 const ownershipFixtures = new Map()
 let ownershipFailure = null
+const membershipRequests = []
+const membershipFixtures = new Map()
+let membershipFailure = null
 let nextAccountLoad = null
 let activeAccountLoad = null
 function releaseAccountLoad() {
@@ -172,6 +175,11 @@ observeMutations(/^\/api\/account\/households\/[^/]+\/owner$/, ownershipRequests
   ownershipFailure = null
   return failure
 })
+observeMutations(/^\/api\/account\/households\/[^/]+\/(?:membership|members\/[^/]+)$/, membershipRequests, () => {
+  const failure = membershipFailure
+  membershipFailure = null
+  return failure
+})
 observeMutations(/^\/api\/account$/, deletionRequests, () => {
   const failure = deletionFailure
   deletionFailure = null
@@ -257,10 +265,7 @@ app.post('/_fixture/deletion/state', express.json(), async (request, response) =
     deletionAttempts, verificationRequests: verificationRequests.length,
   })
 })
-app.post('/_fixture/ownership/seed', express.json(), async (request, response) => {
-  const input = z.object({
-    email: accountEmailSchema, householdId: z.string().uuid(), invitation: z.string(), peerEmail: accountEmailSchema,
-  }).parse(request.body)
+async function seedOwnership(input) {
   const peer = await store.accounts.signIn(identity(input.peerEmail), 'Sam', 'Ownership fixture')
   try {
     const joined = await store.accounts.accept(peer.session, input.invitation, 'Sam')
@@ -268,7 +273,7 @@ app.post('/_fixture/ownership/seed', express.json(), async (request, response) =
     const peerID = joined.session.memberId
     const browserID = randomUUID()
     const formerID = randomUUID()
-    await asInvitationOwner(input.email, async (session) => {
+    return await asInvitationOwner(input.email, async (session) => {
       const { household, memberId } = await store.accounts.household(session, input.householdId)
       await store.accounts.setRoomRole(household, memberId, peerID, 'admin')
       household.members.push(
@@ -283,10 +288,117 @@ app.post('/_fixture/ownership/seed', express.json(), async (request, response) =
       household.version++
       await store.save(household)
       ownershipFixtures.set(input.householdId, { email: input.email, peerID })
-      response.json({ ownerId: memberId, peerId: peerID, browserId: browserID, formerId: formerID })
+      return { ownerId: memberId, peerId: peerID, browserId: browserID, formerId: formerID }
     })
   } finally {
     await store.accounts.logout(peer.session, false)
+  }
+}
+app.post('/_fixture/ownership/seed', express.json(), async (request, response) => {
+  const input = z.object({
+    email: accountEmailSchema, householdId: z.string().uuid(), invitation: z.string(), peerEmail: accountEmailSchema,
+  }).parse(request.body)
+  response.json(await seedOwnership(input))
+})
+app.post('/_fixture/membership/seed', express.json(), async (request, response) => {
+  const input = z.object({
+    email: accountEmailSchema, householdId: z.string().uuid(), invitation: z.string(),
+    peerEmail: accountEmailSchema, withPeers: z.boolean().default(true),
+  }).parse(request.body)
+  const members = input.withPeers ? await seedOwnership(input) : await asInvitationOwner(input.email, async (session) => {
+    const access = await store.accounts.household(session, input.householdId)
+    return { ownerId: access.memberId, peerId: null, browserId: null, formerId: null }
+  })
+  const subject = await store.accounts.signIn(identity(input.withPeers ? input.peerEmail : input.email), 'Sam', 'Membership fixture')
+  let otherHome = null
+  if (input.withPeers) {
+    const created = await store.accounts.createHousehold(subject.session, {
+      name: 'Meadow House', memberName: 'Sam', currency: 'EUR', budget: 25000,
+    })
+    otherHome = { id: created.session.household.id, name: created.session.household.name }
+  }
+  await store.accounts.select(subject.session, input.householdId)
+  const subjectID = members.peerId ?? members.ownerId
+  const proofs = new Map()
+  await asInvitationOwner(input.email, async (session) => {
+    const access = await store.accounts.household(session, input.householdId)
+    const household = access.household
+    const now = new Date().toISOString()
+    for (const memberId of [subjectID, members.browserId].filter(Boolean)) {
+      household.shopping.items.push(shoppingItemSchema.parse({
+        id: randomUUID(), name: memberId === subjectID ? 'Peer supplies' : 'Browser supplies',
+        quantity: '1', notes: '', createdBy: memberId, createdAt: now, updatedAt: now,
+        version: 0, claimedBy: memberId, pickedUp: true,
+      }))
+    }
+    if (!input.withPeers) {
+      household.expenses.push(expenseSchema.parse({
+        id: randomUUID(), createdAt: now, description: 'Retained membership receipt', amount: 1250,
+        paidBy: subjectID, participants: [subjectID], category: 'other', date: billingDate(household.billingTimeZone),
+      }))
+    }
+    household.version++
+    await store.save(household)
+    for (const memberId of [subjectID, members.browserId].filter(Boolean)) {
+      const browser = await store.session(household, memberId, 'Membership browser fixture')
+      const authenticated = await store.authenticate(browser.token)
+      if (!authenticated) throw new Error('Membership browser setup failed.')
+      const recovery = await store.rotateRecovery(authenticated, { version: 0, revokeOthers: false })
+      if (!recovery || recovery === 'conflict') throw new Error('Membership recovery setup failed.')
+      proofs.set(memberId, { token: browser.token, recoveryCode: recovery.code })
+    }
+    const oldInvitation = await store.accounts.invite(session, input.householdId, household.version, 7)
+    membershipFixtures.set(input.householdId, {
+      ...members, subjectID, subjectToken: subject.token, invitation: oldInvitation.code, proofs,
+    })
+  })
+  response.json({ ...members, subjectId: subjectID, otherHome })
+})
+app.post('/_fixture/membership/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const fixture = membershipFixtures.get(id)
+  const household = await store.get(id)
+  if (!fixture || !household) throw new Error('The membership fixture is missing.')
+  const account = await store.accounts.authenticate(fixture.subjectToken)
+  const accountState = account ? await store.accounts.state(account) : null
+  const members = []
+  for (const member of household.members) {
+    const proof = fixture.proofs.get(member.id)
+    const recovery = await database.prepare('SELECT COUNT(*) AS count FROM recovery_codes WHERE household_id = ? AND member_id = ?')
+      .get(id, member.id)
+    members.push({
+      id: member.id, name: member.name, inactive: member.inactive ?? false,
+      browserAccess: proof ? !!(await store.authenticate(proof.token)) : false,
+      recoveryAccess: Number(recovery.count) > 0,
+    })
+  }
+  const owner = await database.prepare('SELECT owner_member_id FROM household_accounts WHERE household_id = ?').get(id)
+  response.json({
+    version: household.version, ownerId: owner?.owner_member_id ?? null, members, items: household.shopping.items,
+    accountAlive: accountState?.account != null,
+    subjectMemberships: accountState?.memberships.map((membership) => membership.householdId) ?? [],
+    requests: membershipRequests.filter((entry) => entry.path.startsWith(`/api/account/households/${id}/`)),
+    ledgerDigest: createHash('sha256').update(JSON.stringify({
+      expenses: household.expenses, settlements: household.settlements, bills: household.bills,
+    })).digest('hex'),
+    balances: Object.fromEntries(balances(household)),
+  })
+})
+app.post('/_fixture/membership/failure', express.json(), (request, response) => {
+  membershipFailure = z.enum(['unavailable', 'lost-response']).parse(request.body.mode)
+  response.json({ configured: true })
+})
+app.post('/_fixture/membership/old-invitation', express.json(), async (request, response) => {
+  const fixture = membershipFixtures.get(z.string().uuid().parse(request.body.householdId))
+  if (!fixture) throw new Error('The membership invitation fixture is missing.')
+  const account = await store.accounts.authenticate(fixture.subjectToken)
+  if (!account) throw new Error('Leaving must preserve the account credential.')
+  try {
+    await store.accounts.accept(account, fixture.invitation, fixture.peerId ? 'Sam' : 'Ada')
+    response.json({ accepted: true })
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 410) throw error
+    response.json({ accepted: false })
   }
 })
 app.post('/_fixture/ownership/state', express.json(), async (request, response) => {
@@ -363,6 +475,9 @@ app.post('/_fixture/seed', express.json(), async (request, response) => {
   ownershipRequests.length = 0
   ownershipFixtures.clear()
   ownershipFailure = null
+  membershipRequests.length = 0
+  membershipFixtures.clear()
+  membershipFailure = null
   const issued = await store.accounts.signIn(identity(email), 'Ada', 'Fixture setup')
   const homes = []
   let invitation
@@ -652,7 +767,7 @@ try {
       const executed = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', result], { encoding: 'utf8' }))
       requireCompleteShard(summary, shardedPlan.tests, executed)
     } else {
-      const expected = 90 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 36)
+      const expected = 100 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 41)
         + (values['include-room'] ? 2 : 0)
       if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
         throw new Error(`Account flows did not all execute. Results: ${result}`)

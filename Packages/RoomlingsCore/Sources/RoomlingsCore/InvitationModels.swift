@@ -86,9 +86,14 @@ public struct HouseholdInvitationAccess: Sendable, Decodable, Equatable {
     public let role: AccountRole
     public let invitations: [HouseholdInvitation]
     public let members: [HouseholdAccessMember]
+    public let canLeave: Bool
 
     public var ownershipCandidates: [HouseholdAccessMember] {
-        role == .owner ? members.filter { $0.id != memberID && $0.active && $0.linked } : []
+        removalCandidates.filter(\.linked)
+    }
+
+    public var removalCandidates: [HouseholdAccessMember] {
+        role == .owner ? members.filter { $0.id != memberID && $0.active } : []
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -105,6 +110,8 @@ public struct HouseholdInvitationAccess: Sendable, Decodable, Equatable {
         invitations = try container.decode([HouseholdInvitation].self, forKey: .invitations)
         members = try container.decode([HouseholdAccessMember].self, forKey: .members)
         let roster = try HouseholdMember.projection(household.value)
+        let actorID = memberID
+        canLeave = role != .owner || !roster.contains { $0.id != actorID && !$0.inactive }
         guard Set(members.map(\.id)).count == members.count,
               Set(members.map(\.id)) == Set(roster.map(\.id)),
               members.filter({ $0.role == .owner }).count <= 1,

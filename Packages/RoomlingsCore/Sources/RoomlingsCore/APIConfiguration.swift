@@ -55,6 +55,7 @@ enum APIEndpoint: Equatable {
     case createHousehold, acceptInvitation, selectHousehold(UUID)
     case householdInvitations(UUID), createInvitation(UUID), revokeInvitation(UUID, UUID)
     case transferOwnership(UUID)
+    case leaveHousehold(UUID), removeHouseholdMember(UUID, UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case recordAnalytics(UUID)
     case addChore, completeChore(UUID), undoChoreCompletion(UUID)
@@ -67,7 +68,8 @@ enum APIEndpoint: Equatable {
         case .account, .householdInvitations, .notificationSettings: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
         case .editShoppingItem: "PATCH"
-        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice, .deleteAccount: "DELETE"
+        case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
+             .deleteAccount, .leaveHousehold, .removeHouseholdMember: "DELETE"
         default: "POST"
         }
     }
@@ -87,6 +89,9 @@ enum APIEndpoint: Equatable {
         case .revokeInvitation(let household, let invitation):
             "api/account/households/\(household.uuidString.lowercased())/invitations/\(invitation.uuidString.lowercased())"
         case .transferOwnership(let id): "api/account/households/\(id.uuidString.lowercased())/owner"
+        case .leaveHousehold(let id): "api/account/households/\(id.uuidString.lowercased())/membership"
+        case .removeHouseholdMember(let household, let member):
+            "api/account/households/\(household.uuidString.lowercased())/members/\(member.uuidString.lowercased())"
         case .notificationSettings(let id), .saveNotificationSettings(let id):
             "api/account/households/\(id.uuidString.lowercased())/notifications"
         case .registerPushDevice: "api/account/push-devices"
