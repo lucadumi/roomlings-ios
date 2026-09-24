@@ -158,4 +158,5 @@ test('Release has independent local overrides and both plist versions use build 
   assert.match(projectFile, /Scripts\/build-room\.mjs/)
   assert.match(bundleScript, /process\.env\.ACTION === 'install'/)
   assert.match(bundleScript, /--untracked-files=normal/)
+  assert.match(bundleScript, /checkBrandAssets\(\{ source, project, requireWeb \}\)/)
 })

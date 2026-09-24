@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "source": "src/assets/brand/roomlings-icon-flat.svg",
+  "webRevisionAtGeneration": "b06cd70d216eb0242af3238dcc18ccd577112f97",
+  "svgSHA256": "a95f507fb05e0bbd91abc1016b5f187cec97cd5e4cfe9120290a784614c7e21a",
+  "background": "#ffffff",
+  "launchSizePoints": 64,
+  "images": {
+    "AppIcon.appiconset/AppIcon.png": "4b24cf36a3b57a1f7a7497b5bfb12241865282b3cfb046e6cce821ccba065fe5",
+    "LaunchMark.imageset/LaunchMark.png": "5c4aae64a93b3a264ac3edb9513aefe7e153f320ae45ee18e4b0a5333121f76e",
+    "LaunchMark.imageset/LaunchMark@2x.png": "91e00408e0f2e159ae764a7a9297eb9e62854aa06ad770ec2c0206a9434c566c",
+    "LaunchMark.imageset/LaunchMark@3x.png": "74c93df7c12f385d45bb760372d30af6775eae8b14ce641297fdb69d1dd5dccd"
+  }
+}

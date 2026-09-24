@@ -30,8 +30,9 @@ Release uses its own `Configuration/Release.local.xcconfig`. See the [TestFlight
 - **Account > Notifications** saves chore and money preferences. Enable push explicitly on each account/device; delivery requires the server and Apple signing setup in the [native guide](Packages/RoomlingsCore/README.md).
 - **Account > Account lifecycle** offers native account deletion with exact email confirmation, re-verification and pending-deletion recovery. [What deletion keeps](Packages/RoomlingsCore/README.md#account-deletion).
 - The larger room view adapts to the window in both orientations. Zoom includes object focus; **Reset room view** returns to 100%.
-- Shared web fonts, colours, error banners, graphics and static logo loaders; sessions stay in the native Keychain.
+- Shared web fonts, colours, error banners, graphics and static logo loaders; the approved mark also supplies the app icon and centred launch screen. Sessions stay in the native Keychain.
 - Minimal [retention events](Packages/RoomlingsCore/README.md#retention-analytics) go only to Roomlings, without message content or a third-party SDK.
+- The app bundles privacy declarations; see the [native data inventory](docs/privacy.md) before distribution.
 - [Native API and Keychain guide](Packages/RoomlingsCore/README.md).
 
 ## Contributing
@@ -55,3 +56,5 @@ Deletion flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testAcc
 Ownership flows: `node Scripts/test-accounts.mjs --ui-test AccountUITests/testOwnershipTransferConfirmsTheNamedMemberAndPreservesTheLedger --ui-test AccountUITests/testAnUnconfirmedOwnershipTransferMustBeRefreshedWithoutRepeatingIt`.
 
 [CI](.github/workflows/ci.yml) covers Swift, the shared renderer, and iPhone/iPad flows.
+Each device's UI coverage is split into two isolated jobs using Xcode's compiled test inventory. Model tests run once per device, on shard 1; the result bundle must contain exactly the assigned tests, all passing without skips.
+To reproduce a CI shard, add `--include-room --shard 1/2` or `--include-room --shard 2/2` to `Scripts/test-accounts.mjs`. Run local shards sequentially because they share build output. Ordinary unsharded runs and individual `--ui-test` selectors are unchanged.

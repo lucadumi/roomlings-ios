@@ -5,6 +5,8 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { readFile } from 'node:fs/promises'
+import { parseShard, planNativeShard, requireCompleteShard } from './native-test-plan.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
@@ -12,10 +14,15 @@ const requireWeb = createRequire(join(web, 'package.json'))
 const { values } = parseArgs({ options: {
   destination: { type: 'string' }, 'include-room': { type: 'boolean' }, 'chores-only': { type: 'boolean' },
   'ui-test': { type: 'string', multiple: true },
+  shard: { type: 'string' },
 } })
 const selectedFlows = values['ui-test'] ? [...new Set(values['ui-test'])] : null
 if (selectedFlows?.some((flow) => !/^[A-Za-z_]\w*\/test\w+$/.test(flow))) {
   throw new Error('Use --ui-test TestClass/testMethod for each native UI flow.')
+}
+const shard = values.shard === undefined ? null : parseShard(values.shard)
+if (shard && (selectedFlows || values['chores-only'])) {
+  throw new Error('--shard cannot be combined with --ui-test or --chores-only. Shard the complete suite instead.')
 }
 const { createApp } = await import(pathToFileURL(join(web, 'server/app.ts')).href)
 const { Store } = await import(pathToFileURL(join(web, 'server/store.ts')).href)
@@ -585,7 +592,8 @@ try {
   await once(server, 'listening')
   const origin = `http://127.0.0.1:${server.address().port}`
   const destination = values.destination ?? 'platform=iOS Simulator,name=iPhone 17 Pro'
-  const result = join(project, 'Build', `Account-flows-${Date.now()}.xcresult`)
+  const runID = Date.now()
+  const result = join(project, 'Build', `Account-flows-${runID}.xcresult`)
   console.log(`Using an isolated account API at ${origin}.`)
   const flows = selectedFlows ? selectedFlows.map((flow) => `RoomlingsUITests/${flow}`) : values['chores-only'] ? [
     'RoomlingsUITests/AccountUITests/testChoreControlsCanReturnToSystemStyling',
@@ -594,11 +602,38 @@ try {
     'RoomlingsUITests/AccountUITests/testChoresKeepFailedDraftsAndRequireConflictReview',
     'RoomlingsUITests/AccountUITests/testChoresRetryLostResponsesWithoutDuplicatingTheSave',
   ] : ['RoomlingsUITests/AccountUITests']
-  const child = spawn('caffeinate', ['-i', 'xcodebuild',
+  const configuration = [
     '-project', join(project, 'Roomlings.xcodeproj'), '-scheme', 'Roomlings',
     '-destination', destination, '-derivedDataPath', join(project, 'Build', 'DerivedData'),
-    '-resultBundlePath', result, '-only-testing:RoomlingsTests', ...flows.map((flow) => `-only-testing:${flow}`),
+  ]
+  const selection = [
+    '-only-testing:RoomlingsTests', ...flows.map((flow) => `-only-testing:${flow}`),
     ...(values['include-room'] ? ['-only-testing:RoomlingsUITests/RoomlingsUITests'] : []),
+  ]
+  const settings = [
+    `ROOMLINGS_TEST_API_ORIGIN=${origin}`, `NODE_BINARY=${process.execPath}`, `ROOMLINGS_WEB_ROOT=${web}`,
+  ]
+  const runXcode = async (args) => {
+    const child = spawn('caffeinate', ['-i', 'xcodebuild', ...configuration, ...args, ...settings], { stdio: 'inherit' })
+    return once(child, 'exit')
+  }
+  let shardedPlan
+  if (shard) {
+    const [built, buildSignal] = await runXcode(['build-for-testing', ...selection, '-quiet'])
+    if (built !== 0) throw new Error(`Building native tests failed (${buildSignal ?? built}).`)
+    const enumerationPath = join(project, 'Build', `Test-enumeration-${runID}.json`)
+    const [enumerated, enumerationSignal] = await runXcode([
+      'test-without-building', ...selection, '-quiet', '-enumerate-tests',
+      '-test-enumeration-style', 'flat', '-test-enumeration-format', 'json',
+      '-test-enumeration-output-path', enumerationPath,
+    ])
+    if (enumerated !== 0) throw new Error(`Enumerating native tests failed (${enumerationSignal ?? enumerated}).`)
+    shardedPlan = planNativeShard(JSON.parse(await readFile(enumerationPath, 'utf8')), shard)
+    console.log(`Native shard ${shardedPlan.shard}: ${shardedPlan.modelTests} model tests and ${shardedPlan.uiTests} of ${shardedPlan.totalUITests} UI flows.`)
+  }
+  const [code, signal] = await runXcode([
+    '-resultBundlePath', result,
+    ...(shardedPlan ? shardedPlan.tests.map((test) => `-only-testing:${test}`) : selection),
     '-parallel-testing-enabled', 'NO',
     ...(process.env.CI ? [
       '-destination-timeout', '60',
@@ -606,19 +641,22 @@ try {
       '-default-test-execution-time-allowance', '300',
       '-maximum-test-execution-time-allowance', '600',
     ] : ['-quiet']),
-    'test', `ROOMLINGS_TEST_API_ORIGIN=${origin}`,
-    `NODE_BINARY=${process.execPath}`, `ROOMLINGS_WEB_ROOT=${web}`,
-  ], { stdio: 'inherit' })
-  const [code, signal] = await once(child, 'exit')
+    shardedPlan ? 'test-without-building' : 'test',
+  ])
   if (code !== 0) {
     console.error(`Account device flows failed${signal ? ` (${signal})` : ''}. Results: ${result}`)
     process.exitCode = code ?? 1
   } else {
     const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
-    const expected = 86 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 36)
-      + (values['include-room'] ? 2 : 0)
-    if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
-      throw new Error(`Account flows did not all execute. Results: ${result}`)
+    if (shardedPlan) {
+      const executed = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', result], { encoding: 'utf8' }))
+      requireCompleteShard(summary, shardedPlan.tests, executed)
+    } else {
+      const expected = 90 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 36)
+        + (values['include-room'] ? 2 : 0)
+      if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
+        throw new Error(`Account flows did not all execute. Results: ${result}`)
+      }
     }
   }
 } finally {
