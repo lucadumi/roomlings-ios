@@ -75,8 +75,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: roomlings/package-lock.json
-      - name: Check release archive safeguards
-        run: node --test Tests/Release/release.test.mjs
+      - name: Check release and invitation link safeguards
+        run: node --test Tests/Release/release.test.mjs Tests/Invitations/invitation-links.test.mjs
       - name: Check native shard coverage
         run: node --test Tests/CI/native-test-plan.test.mjs
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
@@ -146,6 +146,9 @@ jobs:
       - run: npm --prefix ../roomlings ci --no-audit --no-fund
       - run: swift test --package-path Packages/RoomlingsCore
         if: matrix.shard == 1
+      - name: Check Xcode invitation entitlement selection
+        if: matrix.name == 'iPhone' && matrix.shard == 1
+        run: node --test Tests/Invitations/invitation-links.test.mjs
       - name: Build the unsigned device release and verify its metadata
         if: matrix.name == 'iPhone' && matrix.shard == 1
         run: |

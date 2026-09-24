@@ -193,41 +193,17 @@ The default `http://localhost:5173` link is for the same Mac and its simulators,
 
 ### Public link setup
 
-**The public domain is not chosen yet.** The native URL handler is implemented, but no Associated Domains entitlement or deployed `apple-app-site-association` file is configured. Setting an origin alone does not enable Universal Links.
+**The public domain is not chosen yet.** Universal Links are opt-in through `ROOMLINGS_UNIVERSAL_LINKS`; the default `NO` keeps the original push-only entitlements. An invitation origin alone does not enable app-opening links.
 
-`ROOMLINGS_INVITATION_SCHEME` and `ROOMLINGS_INVITATION_HOST` configure the web origin in `Configuration/Local.xcconfig` for Debug or `Configuration/Release.local.xcconfig` for Release. Debug defaults to `http://localhost:5173`; Release leaves the host blank. Missing configuration is shown explicitly, and no new share link is offered. The web origin may differ from the API origin. Distribution archives require both public HTTPS origins; see the [TestFlight guide](../../docs/testflight.md).
+`ROOMLINGS_INVITATION_SCHEME` and `ROOMLINGS_INVITATION_HOST` configure the web origin, separately from the API. Debug defaults to `http://localhost:5173`; Release leaves the host blank. Missing configuration is shown explicitly, and no new share link is offered.
 
-After choosing the HTTPS domain and signing identity:
+`AccountInvitationCode(link:origin:)` accepts incoming URLs only at the configured origin's root, without a query or extra fragment parameters. The general string initializer remains suitable for explicit paste-to-join. Neither opens the supplied URL.
 
-1. Serve the existing web app at that origin and configure the invitation settings to match.
-2. Add the Associated Domains capability to the app target with `applinks:<chosen-domain>`, using a provisioning profile with that entitlement.
-3. Serve `/.well-known/apple-app-site-association` as JSON over HTTPS, without authentication or redirects. Replace the app ID prefix below with the signed app's actual prefix:
-
-```json
-{
-  "applinks": {
-    "details": [{
-      "appIDs": ["APP_ID_PREFIX.com.roomlings.app"],
-      "components": [{"/": "/", "#": "account-invite=roomlings-invite-*"}]
-    }]
-  }
-}
-```
-
-The fragment rule targets generated invitation links without intercepting unrelated web account or recovery URLs. See Apple's [association format](https://developer.apple.com/documentation/bundleresources/applinks) and [SwiftUI URL handler](https://developer.apple.com/documentation/swiftui/view/onopenurl(perform:)).
-
-Without the app, the link opens the existing web join flow. Either join there and later sign into the same native account, or install the app and reopen the original message's link. Universal Links do not automatically transfer a pending invitation through installation. No clipboard scanning or install tracking is used.
+See [invitation configuration](../../docs/invitations.md) for the optional entitlement, generated association file and signing checks. The not-installed flow is web-first: join in the browser, then sign into the same account in the app. No invitation is transferred through installation, and browser sessions remain intact.
 
 ### Invitation flows
 
-```sh
-node Scripts/test-accounts.mjs \
-  --ui-test AccountUITests/testInvitationsShareJoinAndRejectARevokedLink \
-  --ui-test AccountUITests/testInvitationsRequireRefreshAfterALostResponseAndAConflict \
-  --ui-test AccountUITests/testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership
-```
-
-The isolated flows use the real shared server with test accounts and exercise cookie-based web acceptance without invalidating that browser session. A DEBUG-only launch input drives the same native URL handler for signed-out and restored launches. These flows do not verify Apple's domain association. Before closing the Universal Links work, verify signed-device links from Messages with the app installed and absent, including revoked links and both installation paths.
+The [targeted native flows](../../docs/development.md#targeted-native-flows) use the real shared server with isolated test accounts, including cookie-based web acceptance without invalidating the browser session. A DEBUG-only launch input drives the same native URL handler for signed-out and restored launches. Physical-device domain association remains a separate acceptance step.
 
 ## Chores
 

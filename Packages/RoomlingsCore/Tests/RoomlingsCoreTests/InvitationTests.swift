@@ -376,6 +376,32 @@ struct InvitationTests {
             try AccountInvitationCode(link: link, origin: origin)
         }
     }
+
+    @Test(arguments: [
+        "/account", "/recover", "/%2F", "//", "/?code=private", "/?",
+    ])
+    func incomingLinksMustUseOnlyTheInvitationRoot(path: String) throws {
+        let origin = try APIConfiguration(origin: "https://invites.roomlings.example")
+        let link = try #require(URL(string: "\(origin.origin)\(path)#account-invite=\(Fixtures.invitationCode)"))
+        #expect(throws: AccountError.invalidInput(.invitationCode)) {
+            try AccountInvitationCode(link: link, origin: origin)
+        }
+        // Explicit paste still extracts the code locally, without navigating to the supplied URL.
+        #expect(try AccountInvitationCode(link.absoluteString).value == Fixtures.invitationCode)
+    }
+
+    @Test(arguments: [
+        "account-invite=CODE&recovery=private", "other=value&account-invite=CODE",
+        "account-invite=CODE&account-invite=CODE", "account-invite=CODE&", "account-invite=%20CODE",
+    ])
+    func incomingLinksRejectAdditionalFragmentParameters(fragment: String) throws {
+        let origin = try APIConfiguration(origin: "https://invites.roomlings.example")
+        let fragment = fragment.replacingOccurrences(of: "CODE", with: Fixtures.invitationCode)
+        let link = try #require(URL(string: "\(origin.origin)/#\(fragment)"))
+        #expect(throws: AccountError.invalidInput(.invitationCode)) {
+            try AccountInvitationCode(link: link, origin: origin)
+        }
+    }
 }
 
 enum InvitationOperation: CaseIterable, Sendable {

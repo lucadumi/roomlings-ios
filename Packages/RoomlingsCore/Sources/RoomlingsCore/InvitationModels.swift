@@ -32,8 +32,14 @@ public struct AccountInvitationCode: Sendable, Equatable,
     }
 
     public init(link: URL, origin: APIConfiguration) throws {
-        guard origin.contains(link) else { throw AccountError.invalidInput(.invitationCode) }
+        guard origin.contains(link),
+              let components = URLComponents(url: link, resolvingAgainstBaseURL: false),
+              components.percentEncodedPath.isEmpty || components.percentEncodedPath == "/",
+              components.query == nil else { throw AccountError.invalidInput(.invitationCode) }
         try self.init(link.absoluteString)
+        guard components.fragment == "account-invite=\(value)" else {
+            throw AccountError.invalidInput(.invitationCode)
+        }
     }
 
     public func link(origin: APIConfiguration) throws -> URL {

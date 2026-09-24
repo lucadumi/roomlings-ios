@@ -8,11 +8,13 @@ import { parseArgs } from 'node:util'
 import { buildTheme } from './build-theme.mjs'
 import { checkBrandAssets } from './build-brand-assets.mjs'
 import { checkArchiveSettings, checkArchiveSource } from './check-release.mjs'
+import { invitationAssociation, writeInvitationAssociation } from './invitation-links.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const { values } = parseArgs({ options: { 'web-root': { type: 'string' } } })
 const archiving = process.env.ACTION === 'install'
 if (archiving) checkArchiveSettings(process.env)
+const association = invitationAssociation(process.env)
 const requestedSource = values['web-root'] ?? process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings'
 const source = await realpath(resolve(project, requestedSource))
 const requireWeb = createRequire(join(source, 'package.json'))
@@ -123,4 +125,5 @@ await writeFile(join(output, 'source.json'), JSON.stringify({
   webWorkingTreeDirty: dirty,
   webDependencyLockSHA256: createHash('sha256').update(lockfile).digest('hex'),
 }, null, 2) + '\n')
+await writeInvitationAssociation(association, join(project, 'Build', 'InvitationLinks'))
 console.log(`Bundled the shared kitchen from ${revision.slice(0, 7)}${dirty ? ' with local source changes' : ''}.`)

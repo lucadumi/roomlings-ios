@@ -767,7 +767,7 @@ try {
       const executed = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', result], { encoding: 'utf8' }))
       requireCompleteShard(summary, shardedPlan.tests, executed)
     } else {
-      const expected = 100 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 41)
+      const expected = 101 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 41)
         + (values['include-room'] ? 2 : 0)
       if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
         throw new Error(`Account flows did not all execute. Results: ${result}`)
