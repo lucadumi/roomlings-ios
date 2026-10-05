@@ -58,7 +58,7 @@ enum APIEndpoint: Equatable {
     case leaveHousehold(UUID), removeHouseholdMember(UUID, UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case recordAnalytics(UUID)
-    case addChore, completeChore(UUID), undoChoreCompletion(UUID)
+    case addChore, editChore(UUID), setChoreArchived(UUID), completeChore(UUID), undoChoreCompletion(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
@@ -67,7 +67,7 @@ enum APIEndpoint: Equatable {
         switch self {
         case .account, .householdInvitations, .notificationSettings: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
-        case .editShoppingItem: "PATCH"
+        case .editShoppingItem, .editChore, .setChoreArchived: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
              .deleteAccount, .leaveHousehold, .removeHouseholdMember: "DELETE"
         default: "POST"
@@ -98,6 +98,8 @@ enum APIEndpoint: Equatable {
         case .unregisterPushDevice(let id): "api/account/push-devices/\(id.uuidString.lowercased())"
         case .recordAnalytics(let id): "api/account/households/\(id.uuidString.lowercased())/analytics"
         case .addChore: "api/chores"
+        case .editChore(let id): "api/chores/\(id.uuidString.lowercased())"
+        case .setChoreArchived(let id): "api/chores/\(id.uuidString.lowercased())/archive"
         case .completeChore(let id): "api/chores/\(id.uuidString.lowercased())/complete"
         case .undoChoreCompletion(let id): "api/chores/completions/\(id.uuidString.lowercased())/undo"
         case .addShoppingItem: "api/shopping/items"

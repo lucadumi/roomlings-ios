@@ -10,12 +10,17 @@ final class AccountUITests: XCTestCase {
         let recoveryCode: String
     }
 
-    private struct ChoreState: Decodable {
+    struct ChoreState: Decodable {
         struct Item: Decodable {
             let id: String
             let title: String
+            let notes: String
             let dueDate: String?
             let repeatDays: Int?
+            let version: Int
+            let archived: Bool
+            let rotation: [String]
+            let turn: Int
             let occurrence: Int
             let componentId: String?
             let componentName: String?
@@ -28,13 +33,18 @@ final class AccountUITests: XCTestCase {
         }
         struct Request: Decodable {
             let path: String
+            let method: String
             let version: Int
+            let choreVersion: Int?
             let mutationId: String?
             let mutationVersion: Int?
             let native: Bool
             let browserHeaders: Bool
         }
         let version: Int
+        let today: String
+        let historyDigest: String
+        let ledgerDigest: String
         let items: [Item]
         let history: [Completion]
         let requests: [Request]
@@ -446,7 +456,7 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchChores(systemControls: Bool = false) async throws -> (XCUIApplication, Seed.Home) {
+    func launchChores(systemControls: Bool = false) async throws -> (XCUIApplication, Seed.Home) {
         let email = "chores-\(UUID().uuidString.lowercased())@example.test"
         let seed = try JSONDecoder().decode(Seed.self, from: await fixture("_fixture/seed", body: ["email": email]))
         let home = try XCTUnwrap(seed.homes.first { $0.name == "Cedar House" })
@@ -461,17 +471,17 @@ final class AccountUITests: XCTestCase {
     }
 
     @MainActor
-    private func choreState(_ householdID: String) async throws -> ChoreState {
+    func choreState(_ householdID: String) async throws -> ChoreState {
         try JSONDecoder().decode(ChoreState.self, from: await fixture("_fixture/chores/state", body: ["householdId": householdID]))
     }
 
     @MainActor
-    private func picker(_ label: String, in app: XCUIApplication) -> XCUIElement {
+    func picker(_ label: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@", label)).firstMatch
     }
 
     @MainActor
-    private func choose(_ option: String, from label: String, in app: XCUIApplication) throws {
+    func choose(_ option: String, from label: String, in app: XCUIApplication) throws {
         try tap(picker(label, in: app), in: app)
         try tap(app.buttons[option], in: app)
     }

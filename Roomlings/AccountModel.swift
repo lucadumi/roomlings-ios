@@ -554,6 +554,24 @@ final class AccountModel {
         return saved
     }
 
+    func editChore(_ chore: Chore, draft: ChoreDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.editChore) {
+            try await $0.editChore(id: chore.id, draft: draft, choreVersion: chore.version,
+                                  householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Chore saved." }
+        return saved
+    }
+
+    func setChoreArchived(_ chore: Chore, archived: Bool, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.archiveChore) {
+            try await $0.setChoreArchived(id: chore.id, archived: archived, choreVersion: chore.version,
+                                         householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = archived ? "Chore archived. Its history is kept." : "Chore restored with its saved schedule." }
+        return saved
+    }
+
     func undoChoreCompletion(_ completion: ChoreCompletion, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
         let saved = await perform(.undoChore) {
             try await $0.undoChoreCompletion(id: completion.id, choreVersion: completion.resultVersion,
@@ -822,11 +840,13 @@ final class AccountModel {
 
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
-        case addChore, completeChore, undoChore, shopping, ledger
+        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
 
-        var isChore: Bool { self == .addChore || self == .completeChore || self == .undoChore }
+        var isChore: Bool {
+            self == .addChore || self == .editChore || self == .archiveChore || self == .completeChore || self == .undoChore
+        }
         var isInvitation: Bool { self == .invitationLoad || isInvitationMutation }
         var isInvitationMutation: Bool { self == .invitationCreate || self == .invitationRevoke }
 

@@ -256,6 +256,70 @@ final class RoomBridgeTests: XCTestCase {
         )))
     }
 
+    func testChoreFormValuesKeepTheNextTurnSafeWhenRotationIndexesFallOutOfRange() {
+        let first = UUID()
+        let second = UUID()
+        XCTAssertEqual(ChoreFormValues.nextMemberID(in: [first, second], turn: 0), first)
+        XCTAssertEqual(ChoreFormValues.nextMemberID(in: [first, second], turn: 1), second)
+        XCTAssertEqual(ChoreFormValues.nextMemberID(in: [first, second], turn: 99), first)
+        XCTAssertNil(ChoreFormValues.nextMemberID(in: [], turn: 0))
+    }
+
+    func testSavedChoreDaysRoundTripThroughTheHouseholdPickerWithoutChangingDates() throws {
+        for zone in ["UTC", "us/eastern", "Pacific/Honolulu", "Asia/Kathmandu", "+23:59", "-23:59"] {
+            let calendar = try ChoreCalendar(chores: HouseholdChores(household: choreHousehold(extra: ["billingTimeZone": zone])))
+            for day in ["1900-01-01", "2026-03-08", "2026-11-01", "2026-09-24"] {
+                XCTAssertEqual(calendar.day(try calendar.instant(on: day)), day, zone)
+            }
+            XCTAssertThrowsError(try calendar.instant(on: "2026-02-30"))
+            XCTAssertThrowsError(try calendar.instant(on: "not-a-date"))
+        }
+    }
+
+    func testChoreEditDraftPreservesSavedFieldsAndSchedulesCompletedOneOffsForToday() throws {
+        let memberID = UUID(), formerID = UUID()
+        var item: [String: Any] = [
+            "id": UUID().uuidString, "title": "Polish the mirror", "notes": "Use the soft cloth.",
+            "roomId": "bathroom", "area": "mirror", "componentId": "default-bathroom-mirror",
+            "componentName": "Mirror", "dueDate": "2026-11-01", "repeatDays": 9,
+            "rotation": [formerID.uuidString, memberID.uuidString], "turn": 1,
+            "createdBy": memberID.uuidString, "createdAt": "2026-09-01T12:00:00Z",
+            "updatedAt": "2026-09-15T12:00:00Z", "version": 4, "occurrence": 1, "archived": false
+        ]
+        let members: [[String: Any]] = [
+            ["id": memberID.uuidString, "name": "Ada", "color": "#81b29a"],
+            ["id": formerID.uuidString, "name": "Former roommate", "color": "#81b29a", "inactive": true]
+        ]
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-24T00:30:00Z"))
+        for (days, choice) in [(nil, ""), (1, "1"), (7, "7"), (14, "14"), (9, "custom"), (365, "custom")] as [(Int?, String)] {
+            item["repeatDays"] = days.map { $0 as Any } ?? NSNull()
+            let chores = try HouseholdChores(household: choreHousehold(extra: [
+                "members": members, "billingTimeZone": "us/eastern", "chores": ["items": [item], "history": []]
+            ]))
+            let calendar = try ChoreCalendar(chores: chores)
+            let draft = try ChoreFormValues(chore: XCTUnwrap(chores.items.first), calendar: calendar, now: now)
+            XCTAssertEqual(draft.title, "Polish the mirror")
+            XCTAssertEqual(draft.notes, "Use the soft cloth.")
+            XCTAssertEqual(draft.roomID, "bathroom")
+            XCTAssertEqual(draft.area, "mirror")
+            XCTAssertEqual(draft.componentID, "default-bathroom-mirror")
+            XCTAssertEqual(calendar.day(draft.dueDate), "2026-11-01")
+            XCTAssertEqual(draft.repeatChoice, choice)
+            XCTAssertEqual(draft.customDays, String(days ?? 3))
+            XCTAssertEqual(draft.rotation, [formerID, memberID])
+            XCTAssertEqual(draft.nextMemberID, memberID)
+        }
+        item["dueDate"] = NSNull()
+        item["repeatDays"] = NSNull()
+        let chores = try HouseholdChores(household: choreHousehold(extra: [
+            "members": members, "billingTimeZone": "us/eastern", "chores": ["items": [item], "history": []]
+        ]))
+        let calendar = try ChoreCalendar(chores: chores)
+        let draft = try ChoreFormValues(chore: XCTUnwrap(chores.items.first), calendar: calendar, now: now)
+        XCTAssertEqual(calendar.day(draft.dueDate), "2026-09-23")
+        XCTAssertEqual(draft.repeatChoice, "")
+    }
+
     private func choreHousehold(extra: [String: Any] = [:]) throws -> HouseholdSnapshot {
         var fields: [String: Any] = [
             "id": UUID().uuidString, "name": "Our home", "version": 4, "currency": "EUR",

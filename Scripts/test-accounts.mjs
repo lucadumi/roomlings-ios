@@ -109,6 +109,7 @@ function observeMutations(path, requests, consumeFailure) {
     if (!['POST', 'PATCH', 'DELETE'].includes(request.method)) { next(); return }
     requests.push({
       path: request.originalUrl, method: request.method, version: request.body.version, itemVersion: request.body.itemVersion,
+      choreVersion: request.body.choreVersion,
       memberId: request.body.memberId,
       mutationId: request.body.mutationId, mutationVersion: request.body.mutationVersion,
       native: request.get('X-Roomlings-Client') === 'ios',
@@ -584,10 +585,19 @@ app.post('/_fixture/chores/failure', express.json(), (request, response) => {
   response.json({ configured: true })
 })
 app.post('/_fixture/chores/change', express.json(), async (request, response) => {
-  const id = z.string().uuid().parse(request.body.householdId)
+  const input = z.object({
+    householdId: z.string().uuid(), choreId: z.string().uuid().optional(), title: z.string().trim().min(1).max(80).optional(),
+  }).parse(request.body)
   await store.transaction(async () => {
-    const household = await store.get(id)
+    const household = await store.get(input.householdId)
     if (!household) throw new Error('The chore fixture household is missing.')
+    if (input.choreId) {
+      const chore = household.chores.items.find((item) => item.id === input.choreId)
+      if (!chore) throw new Error('The chore fixture item is missing.')
+      if (input.title !== undefined) chore.title = input.title
+      chore.version++
+      chore.updatedAt = new Date().toISOString()
+    }
     household.version++
     await store.save(household)
   })
@@ -597,7 +607,14 @@ app.post('/_fixture/chores/state', express.json(), async (request, response) => 
   const id = z.string().uuid().parse(request.body.householdId)
   const household = await store.get(id)
   if (!household) throw new Error('The chore fixture household is missing.')
-  response.json({ version: household.version, ...household.chores, requests: choreRequests })
+  response.json({
+    version: household.version, today: billingDate(household.billingTimeZone),
+    ...household.chores, requests: choreRequests,
+    historyDigest: createHash('sha256').update(JSON.stringify(household.chores.history)).digest('hex'),
+    ledgerDigest: createHash('sha256').update(JSON.stringify({
+      expenses: household.expenses, settlements: household.settlements, bills: household.bills, shopping: household.shopping,
+    })).digest('hex'),
+  })
 })
 async function shoppingRequest(householdId, path, fields, method = 'POST') {
   const actor = shoppingActors.get(householdId)
@@ -716,6 +733,9 @@ try {
     'RoomlingsUITests/AccountUITests/testChoresCreateAndCompleteInTheSharedHousehold',
     'RoomlingsUITests/AccountUITests/testChoresKeepFailedDraftsAndRequireConflictReview',
     'RoomlingsUITests/AccountUITests/testChoresRetryLostResponsesWithoutDuplicatingTheSave',
+    'RoomlingsUITests/AccountUITests/testChoresEditArchiveRestoreAndKeepSharedHistory',
+    'RoomlingsUITests/AccountUITests/testChoreEditsPreserveDraftsAndRequireConflictReview',
+    'RoomlingsUITests/AccountUITests/testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory',
   ] : ['RoomlingsUITests/AccountUITests']
   const configuration = [
     '-project', join(project, 'Roomlings.xcodeproj'), '-scheme', 'Roomlings',
@@ -767,7 +787,7 @@ try {
       const executed = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', result], { encoding: 'utf8' }))
       requireCompleteShard(summary, shardedPlan.tests, executed)
     } else {
-      const expected = 101 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 5 : 41)
+      const expected = 103 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 8 : 44)
         + (values['include-room'] ? 2 : 0)
       if (summary.result !== 'Passed' || summary.passedTests < expected || summary.skippedTests !== 0) {
         throw new Error(`Account flows did not all execute. Results: ${result}`)

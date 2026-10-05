@@ -47,6 +47,8 @@ All operations are explicit, asynchronous and throwing:
 | `unregisterPushDevice(installationID:)` | `DELETE /api/account/push-devices/<installationId>` |
 | `recordAnalytics(_:context:)` | `POST /api/account/households/<id>/analytics` |
 | `addChore(_:householdID:version:mutationID:)` | `POST /api/chores` |
+| `editChore(id:draft:choreVersion:householdID:version:mutationID:)` | `PATCH /api/chores/<id>` |
+| `setChoreArchived(id:archived:choreVersion:householdID:version:mutationID:)` | `PATCH /api/chores/<id>/archive` |
 | `completeChore(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/<id>/complete` |
 | `undoChoreCompletion(id:choreVersion:householdID:version:mutationID:)` | `POST /api/chores/completions/<id>/undo` |
 | `addShoppingItem(_:householdID:version:mutationID:)` | `POST /api/shopping/items` |
@@ -215,6 +217,10 @@ The [targeted native flows](../../docs/development.md#targeted-native-flows) use
 - `accountStateRequired` or `householdSelectionChanged` requires reviewing/restoring the current account or home. Chores share the account/credential operation gate and existing expiry/storage failure handling. No separate chores GET is needed.
 - `canUndo(_:)` requires a retained completion and the server's matching chore version and occurrence, regardless of history order or assignee. Later edits, completions, archiving and replaced history invalidate older completion values. Completed one-offs and stored object chores can still be undone.
 - Undo uses the completion's `resultVersion` as `choreVersion`; only the server restores its date, turn and occurrence. The response must confirm that completion and the current roommate's undo. Explicit retries retain the original versions and mutation ID, even after refresh; replay responses may include later chore changes and are never rolled back locally.
+- Editing sends the complete `ChoreDraft`, including an explicit null to clear an object link. `setChoreArchived` sends the intended Boolean, not a toggle. Both require a matching mutation receipt; fresh responses must confirm the requested fields, next chore version and unchanged occurrence, other chores and completion history.
+- **Edit** and **Archive** sit beside **Mark done**. **Archived** offers **Restore chore**, which retains the saved schedule and rotation. Stored-object chores can be archived but cannot be edited or restored until their object returns. Archiving does not free a slot under the 200-chore limit.
+- **History > Schedule again** edits a completed one-off with a new due date; it neither undoes nor replaces its previous completion. Saved dates open in the household time zone, and completed one-offs default to today there.
+- A conflicting edit retains typed fields through **Review latest chores**, then offers **Use latest chore** or **Keep my draft** when that chore changed. An unconfirmed save keeps its original request for explicit retry and blocks dismissal until retry or refresh; refreshing an uncertain save returns to the board rather than submitting a new change.
 
 ## Shopping
 

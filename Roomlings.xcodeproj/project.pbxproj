@@ -57,6 +57,7 @@
 		A00000000000000000000030 /* BrandAssetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000038 /* BrandAssetsTests.swift */; };
 		A00000000000000000000031 /* MembershipModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000039 /* MembershipModelTests.swift */; };
 		A00000000000000000000032 /* MembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* MembershipUITests.swift */; };
+		A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* ChoreManagementUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -129,6 +130,7 @@
 		B00000000000000000000039 /* MembershipModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipModelTests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003A /* MembershipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipUITests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003B /* RoomlingsLinks.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RoomlingsLinks.entitlements; sourceTree = "<group>"; };
+		B0000000000000000000003C /* ChoreManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreManagementUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +238,7 @@
 				B00000000000000000000030 /* AccountDeletionUITests.swift */,
 				B00000000000000000000033 /* OwnershipUITests.swift */,
 				B0000000000000000000003A /* MembershipUITests.swift */,
+				B0000000000000000000003C /* ChoreManagementUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
 			);
@@ -455,6 +458,7 @@
 				A00000000000000000000028 /* AccountDeletionUITests.swift in Sources */,
 				A0000000000000000000002B /* OwnershipUITests.swift in Sources */,
 				A00000000000000000000032 /* MembershipUITests.swift in Sources */,
+				A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

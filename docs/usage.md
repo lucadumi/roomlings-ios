@@ -7,10 +7,14 @@ The room adapts to either orientation. Zoom includes object focus; **Reset room 
 
 | Control | What it does |
 | --- | --- |
-| **Chores** or an object's **+** marker | View, add, complete and undo tasks with shared schedules and rotations. |
+| **Chores** or an object's **+** marker | View, add, edit, complete and undo tasks with shared schedules and rotations. |
 | **Shopping** | Add, edit, claim and pick up items. Record a paid receipt to split its cost in the shared ledger. Picking up an item alone creates no debt. |
 | **Money** | View receipts, balances and repayments. Roomlings tracks money; it never moves it. |
 | Household name or avatar | Open **Account**. |
+
+Use the pencil or archive action beside **Mark done** to manage a chore.
+**Archived** restores saved schedules; **History > Schedule again** reschedules a completed one-off without changing its completion history.
+Stored-object chores must wait for their object to return before editing or restoring. Archiving keeps history and does not free a chore slot.
 
 ## Account
 
