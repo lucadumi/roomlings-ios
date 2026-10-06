@@ -11,6 +11,8 @@ struct ChoresSheet: View {
     @State private var mine = false
     @State private var historyCount = 20
     @State private var adding = false
+    @State private var editing: Chore?
+    @State private var archiving: Chore?
     @State private var draft = ChoreFormValues()
     @State private var hasDraft = false
     @State private var confirming: Chore?
@@ -34,7 +36,7 @@ struct ChoresSheet: View {
     }
 
     private enum Change {
-        case add(ChoreDraft), complete(Chore), undo(ChoreCompletion)
+        case add(ChoreDraft), edit(Chore, ChoreDraft), archive(Chore, Bool), complete(Chore), undo(ChoreCompletion)
     }
 
     private struct Save {
@@ -45,12 +47,17 @@ struct ChoresSheet: View {
     }
 
     private var changesBlocked: Bool { model.busy || pending != nil || reviewRequired }
+    private var dismissalBlocked: Bool { model.busy || pending != nil }
     private var title: String {
-        adding ? "Add a household chore." : undoing != nil ? "Undo this chore completion?"
+        if let editing { return editing.dueDate == nil ? "Schedule this chore again." : "Edit this chore." }
+        if let archiving { return archiving.archived ? "Restore this chore?" : "Archive this chore?" }
+        return adding ? "Add a household chore." : undoing != nil ? "Undo this chore completion?"
             : confirming != nil ? "Mark this chore done?" : "Household chores"
     }
     private var pageID: String {
         if adding { return "add" }
+        if let editing { return "edit-\(editing.id)-\(editing.version)" }
+        if let archiving { return "archive-\(archiving.id)" }
         if let undoing { return "undo-\(undoing.id.uuidString)" }
         return confirming?.id.uuidString ?? "board"
     }
@@ -60,7 +67,7 @@ struct ChoresSheet: View {
             HStack(spacing: 12) {
                 Text(title).font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                Button("Done") { dismiss() }.disabled(model.busy)
+                Button("Done") { dismiss() }.disabled(dismissalBlocked)
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
             .padding(.horizontal, 24)
@@ -73,9 +80,10 @@ struct ChoresSheet: View {
                         feedback.id("chores-feedback")
                         if let chores = model.chores, let catalog = model.choreCatalog, let calendar = model.choreCalendar,
                            model.canUseAccount, model.state?.session != nil {
-                            if adding {
-                                ChoreForm(values: $draft, chores: chores, catalog: catalog, objects: model.choreObjects,
-                                          calendar: calendar, disabled: changesBlocked) { start(.add($0)) }
+                            if adding || editing != nil {
+                                form(chores: chores, catalog: catalog, calendar: calendar)
+                            } else if let archiving {
+                                archiveConfirmation(archiving, chores: chores, catalog: catalog, calendar: calendar)
                             } else if let undoing {
                                 undoConfirmation(undoing, chores: chores, catalog: catalog, calendar: calendar)
                             } else if let confirming {
@@ -115,7 +123,7 @@ struct ChoresSheet: View {
         .accessibilityIdentifier("chores-sheet")
         .presentationBackground(RoomTheme.paper)
         .presentationCornerRadius(16)
-        .interactiveDismissDisabled(model.busy)
+        .interactiveDismissDisabled(dismissalBlocked)
         .modifier(RoomSheetPresentation(idealHeight: contentHeight + headerHeight + 1))
     }
 
@@ -148,12 +156,17 @@ struct ChoresSheet: View {
         }
         Button(pending != nil || reviewRequired ? "Review latest chores" : "Refresh chores") {
             Task {
-                let reviewing = pending != nil || reviewRequired
+                let uncertain = pending != nil
+                let reviewing = uncertain || reviewRequired
                 if await model.refresh(), model.chores != nil {
+                    pending = nil
+                    reviewRequired = false
                     if reviewing {
-                        pending = nil
-                        reviewRequired = false
-                        adding = false
+                        if uncertain || editing == nil {
+                            adding = false
+                            editing = nil
+                        }
+                        archiving = nil
                         confirming = nil
                         undoing = nil
                         model.notice = "Chores refreshed. Review the current list before starting another change."
@@ -297,6 +310,8 @@ struct ChoresSheet: View {
             Text(location(chore, catalog: catalog))
             if paused {
                 Text("This object's care is paused in Storage. Bring it back on the web to resume. Its due date, rotation and completion history are kept.")
+            } else if chore.archived && !chores.canRestore(chore) {
+                Text("This object is in Storage. Bring it back on the web before restoring this chore. Its history is kept.")
             }
             HStack {
                 Text(chore.dueDate.map { ChoreCalendar.title($0, today: today) } ?? "One-off completed")
@@ -310,13 +325,30 @@ struct ChoresSheet: View {
                 Spacer()
                 if chore.rotation.count > 1 { Text("Rotating") }
             }
-            if !chore.archived {
-                Button("Mark done") {
-                    model.clearFeedback()
-                    confirming = chore
+            if chore.archived {
+                Button("Restore chore") { openArchive(chore) }
+                    .disabled(changesBlocked || !chores.canRestore(chore))
+            } else {
+                HStack(spacing: 8) {
+                    Button("Mark done") {
+                        model.clearFeedback()
+                        confirming = chore
+                    }
+                    .buttonStyle(RoomButtonStyle(kind: .primary))
+                    .disabled(changesBlocked || chore.dueDate == nil || paused || currentStatus == nil)
+                    Button { openForm(chore) } label: {
+                        Image(systemName: "pencil").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(RoomButtonStyle(kind: .text))
+                    .accessibilityLabel("Edit \(chore.title)")
+                    .disabled(changesBlocked || !chores.canEdit(chore))
+                    Button { openArchive(chore) } label: {
+                        Image(systemName: "archivebox").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(RoomButtonStyle(kind: .text))
+                    .accessibilityLabel("Archive \(chore.title)")
+                    .disabled(changesBlocked)
                 }
-                .buttonStyle(RoomButtonStyle(kind: .primary))
-                .disabled(changesBlocked || chore.dueDate == nil || paused || currentStatus == nil)
             }
         }
         .font(RoomTheme.body(14))
@@ -345,6 +377,11 @@ struct ChoresSheet: View {
                 Button("Undo completion") { openUndo(completion) }
                     .buttonStyle(RoomButtonStyle(kind: .text))
                     .disabled(changesBlocked)
+            }
+            if chores.canScheduleAgain(completion), let chore = chores.items.first(where: { $0.id == completion.choreID }) {
+                Button("Schedule again") { openForm(chore) }
+                    .buttonStyle(RoomButtonStyle(kind: .text))
+                    .disabled(changesBlocked || !chores.canEdit(chore))
             }
         }
         .font(RoomTheme.body(14))
@@ -375,7 +412,58 @@ struct ChoresSheet: View {
             Button("Record completion") { start(.complete(chore)) }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
                 .disabled(changesBlocked || !allowed)
-            Button("Cancel") { confirming = nil; model.clearFeedback() }.disabled(model.busy)
+            Button("Cancel") { confirming = nil; model.clearFeedback() }.disabled(dismissalBlocked)
+        }
+    }
+
+    private func form(chores: HouseholdChores, catalog: ChoreCatalog, calendar: ChoreCalendar) -> some View {
+        let latest = editing.flatMap { snapshot in chores.items.first { $0.id == snapshot.id } }
+        let blocked = editing != nil && (latest == nil || latest.map { !chores.canEdit($0) } == true)
+        let changed = editing != nil && latest?.version != editing?.version
+        return VStack(alignment: .leading, spacing: 20) {
+            if blocked {
+                RoomFeedback("Chore unavailable, archived or paused in Storage. Cancel and review the latest chores.")
+            } else if changed, let latest {
+                RoomFeedback("This chore changed. Review its latest schedule before saving your draft.")
+                Text("Latest: \(latest.title). \(latest.dueDate.map { ChoreCalendar.title($0, today: calendar.day()) } ?? "One-off completed"). \(ChoreCalendar.repeats(latest.repeatDays)).")
+                    .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
+                Button("Use latest chore") { openForm(latest) }.disabled(changesBlocked)
+                Button("Keep my draft") { editing = latest; model.clearFeedback() }.disabled(changesBlocked)
+            }
+            ChoreForm(values: $draft, chores: chores, catalog: catalog, objects: model.choreObjects,
+                      calendar: calendar, disabled: changesBlocked, editing: editing != nil,
+                      submitDisabled: blocked || changed) { value in
+                start(editing.map { .edit($0, value) } ?? .add(value))
+            }
+            Button("Cancel") {
+                adding = false
+                editing = nil
+                model.clearFeedback()
+            }
+            .disabled(dismissalBlocked)
+        }
+    }
+
+    private func archiveConfirmation(_ chore: Chore, chores: HouseholdChores,
+                                     catalog: ChoreCatalog, calendar: ChoreCalendar) -> some View {
+        let latest = chores.items.first { $0.id == chore.id }
+        let allowed = latest.map {
+            $0.version == chore.version && $0.archived == chore.archived && (!chore.archived || chores.canRestore($0))
+        } ?? false
+        return VStack(alignment: .leading, spacing: 16) {
+            Text(chore.archived ? "The chore returns with its saved schedule. Previous history stays."
+                 : "The chore leaves the active list. Its history stays, and it can be restored later. Archiving does not free a chore slot.")
+                .foregroundStyle(RoomTheme.muted)
+            Text(chore.title).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+            Text(location(chore, catalog: catalog))
+            if let due = chore.dueDate { Text("Scheduled for \(ChoreCalendar.title(due, today: calendar.day())).") }
+            if !allowed {
+                RoomFeedback("Chore changed or its object is unavailable. Cancel and review the latest chores.")
+            }
+            Button(chore.archived ? "Restore chore" : "Archive chore") { start(.archive(chore, !chore.archived)) }
+                .buttonStyle(RoomButtonStyle(kind: .primary))
+                .disabled(changesBlocked || !allowed)
+            Button("Cancel") { archiving = nil; model.clearFeedback() }.disabled(dismissalBlocked)
         }
     }
 
@@ -393,7 +481,7 @@ struct ChoresSheet: View {
                 RoomFeedback("Chore changed. This completion can no longer be undone.")
             }
             Button("Keep completion") { undoing = nil; model.clearFeedback() }
-                .disabled(model.busy)
+                .disabled(dismissalBlocked)
             Button("Undo completion") { start(.undo(completion)) }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
                 .disabled(changesBlocked || !allowed)
@@ -445,16 +533,35 @@ struct ChoresSheet: View {
     private func openUndo(_ completion: ChoreCompletion) {
         model.clearFeedback()
         adding = false
+        editing = nil
+        archiving = nil
         confirming = nil
         undoing = completion
     }
 
-    private func openForm() {
+    private func openArchive(_ chore: Chore) {
+        model.clearFeedback()
+        archiving = chore
+    }
+
+    private func openForm(_ chore: Chore? = nil) {
         guard let memberID = model.state?.session?.memberID else {
             model.message = "Open your household before adding a chore."
             return
         }
-        if !hasDraft {
+        if let chore {
+            guard let calendar = model.choreCalendar else {
+                model.message = "Refresh chores before editing their saved schedule."
+                return
+            }
+            do {
+                draft = try ChoreFormValues(chore: chore, calendar: calendar)
+                hasDraft = false
+            } catch {
+                model.message = "The saved chore date could not be loaded. Refresh chores before editing it."
+                return
+            }
+        } else if !hasDraft {
             draft = ChoreFormValues()
             draft.roomID = roomFilter == "home" ? "" : roomFilter == "all" ? "kitchen" : roomFilter
             draft.area = areaFilter
@@ -464,7 +571,11 @@ struct ChoresSheet: View {
             hasDraft = true
         }
         model.clearFeedback()
-        adding = true
+        adding = chore == nil
+        editing = chore
+        archiving = nil
+        confirming = nil
+        undoing = nil
     }
 
     private func start(_ change: Change) {
@@ -477,6 +588,15 @@ struct ChoresSheet: View {
             reviewRequired = true
             return
         }
+        switch change {
+        case .edit(let chore, _), .archive(let chore, _):
+            guard let latest = model.chores?.items.first(where: { $0.id == chore.id }), latest.version == chore.version else {
+                model.message = "This chore changed. Refresh chores and review the latest schedule."
+                reviewRequired = true
+                return
+            }
+        default: break
+        }
         let save = Save(householdID: household.id, version: household.version, change: change)
         pending = save
         Task { await send(save) }
@@ -487,6 +607,12 @@ struct ChoresSheet: View {
         switch save.change {
         case .add(let draft):
             saved = await model.addChore(draft, householdID: save.householdID, version: save.version, mutationID: save.mutationID)
+        case .edit(let chore, let draft):
+            saved = await model.editChore(chore, draft: draft, householdID: save.householdID,
+                                          version: save.version, mutationID: save.mutationID)
+        case .archive(let chore, let archived):
+            saved = await model.setChoreArchived(chore, archived: archived, householdID: save.householdID,
+                                                 version: save.version, mutationID: save.mutationID)
         case .complete(let chore):
             saved = await model.completeChore(chore, householdID: save.householdID, version: save.version, mutationID: save.mutationID)
         case .undo(let completion):
@@ -497,11 +623,16 @@ struct ChoresSheet: View {
             pending = nil
             reviewRequired = false
             adding = false
+            editing = nil
+            archiving = nil
             confirming = nil
             undoing = nil
-            section = .chores
             switch save.change {
-            case .add:
+            case .archive: break
+            default: section = .chores
+            }
+            switch save.change {
+            case .add, .edit:
                 draft = ChoreFormValues()
                 hasDraft = false
                 lastCompletionID = nil
@@ -510,7 +641,7 @@ struct ChoresSheet: View {
                     $0.choreID == chore.id && $0.occurrence == chore.occurrence
                         && $0.resultVersion == chore.version + 1 && $0.undoneAt == nil
                 }?.id
-            case .undo:
+            case .undo, .archive:
                 lastCompletionID = nil
             }
         } else {

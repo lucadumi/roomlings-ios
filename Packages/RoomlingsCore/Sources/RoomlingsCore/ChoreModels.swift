@@ -171,6 +171,7 @@ public typealias ChoreMember = HouseholdMember
 
 /// A validated native projection, not a replacement ledger or an account/renderer payload.
 public struct HouseholdChores: Sendable, Equatable {
+    public let householdVersion: Int64
     public let items: [Chore]
     public let history: [ChoreCompletion]
     public let members: [ChoreMember]
@@ -181,6 +182,7 @@ public struct HouseholdChores: Sendable, Equatable {
     private let components: [String: HouseholdComponent]
 
     public init(household: HouseholdSnapshot) throws {
+        householdVersion = household.version
         let fields = try ChoreFields(household.value)
         if household.value["billingTimeZone"] == nil {
             billingTimeZone = "UTC"
@@ -245,6 +247,20 @@ public struct HouseholdChores: Sendable, Equatable {
     public func isPaused(_ chore: Chore) -> Bool {
         guard !chore.archived, let id = chore.componentID else { return false }
         return components[id]?.installed == false
+    }
+
+    public func canEdit(_ chore: Chore) -> Bool {
+        !chore.archived && !isPaused(chore)
+    }
+
+    public func canRestore(_ chore: Chore) -> Bool {
+        chore.archived && (chore.componentID.map { components[$0]?.installed == true } ?? true)
+    }
+
+    public func canScheduleAgain(_ completion: ChoreCompletion) -> Bool {
+        guard completion.undoneAt == nil, history.contains(completion),
+              let chore = items.first(where: { $0.id == completion.choreID }) else { return false }
+        return !chore.archived && chore.dueDate == nil && chore.occurrence == completion.occurrence + 1
     }
 
     public func canUndo(_ completion: ChoreCompletion) -> Bool {

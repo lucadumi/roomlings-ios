@@ -16,16 +16,18 @@ struct ChoreSessionTests {
         let original = try await session.restore()
         let updated = try await operation.perform(session)
         let request = try #require(await transport.requests.last)
-        expectNativeRequest(request, path: operation.path)
+        expectNativeRequest(request, path: operation.path, method: operation.method)
         var expected: [String: JSONValue] = [
             "version": .integer(17), "mutationVersion": .integer(17),
             "mutationId": ChoreFixtures.id(ChoreFixtures.mutationID)
         ]
-        if operation == .add {
+        if operation == .add || operation == .edit {
             expected.merge(ChoreFixtures.draft.requestFields) { _, new in new }
-        } else {
+        }
+        if operation != .add {
             expected["choreVersion"] = .integer(4)
         }
+        if operation == .archive { expected["archived"] = .bool(true) }
         let payload = try body(request)
         #expect(payload == .object(expected))
         for key in ["householdId", "account", "accessToken", "csrfToken", "memberId", "completedBy", "session"] {
@@ -590,12 +592,12 @@ struct ChoreSessionTests {
         #expect(await transport.requests.count == 2)
     }
 
-    private func expectNativeRequest(_ request: URLRequest, path: String) {
+    private func expectNativeRequest(_ request: URLRequest, path: String, method: String) {
         #expect(request.url?.path == path)
         #expect(request.url?.host == Fixtures.configuration.origin.host)
         #expect(request.url?.query == nil)
         #expect(request.url?.fragment == nil)
-        #expect(request.httpMethod == "POST")
+        #expect(request.httpMethod == method)
         #expect(request.timeoutInterval == Fixtures.configuration.requestTimeout)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(Fixtures.oldToken.value)")
         #expect(request.value(forHTTPHeaderField: "X-Roomlings-Client") == "ios")

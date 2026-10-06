@@ -12,6 +12,26 @@ struct ChoreFormValues {
     var customDays = "3"
     var rotation: [UUID] = []
     var nextMemberID: UUID?
+
+    static func nextMemberID(in rotation: [UUID], turn: Int) -> UUID? {
+        guard !rotation.isEmpty else { return nil }
+        return rotation.indices.contains(turn) ? rotation[turn] : rotation.first
+    }
+
+    init() {}
+
+    init(chore: Chore, calendar: ChoreCalendar, now: Date = .now) throws {
+        title = chore.title
+        notes = chore.notes
+        roomID = chore.roomID ?? ""
+        area = chore.area ?? ""
+        componentID = chore.componentID ?? ""
+        dueDate = try chore.dueDate.map { try calendar.instant(on: $0) } ?? now
+        repeatChoice = chore.repeatDays.map { [1, 7, 14].contains($0) ? String($0) : "custom" } ?? ""
+        customDays = String(chore.repeatDays ?? 3)
+        rotation = chore.rotation
+        nextMemberID = Self.nextMemberID(in: rotation, turn: chore.turn)
+    }
 }
 
 struct ChoreForm: View {
@@ -21,6 +41,8 @@ struct ChoreForm: View {
     let objects: [ChoreObject]
     let calendar: ChoreCalendar
     let disabled: Bool
+    let editing: Bool
+    let submitDisabled: Bool
     let onSubmit: (ChoreDraft) -> Void
     @State private var error: String?
 
@@ -65,9 +87,9 @@ struct ChoreForm: View {
             if let error {
                 RoomFeedback(error, identifier: "chore-form-error")
             }
-            Button("Create chore", action: submit)
+            Button(editing ? "Save chore" : "Create chore", action: submit)
                 .buttonStyle(RoomButtonStyle(kind: .primary))
-                .disabled(values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || values.rotation.isEmpty)
+                .disabled(submitDisabled || values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || values.rotation.isEmpty)
         }
         .disabled(disabled)
     }

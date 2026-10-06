@@ -41,6 +41,15 @@ struct ChoreCalendar: Sendable {
         date.addingTimeInterval(-fixedOffset)
     }
 
+    func instant(on day: String) throws -> Date {
+        let parser = Self.formatter("yyyy-MM-dd HH:mm", timeZone: timeZone)
+        let value = "\(day) 12:00"
+        guard let date = parser.date(from: value), parser.string(from: date) == value else {
+            throw AccountError.invalidInput(.dueDate)
+        }
+        return instant(fromPickerDate: date)
+    }
+
     func completionDay(_ timestamp: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = timestamp.contains(".")

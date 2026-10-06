@@ -179,7 +179,7 @@ jobs:
           DEVICE: ${{ steps.simulator.outputs.device }}
         run: xcrun simctl bootstatus "$DEVICE" -b
       - name: Run the native account and room shard
-        timeout-minutes: 60
+        timeout-minutes: 68
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
           SHARD: ${{ matrix.shard }}

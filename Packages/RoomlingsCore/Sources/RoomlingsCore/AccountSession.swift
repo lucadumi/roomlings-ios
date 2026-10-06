@@ -411,6 +411,30 @@ public actor AccountSession {
     }
 
     @discardableResult
+    public func editChore(
+        id: UUID, draft: ChoreDraft, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await updateChore(.edit(id, draft, choreVersion), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func setChoreArchived(
+        id: UUID, archived: Bool, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await updateChore(.archive(id, archived, choreVersion), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    private func updateChore(
+        _ change: ChoreUpdate, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, chores in
+            try await api.updateChore(
+                change, version: version, mutationID: mutationID, memberID: memberID, chores: chores, token: token
+            )
+        }
+    }
+
+    @discardableResult
     public func completeChore(
         id: UUID, choreVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {

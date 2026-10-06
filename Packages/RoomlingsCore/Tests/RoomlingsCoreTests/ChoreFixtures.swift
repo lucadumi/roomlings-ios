@@ -89,6 +89,20 @@ enum ChoreFixtures {
         return withReceipt(household(items: [updated], history: [finished, completion], version: 18))
     }
 
+    static var editedHousehold: JSONValue {
+        let updated = replacing(chore, with: draft.requestFields.merging([
+            "componentName": .string("The sink"),
+            "version": .integer(5), "updatedAt": .string("2026-09-15T12:00:00.000Z")
+        ]) { _, new in new })
+        return withReceipt(household(items: [updated], version: 18))
+    }
+
+    static var archivedHousehold: JSONValue {
+        withReceipt(household(items: [replacing(chore, with: [
+            "archived": .bool(true), "version": .integer(5), "updatedAt": .string("2026-09-15T12:00:00.000Z")
+        ])], version: 18))
+    }
+
     static var undoneHousehold: JSONValue {
         guard let finished = completedHousehold["chores"]?["history"]?.arrayValue?.first,
               let receipts = completedHousehold["mutationReceipts"]?.arrayValue else {
@@ -155,11 +169,13 @@ enum ChoreFixtures {
 }
 
 enum ChoreOperation: CaseIterable, Sendable {
-    case add, complete
+    case add, edit, archive, complete
 
     var successHousehold: JSONValue {
         switch self {
         case .add: ChoreFixtures.addedHousehold()
+        case .edit: ChoreFixtures.editedHousehold
+        case .archive: ChoreFixtures.archivedHousehold
         case .complete: ChoreFixtures.completedHousehold
         }
     }
@@ -167,9 +183,13 @@ enum ChoreOperation: CaseIterable, Sendable {
     var path: String {
         switch self {
         case .add: "/api/chores"
+        case .edit: "/api/chores/\(ChoreFixtures.choreID.uuidString.lowercased())"
+        case .archive: "/api/chores/\(ChoreFixtures.choreID.uuidString.lowercased())/archive"
         case .complete: "/api/chores/\(ChoreFixtures.choreID.uuidString.lowercased())/complete"
         }
     }
+
+    var method: String { self == .edit || self == .archive ? "PATCH" : "POST" }
 
     @discardableResult
     func perform(
@@ -180,6 +200,16 @@ enum ChoreOperation: CaseIterable, Sendable {
         case .add:
             try await session.addChore(
                 ChoreFixtures.draft, householdID: householdID, version: version, mutationID: mutationID
+            )
+        case .edit:
+            try await session.editChore(
+                id: ChoreFixtures.choreID, draft: ChoreFixtures.draft, choreVersion: 4,
+                householdID: householdID, version: version, mutationID: mutationID
+            )
+        case .archive:
+            try await session.setChoreArchived(
+                id: ChoreFixtures.choreID, archived: true, choreVersion: 4,
+                householdID: householdID, version: version, mutationID: mutationID
             )
         case .complete:
             try await session.completeChore(

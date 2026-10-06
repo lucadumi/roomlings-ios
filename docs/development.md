@@ -47,6 +47,7 @@ All methods below belong to `AccountUITests`.
 
 | Area | Methods |
 | --- | --- |
+| Chore management | `testChoresEditArchiveRestoreAndKeepSharedHistory`, `testChoreEditsPreserveDraftsAndRequireConflictReview`, `testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory` |
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |
 | Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone` |
 | Invitations | `testInvitationsShareJoinAndRejectARevokedLink`, `testInvitationsRequireRefreshAfterALostResponseAndAConflict`, `testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership` |

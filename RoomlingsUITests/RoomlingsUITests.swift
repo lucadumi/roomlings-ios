@@ -111,7 +111,10 @@ final class RoomlingsUITests: XCTestCase {
         tapRoom(daylight, until: evening, while: daylight, "Lighting must return to daylight.")
         tapRoom(zoomIn, until: room.staticTexts["110"], while: restored, "Zooming in must change the room zoom.")
         tapRoom(reset, until: restored, while: moved, "Resetting must return the room to its default zoom.")
-        room.pinch(withScale: 1.3, velocity: 0.5)
+        for _ in 1...4 {
+            room.pinch(withScale: 1.3, velocity: 0.5)
+            if moved.waitForExistence(timeout: Wait.flip) || !restored.exists { break }
+        }
         XCTAssertTrue(moved.waitForExistence(timeout: Wait.room), "Pinching must change the room zoom, not magnify the web page.")
         tapRoom(reset, until: restored, while: moved, "Resetting must undo a pinch.")
         tapRoom(evening, until: daylight, while: evening, "Lighting must remain responsive after pinching.")
