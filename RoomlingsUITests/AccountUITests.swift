@@ -307,8 +307,12 @@ final class AccountUITests: XCTestCase {
         attachHeaderScreenshot("Native saved-member header, landscape")
         try tap(household, in: app)
         XCTAssertTrue(app.otherElements["account-sheet"].waitForExistence(timeout: Wait.control))
-        XCTAssertTrue(app.buttons["Done"].isHittable)
-        try tap(app.buttons["Done"], in: app)
+        let dismiss = app.buttons["Done"]
+        let dismissIsHittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"), object: dismiss
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissIsHittable], timeout: Wait.control), .completed)
+        try tap(dismiss, in: app)
         XCTAssertEqual(app.buttons["household-entry"].label, name)
         try openAccount(app)
         XCTAssertTrue(app.buttons["Open \(name)"].waitForExistence(timeout: Wait.control))
