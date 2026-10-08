@@ -12,6 +12,7 @@ public actor AccountSession {
 
     private let api: AccountAPI
     private let shoppingAPI: ShoppingAPI
+    private let billsAPI: BillsAPI
     private let ledgerAPI: LedgerAPI
     private let householdAccessAPI: HouseholdAccessAPI
     private let notificationAPI: NotificationAPI
@@ -29,6 +30,7 @@ public actor AccountSession {
         )
         api = AccountAPI(client: client)
         shoppingAPI = ShoppingAPI(client: client)
+        billsAPI = BillsAPI(client: client)
         ledgerAPI = LedgerAPI(client: client)
         householdAccessAPI = HouseholdAccessAPI(client: client)
         notificationAPI = NotificationAPI(client: client)
@@ -512,6 +514,44 @@ public actor AccountSession {
         _ draft: ExpenseDraft, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
         try await mutateLedger(.record(draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+    
+    @discardableResult
+    public func createBill(
+        _ draft: BillDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateBills(.create(draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func editBill(
+        id: UUID, draft: BillEditDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateBills(.edit(id, draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func setBillPaused(
+        id: UUID, paused: Bool, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateBills(.pause(id, paused), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    @discardableResult
+    public func recordBillPayment(
+        id: UUID, draft: BillPaymentDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateBills(.pay(id, draft), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
+    private func mutateBills(
+        _ change: BillChange, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [billsAPI] token, memberID, bills in
+            try await billsAPI.mutate(
+                change, version: version, mutationID: mutationID, memberID: memberID, bills: bills, token: token
+            )
+        }
     }
 
     @discardableResult

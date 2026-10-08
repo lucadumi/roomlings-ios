@@ -5,6 +5,7 @@ public enum AccountInputField: String, Sendable {
     case memberName, memberID, budgetCents, invitationCode, confirmation
     case title, notes, roomID, area, componentID, dueDate, repeatDays, rotation, turn, version, choreVersion
     case quantity, itemVersion
+    case billName, dueDay, month
     case expenseDescription = "description"
     case amount, paidBy, participants, date, checkoutID
     case pushToken
