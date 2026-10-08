@@ -84,6 +84,7 @@ public struct HouseholdExpense: Sendable, Equatable, Identifiable {
     public let participants: [UUID]
     public let category: ExpenseCategory
     public let date: String
+    public let bill: BillReference?
     public let createdAt: String
     public let shoppingRunID: UUID?
     /// Bill payments are recorded by the web app and cannot be edited or removed here.
@@ -111,7 +112,18 @@ public struct HouseholdExpense: Sendable, Equatable, Identifiable {
         guard ChoreValidation.date(date) else { throw AccountError.invalidResponse }
         createdAt = try fields.timestamp("createdAt")
         shoppingRunID = fields.object["shoppingRunId"] == nil ? nil : try fields.uuid("shoppingRunId")
-        isBillPayment = fields.object["bill"] != nil
+        if let raw = fields.object["bill"] {
+            let billFields = try HouseholdFields(raw)
+            let billID = try billFields.uuid("billId")
+            let month = try billFields.string("month")
+            let dueDate = try billFields.string("dueDate")
+            guard AccountValidation.matches(month, #"^[0-9]{4}-[0-9]{2}$"#),
+                  ChoreValidation.date(dueDate) else { throw AccountError.invalidResponse }
+            bill = BillReference(billId: billID, month: month, dueDate: dueDate)
+        } else {
+            bill = nil
+        }
+        isBillPayment = bill != nil
     }
 
     /// The same whole-cent division the server applies when it computes balances.
@@ -142,6 +154,12 @@ public struct HouseholdSettlement: Sendable, Equatable, Identifiable {
         createdAt = try fields.timestamp("createdAt")
         guard from != to else { throw AccountError.invalidResponse }
     }
+}
+
+public struct BillReference: Sendable, Equatable {
+    public let billId: UUID
+    public let month: String
+    public let dueDate: String
 }
 
 /// One member's position in the shared ledger. Positive means the household owes them.

@@ -25,6 +25,8 @@ final class AccountModel {
     private(set) var ledger: HouseholdLedger?
     private(set) var ledgerFailure: String?
     private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
+    private(set) var bills: HouseholdBills?
+    private(set) var billsFailure: String?
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -659,6 +661,30 @@ final class AccountModel {
                                           version: version, mutationID: mutationID)
         }
     }
+    
+    func createBill(_ draft: BillDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Monthly bill created.") {
+            try await $0.createBill(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func editBill(id: UUID, draft: BillEditDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Monthly bill updated.") {
+            try await $0.editBill(id: id, draft: draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func setBillPaused(id: UUID, paused: Bool, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger(paused ? "Monthly bill paused." : "Monthly bill resumed.") {
+            try await $0.setBillPaused(id: id, paused: paused, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
+    func recordBillPayment(id: UUID, draft: BillPaymentDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Bill payment recorded. Roomlings tracks it; no money moved.") {
+            try await $0.recordBillPayment(id: id, draft: draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
 
     private func saveLedger(_ notice: String, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
         let saved = await perform(.ledger, operation: operation)
@@ -720,8 +746,8 @@ final class AccountModel {
                 shoppingSaveFailure = .retrySameChange
                 return false
             }
-            if action == .ledger, let ledgerFailure {
-                message = ledgerFailure
+            if action == .ledger, let failureMessage = ledgerFailure ?? billsFailure {
+                message = failureMessage
                 ledgerSaveFailure = .retrySameChange
                 return false
             }
@@ -755,6 +781,8 @@ final class AccountModel {
         shoppingFailure = nil
         ledger = nil
         ledgerFailure = nil
+        bills = nil
+        billsFailure = nil
         guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
@@ -777,6 +805,11 @@ final class AccountModel {
             ledger = try HouseholdLedger(household: household)
         } catch {
             ledgerFailure = "Your recorded receipts could not be displayed. Refresh shopping before recording another."
+        }
+        do {
+            bills = try HouseholdBills(household: household)
+        } catch {
+            billsFailure = "Your monthly bills could not be displayed. Refresh money before making changes."
         }
         do {
             let catalog = try choreCatalog ?? ChoreCatalog.load()
