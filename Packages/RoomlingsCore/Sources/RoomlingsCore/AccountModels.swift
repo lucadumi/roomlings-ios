@@ -217,6 +217,11 @@ public struct AccountState: Sendable, Codable, Equatable,
     private let csrfToken: String?
 
     public var isSignedIn: Bool { account != nil }
+    
+    public func viewerID() throws -> UUID {
+        guard let session else { throw AccountError.accountStateRequired }
+        return session.memberID
+    }
 
     private enum CodingKeys: String, CodingKey {
         case configured, account, memberships, devices, csrfToken, session, deletionPending
