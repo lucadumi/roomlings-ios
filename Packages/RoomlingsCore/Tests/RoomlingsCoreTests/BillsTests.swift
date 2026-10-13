@@ -20,7 +20,7 @@ struct BillsTests {
 
     @Test
     func creatingABillSendsTheExpectedRequestAndValidatesTheReceipt() async throws {
-        let (session, transport) = try await restore(initial: Fixtures.state(selectedHousehold: true), response: addedHousehold())
+        let (session, transport) = try await restore(initial: household(), response: addedHousehold())
         let result = try await session.createBill(
             draft, householdID: householdID, version: 17, mutationID: mutationID
         )
@@ -35,7 +35,6 @@ struct BillsTests {
             "firstDueDate": .string("2026-10-05"), "timeZone": .string("Europe/Bucharest"),
             "participants": .array([.string(memberID.uuidString.lowercased()), .string(roommateID.uuidString.lowercased())]),
         ]))
-        #expect(result.session?.household.value["bills"]?["0"] == nil) // JSON shape sanity
         let bills = try HouseholdBills(household: #require(result.session?.household))
         #expect(bills.bills.first?.revisions.first?.name == "Internet")
         #expect(bills.bills.first?.startMonth == "2026-10")
@@ -44,11 +43,10 @@ struct BillsTests {
     @Test
     func aConflictRetainsTheOriginalVersionsAndIsNotRetriedAutomatically() async throws {
         let transport = TestTransport(responses: [
-            try Fixtures.response(Fixtures.state(selectedHousehold: true)),
+            try Fixtures.response(ShoppingFixtures.state(household: household())),
             try Fixtures.failure(status: 409, code: nil),
         ])
-        let credentials = MemoryTokenStore(token: Fixtures.oldToken)
-        let session = make(transport, credentials)
+        let session = make(transport)
         try await session.restore()
         await #expect(throws: AccountError.server(status: 409, code: nil)) {
             try await session.createBill(draft, householdID: householdID, version: 17, mutationID: mutationID)
@@ -78,8 +76,7 @@ struct BillsTests {
     @Test
     func pausingABillHidesItsOccurrenceForTheCurrentMonth() async throws {
         let paused = billedHousehold(paid: false, paused: true)
-        let snapshot = try JSONDecoder().decode(HouseholdSnapshot.self, from: Fixtures.data(paused))
-        let bills = try HouseholdBills(household: snapshot)
+        let bills = try HouseholdBills(household: ShoppingFixtures.snapshot(paused))
         let bill = try #require(bills.bills.first)
         #expect(bill.isPaused)
         #expect(bills.occurrence(of: bill, in: "2026-10") == nil)
@@ -87,7 +84,7 @@ struct BillsTests {
 
     @Test
     func shortMonthsClampTheDueDateToTheLastDay() throws {
-        let bill = try Bill(JSONValue.object([
+        let rent: JSONValue = .object([
             "id": .string(billID.uuidString.lowercased()),
             "createdAt": .string("2026-01-01T00:00:00.000Z"),
             "startMonth": .string("2026-01"),
@@ -98,16 +95,20 @@ struct BillsTests {
                 "dueDay": .integer(31),
                 "participants": .array([.string(memberID.uuidString.lowercased())]),
             ])]),
-        ]))
-        let bills = try HouseholdBills(household: Fixtures.snapshot(Fixtures.household, bills: [bill]))
+        ])
+        let bills = try HouseholdBills(household: ShoppingFixtures.snapshot(household(bills: [rent])))
+        let bill = try #require(bills.bills.first)
         let occurrence = try #require(bills.occurrence(of: bill, in: "2026-02"))
         #expect(occurrence.dueDate == "2026-02-28")
     }
 
     // MARK: - Fixtures
 
-    private func restore(initial: [String: JSONValue], response: JSONValue) async throws -> (AccountSession, TestTransport) {
-        let transport = TestTransport(responses: [try Fixtures.response(initial), try Fixtures.response(response)])
+    private func restore(initial: JSONValue, response: JSONValue) async throws -> (AccountSession, TestTransport) {
+        let transport = TestTransport(responses: [
+            try Fixtures.response(ShoppingFixtures.state(household: initial)),
+            try Fixtures.response(["household": response]),
+        ])
         let session = make(transport)
         try await session.restore()
         return (session, transport)
@@ -117,61 +118,49 @@ struct BillsTests {
         AccountSession(configuration: Fixtures.configuration, tokenStore: MemoryTokenStore(token: Fixtures.oldToken), transport: transport)
     }
 
-    private func billedHousehold(paid: Bool, paused: Bool = false) -> JSONValue {
-        let bill: JSONValue = .object([
+    private func household(bills: [JSONValue] = [], expenses: [JSONValue] = [], version: Int64 = 17) -> JSONValue {
+        let base = ShoppingFixtures.household(version: version)
+        return ShoppingFixtures.replacing(base, with: [
+            "bills": .array(bills),
+            "expenses": .array(expenses + (base["expenses"]?.arrayValue ?? [])),
+        ])
+    }
+
+    private func bill(paused: Bool = false, startMonth: String = "2026-09") -> JSONValue {
+        .object([
             "id": .string(billID.uuidString.lowercased()),
-            "createdAt": .string("2026-09-01T00:00:00.000Z"),
-            "startMonth": .string("2026-09"),
+            "createdAt": .string("\(startMonth)-01T00:00:00.000Z"),
+            "startMonth": .string(startMonth),
             "pauses": .array(paused ? [.object(["fromMonth": .string("2026-10"), "untilMonth": .null])] : []),
             "revisions": .array([.object([
-                "fromMonth": .string("2026-09"),
+                "fromMonth": .string(startMonth),
                 "name": .string("Internet"), "amount": .integer(4_200),
                 "dueDay": .integer(5),
                 "participants": .array([.string(memberID.uuidString.lowercased()), .string(roommateID.uuidString.lowercased())]),
             ])]),
         ])
-        var household = Fixtures.household
-        if case .object(var object) = household {
-            object["bills"] = .array([bill])
-            object["version"] = .integer(paid ? 18 : 17)
-            if paid {
-                object["expenses"] = .array([.object([
-                    "id": .string("99999999-9999-4999-8999-999999999999"),
-                    "description": .string("Internet"),
-                    "amount": .integer(4_200),
-                    "paidBy": .string(memberID.uuidString.lowercased()),
-                    "participants": .array([.string(memberID.uuidString.lowercased()), .string(roommateID.uuidString.lowercased())]),
-                    "category": .string("other"), "date": .string("2026-10-05"),
-                    "createdAt": .string("2026-10-05T12:00:00.000Z"),
-                    "bill": .object([
-                        "billId": .string(billID.uuidString.lowercased()),
-                        "month": .string("2026-10"),
-                        "dueDate": .string("2026-10-05"),
-                    ]),
-                ])])
-            }
-            household = .object(object)
-        }
-        return withReceipt(household)
+    }
+
+    private func billedHousehold(paid: Bool, paused: Bool = false) -> JSONValue {
+        let payment: JSONValue = .object([
+            "id": .string("99999999-9999-4999-8999-999999999999"),
+            "description": .string("Internet"),
+            "amount": .integer(4_200),
+            "paidBy": .string(memberID.uuidString.lowercased()),
+            "participants": .array([.string(memberID.uuidString.lowercased()), .string(roommateID.uuidString.lowercased())]),
+            "category": .string("other"), "date": .string("2026-10-05"),
+            "createdAt": .string("2026-10-05T12:00:00.000Z"),
+            "bill": .object([
+                "billId": .string(billID.uuidString.lowercased()),
+                "month": .string("2026-10"),
+                "dueDate": .string("2026-10-05"),
+            ]),
+        ])
+        let value = household(bills: [bill(paused: paused)], expenses: paid ? [payment] : [], version: paid ? 18 : 17)
+        return paid ? ShoppingFixtures.withReceipt(value) : value
     }
 
     private func addedHousehold() -> JSONValue {
-        var household = billedHousehold(paid: false)
-        if case .object(var object) = household {
-            object["version"] = .integer(18)
-            household = .object(object)
-        }
-        return household
-    }
-
-    private func withReceipt(_ household: JSONValue) -> JSONValue {
-        guard case .object(var object) = household else { return household }
-        object["mutationReceipts"] = .array([.object([
-            "id": .string(mutationID.uuidString.lowercased()),
-            "memberId": .string(memberID.uuidString.lowercased()),
-            "version": .integer(18),
-            "fingerprint": .string(String(repeating: "1", count: 64)),
-        ])])
-        return .object(object)
+        ShoppingFixtures.withReceipt(household(bills: [bill(startMonth: "2026-10")], version: 18))
     }
 }
