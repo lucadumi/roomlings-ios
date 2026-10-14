@@ -22,6 +22,19 @@ extension AccountUITests {
         XCTAssertTrue(app.buttons["save-house-rules"].waitForExistence(timeout: Wait.control))
     }
 
+    /// iPad can drop a tap while the keyboard is up. A save that started replaces or disables
+    /// this button, so tapping again only retries a tap the app never received.
+    @MainActor
+    private func save(_ app: XCUIApplication, until outcome: XCUIElement) throws {
+        let button = app.buttons["save-house-rules"]
+        for _ in 1...3 {
+            try tap(button, in: app)
+            if outcome.waitForExistence(timeout: Wait.flip) { return }
+            guard button.exists, button.isEnabled else { break }
+        }
+        XCTAssertTrue(outcome.waitForExistence(timeout: Wait.control), "\(outcome.description) after saving")
+    }
+
     @MainActor
     func testHouseRulesSaveToTheSharedHouseholdAndReviewRemoteChanges() async throws {
         continueAfterFailure = false
@@ -44,8 +57,7 @@ extension AccountUITests {
         try fill(app.textFields["Household name"], "Cedar Loft")
         try fill(app.textFields["Monthly grocery budget"], "312.50")
         try choose("GBP", from: "Currency", in: app)
-        try tap(app.buttons["save-house-rules"], in: app)
-        XCTAssertTrue(app.staticTexts["House rules saved."].waitForExistence(timeout: Wait.control))
+        try save(app, until: app.staticTexts["House rules saved."])
         XCTAssertTrue(app.buttons["Open Cedar Loft"].waitForExistence(timeout: Wait.control))
         let saved = try await houseRulesState(home)
         XCTAssertEqual(saved.version, before.version + 1)
@@ -57,9 +69,8 @@ extension AccountUITests {
         try tap(app.buttons["open-house-rules"], in: app)
         try fill(app.textFields["Monthly grocery budget"], "400")
         _ = try await fixture("_fixture/settings/remote", body: ["householdId": home.id, "name": "Cedar Annex"])
-        try tap(app.buttons["save-house-rules"], in: app)
         let error = app.staticTexts["account-error"]
-        XCTAssertTrue(error.waitForExistence(timeout: Wait.control))
+        try save(app, until: error)
         XCTAssertEqual(error.label, "House rules changed elsewhere. Refresh house rules and review the latest state before trying again.")
         let unchanged = try await houseRulesState(home)
         XCTAssertEqual(unchanged.budget, 31_250)
@@ -70,8 +81,7 @@ extension AccountUITests {
         XCTAssertEqual(app.textFields["Household name"].value as? String, "Cedar Annex")
         XCTAssertEqual(app.textFields["Monthly grocery budget"].value as? String, "312.50")
         try fill(app.textFields["Monthly grocery budget"], "400")
-        try tap(app.buttons["save-house-rules"], in: app)
-        XCTAssertTrue(app.staticTexts["House rules saved."].waitForExistence(timeout: Wait.control))
+        try save(app, until: app.staticTexts["House rules saved."])
         let latest = try await houseRulesState(home)
         XCTAssertEqual(latest.name, "Cedar Annex")
         XCTAssertEqual(latest.budget, 40_000)
