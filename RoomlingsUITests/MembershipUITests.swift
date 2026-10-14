@@ -104,6 +104,30 @@ extension AccountUITests {
     }
 
     @MainActor
+    func testOwnersGrantAndRemoveRoomAdminRights() async throws {
+        continueAfterFailure = false
+        // The membership fixture seeds the linked peer as a room admin.
+        let (app, _, seed) = try await launchMembership(asOwner: true)
+        let peer = try XCTUnwrap(seed.peerId)
+        let toggle = app.buttons["room-admin-\(peer)"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(toggle.label.hasPrefix("Remove admin rights"), toggle.label)
+        let row = app.otherElements["household-member-\(peer)"]
+        XCTAssertTrue(row.staticTexts["Admin; account linked"].exists)
+
+        try tap(toggle, in: app)
+        try tap(app.buttons["Confirm removal of admin rights"], in: app)
+        XCTAssertTrue(app.staticTexts["Room admin access removed."].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(row.staticTexts["Member; account linked"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.buttons["room-admin-\(peer)"].label.hasPrefix("Make "))
+
+        try tap(app.buttons["room-admin-\(peer)"], in: app)
+        try tap(app.buttons["Confirm admin access"], in: app)
+        XCTAssertTrue(app.staticTexts["Room admin access granted."].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(row.staticTexts["Admin; account linked"].waitForExistence(timeout: Wait.control))
+    }
+
+    @MainActor
     func testLeavingAHouseholdPreservesOtherHomesAndRevokesItsOldAccess() async throws {
         executionTimeAllowance = 600
         continueAfterFailure = false

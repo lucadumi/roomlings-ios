@@ -521,6 +521,37 @@ final class AccountModel {
         }
     }
 
+    func setRoomRole(_ member: HouseholdAccessMember, admin: Bool, householdID: UUID, version: Int64, accountID: UUID) async -> Bool {
+        guard let access = currentHouseholdAccess(householdID: householdID, version: version, accountID: accountID) else {
+            return false
+        }
+        guard access.role != .member, member.active, member.role != .owner,
+              access.members.contains(where: { $0.id == member.id && $0.active && $0.role == member.role }),
+              member.role != (admin ? .admin : .member) else {
+            message = "Only the owner or an admin can change admin rights for another active roommate."
+            return false
+        }
+        guard let client, begin() else { return false }
+        defer { busy = false }
+        do {
+            try await client.setRoomRole(
+                memberID: member.id, role: admin ? .admin : .member, householdID: householdID,
+                version: version, mutationID: UUID()
+            )
+            let latest = try await client.loadHouseholdAccess(householdID: householdID)
+            guard latest.members.first(where: { $0.id == member.id })?.role == (admin ? .admin : .member) else {
+                throw AccountError.invalidResponse
+            }
+            let published = acceptInvitations(latest, state: await client.state)
+            if published { notice = admin ? "Room admin access granted." : "Room admin access removed." }
+            return published
+        } catch {
+            await failed(error, action: .roomRole, client: client)
+            invitationNeedsRefresh = true
+            return false
+        }
+    }
+
     private func currentHouseholdAccess(householdID: UUID, version: Int64, accountID: UUID) -> HouseholdInvitationAccess? {
         guard !busy else {
             message = "Another account action is still running."
@@ -1031,7 +1062,7 @@ final class AccountModel {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
         case invitationLoad, invitationCreate, invitationRevoke
-        case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
+        case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold, roomRole
         case profile, deviceRevoke, recoveryLoad, recoveryChange
 
         var isChore: Bool {
@@ -1158,7 +1189,19 @@ final class AccountModel {
                 }
             }
         }
-        if action == .householdAccessLoad || action == .ownershipTransfer || action == .removeMember || action == .leaveHousehold {
+        if action == .roomRole {
+            switch error {
+            case AccountError.server(403, _):
+                return "Only the owner or an admin can change admin rights. Refresh household members to check your access."
+            case AccountError.server(409, _), AccountError.server(404, _):
+                return "The household changed elsewhere. Refresh household members and review admin rights before continuing."
+            case AccountError.invalidResponse, AccountError.network, is CancellationError:
+                return "The admin change could not be confirmed. Refresh household members before trying again."
+            default: break
+            }
+        }
+        if action == .householdAccessLoad || action == .ownershipTransfer || action == .removeMember || action == .leaveHousehold
+            || action == .roomRole {
             switch error {
             case is KeychainError, AccountError.credentialStorage:
                 return "Saved access could not be read securely. Unlock this device and try again."
