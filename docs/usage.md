@@ -20,6 +20,7 @@ Stored-object chores must wait for their object to return before editing or rest
 
 | Section | What it does |
 | --- | --- |
+| **House rules** | Any roommate can change the household name, monthly grocery budget and currency. Currency stays fixed after expenses, repayments or monthly bills. |
 | Invitations | Owners share seven-day invitations and revoke pending links. See [invitation setup](invitations.md). |
 | **Household members** | View roommates, transfer ownership, remove access as owner, or leave. These actions preserve shared debts and history. |
 | **Notifications** | Save chore and money preferences. Push requires explicit opt-in on each account/device and a configured delivery service. |

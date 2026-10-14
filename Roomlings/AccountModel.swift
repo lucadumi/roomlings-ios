@@ -25,6 +25,9 @@ final class AccountModel {
     private(set) var ledger: HouseholdLedger?
     private(set) var ledgerFailure: String?
     private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
+    private(set) var houseRules: HouseholdSettings?
+    private(set) var houseRulesFailure: String?
+    private(set) var houseRulesSaveFailure = HouseholdSaveFailure.none
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -666,6 +669,14 @@ final class AccountModel {
         return saved
     }
 
+    func saveHouseRules(_ draft: HouseholdSettingsDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.houseRules) {
+            try await $0.updateHouseholdSettings(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "House rules saved." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -688,6 +699,7 @@ final class AccountModel {
         if action.isChore { choreSaveFailure = .none }
         if action == .shopping { shoppingSaveFailure = .none }
         if action == .ledger { ledgerSaveFailure = .none }
+        if action == .houseRules { houseRulesSaveFailure = .none }
         let previousDeletion = deletionStatus
         let previousDeparture = pendingHouseholdDeparture
         do {
@@ -725,6 +737,11 @@ final class AccountModel {
                 ledgerSaveFailure = .retrySameChange
                 return false
             }
+            if action == .houseRules, let houseRulesFailure {
+                message = houseRulesFailure
+                houseRulesSaveFailure = .retrySameChange
+                return false
+            }
             return published
         } catch {
             await failed(error, action: action, client: client)
@@ -755,6 +772,8 @@ final class AccountModel {
         shoppingFailure = nil
         ledger = nil
         ledgerFailure = nil
+        houseRules = nil
+        houseRulesFailure = nil
         guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
@@ -777,6 +796,11 @@ final class AccountModel {
             ledger = try HouseholdLedger(household: household)
         } catch {
             ledgerFailure = "Your recorded receipts could not be displayed. Refresh shopping before recording another."
+        }
+        do {
+            houseRules = try HouseholdSettings(household: household)
+        } catch {
+            houseRulesFailure = "Your house rules could not be displayed. Refresh your account before changing them."
         }
         do {
             let catalog = try choreCatalog ?? ChoreCatalog.load()
@@ -815,7 +839,7 @@ final class AccountModel {
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
         _ = publish(latest, requestFailed: true)
-        if action.isChore || action == .shopping || action == .ledger {
+        if action.resource != nil {
             let failure: HouseholdSaveFailure
             switch error {
             case AccountError.server(let status, _) where [403, 404, 409].contains(status):
@@ -831,6 +855,7 @@ final class AccountModel {
             }
             if action.isChore { choreSaveFailure = failure }
             else if action == .shopping { shoppingSaveFailure = failure }
+            else if action == .houseRules { houseRulesSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
         message = deletionCleanupRequired
@@ -840,7 +865,7 @@ final class AccountModel {
 
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
-        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger
+        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
 
@@ -853,19 +878,21 @@ final class AccountModel {
         var resource: Resource? {
             if isChore { return .chores }
             if self == .shopping { return .shopping }
+            if self == .houseRules { return .houseRules }
             return self == .ledger ? .ledger : nil
         }
     }
 
     /// Wording for the household collection a failed mutation touched.
     private enum Resource {
-        case chores, shopping, ledger
+        case chores, shopping, ledger, houseRules
 
         var name: String {
             switch self {
             case .chores: "chores"
             case .shopping: "shopping"
             case .ledger: "receipts"
+            case .houseRules: "house rules"
             }
         }
 
@@ -874,6 +901,7 @@ final class AccountModel {
             case .chores: "Chores"
             case .shopping: "Shopping"
             case .ledger: "Receipts"
+            case .houseRules: "House rules"
             }
         }
 
@@ -882,6 +910,7 @@ final class AccountModel {
             case .chores: "chore"
             case .shopping: "item"
             case .ledger: "receipt"
+            case .houseRules: "household"
             }
         }
 
@@ -890,6 +919,7 @@ final class AccountModel {
             case .chores: "chore"
             case .shopping: "shopping"
             case .ledger: "receipt"
+            case .houseRules: "house rules"
             }
         }
 
@@ -898,6 +928,7 @@ final class AccountModel {
             case .chores: "Check the chore name, date, repeat interval, object and active roommates."
             case .shopping: "Check the item name, quantity and notes, then review its current claim."
             case .ledger: "Check the description, amount, who paid, the split and the date."
+            case .houseRules: "Check the household name and a budget from 0.01 to 1,000,000.00. Currency stays fixed after money is recorded."
             }
         }
     }

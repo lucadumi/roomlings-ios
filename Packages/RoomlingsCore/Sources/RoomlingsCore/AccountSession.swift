@@ -547,6 +547,17 @@ public actor AccountSession {
         try await mutateLedger(.removeSettlement(id), householdID: householdID, version: version, mutationID: mutationID)
     }
 
+    @discardableResult
+    public func updateHouseholdSettings(
+        _ draft: HouseholdSettingsDraft, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, settings in
+            try await api.updateHouseholdSettings(
+                draft, version: version, mutationID: mutationID, memberID: memberID, settings: settings, token: token
+            )
+        }
+    }
+
     private func mutateLedger(
         _ change: LedgerChange, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {

@@ -7,7 +7,7 @@ public enum AccountInputField: String, Sendable {
     case quantity, itemVersion
     case expenseDescription = "description"
     case amount, paidBy, participants, date, checkoutID
-    case pushToken
+    case pushToken, currency
 }
 
 public enum AccountServerCode: String, Sendable, Codable {
