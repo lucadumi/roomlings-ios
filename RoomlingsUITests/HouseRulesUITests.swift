@@ -22,17 +22,9 @@ extension AccountUITests {
         XCTAssertTrue(app.buttons["save-house-rules"].waitForExistence(timeout: Wait.control))
     }
 
-    /// iPad can drop a tap while the keyboard is up. A save that started replaces or disables
-    /// this button, so tapping again only retries a tap the app never received.
     @MainActor
     private func save(_ app: XCUIApplication, until outcome: XCUIElement) throws {
-        let button = app.buttons["save-house-rules"]
-        for _ in 1...3 {
-            try tap(button, in: app)
-            if outcome.waitForExistence(timeout: Wait.flip) { return }
-            guard button.exists, button.isEnabled else { break }
-        }
-        XCTAssertTrue(outcome.waitForExistence(timeout: Wait.control), "\(outcome.description) after saving")
+        try tap(app.buttons["save-house-rules"], in: app, until: outcome)
     }
 
     @MainActor

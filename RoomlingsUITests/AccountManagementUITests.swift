@@ -74,8 +74,8 @@ extension AccountUITests {
         try tap(app.buttons["verify-for-recovery"], in: app)
         try tap(app.buttons["send-deletion-verification"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
-        try tap(app.buttons["verify-deletion-email"], in: app)
-        XCTAssertTrue(app.staticTexts["Email verified. You can now change your recovery codes."].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["verify-deletion-email"], in: app,
+                until: app.staticTexts["Email verified. You can now change your recovery codes."])
 
         try tap(app.buttons["generate-recovery-codes"], in: app)
         try confirm("Replace recovery codes", in: app)
