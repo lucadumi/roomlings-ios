@@ -41,6 +41,12 @@ final class AccountModel {
     private(set) var incomingInvitationError: String?
     private(set) var deletionStatus = AccountDeletionStatus.none
     private(set) var deletionRequiresReauthentication = false
+    private(set) var recoveryStatus: AccountRecoveryStatus?
+    /// Shown once, then dropped. Never persisted or logged.
+    private(set) var recoveryCodes: AccountRecoveryCodes?
+    private(set) var recoveryRequiresReauthentication = false
+    /// A recovery change may have reached the server without a readable reply.
+    private(set) var recoveryNeedsRefresh = false
     private(set) var pendingHouseholdDeparture: UUID?
     var message: String?
     var notice: String?
@@ -229,13 +235,96 @@ final class AccountModel {
         return signedOut
     }
 
-    func reauthenticate(accountID: UUID, code: String, label: String) async -> Bool {
+    func signOutEverywhere() async -> Bool {
+        let signedOut = await perform(.logout) { try await $0.logout(allDevices: true) }
+        if signedOut {
+            dismissInvitation()
+            notice = "Signed out on every device. Use an email code or an unused recovery code to return."
+        }
+        return signedOut
+    }
+
+    func updateProfile(name: String) async -> Bool {
+        let saved = await perform(.profile) { try await $0.updateProfile(name: name) }
+        if saved { notice = "Account name saved. Ledger names unchanged." }
+        return saved
+    }
+
+    func renameDevice(label: String) async -> Bool {
+        let saved = await perform(.profile) { try await $0.renameDevice(label: label) }
+        if saved { notice = "Device name saved." }
+        return saved
+    }
+
+    func revokeDevice(_ device: AccountDevice) async -> Bool {
+        let revoked = await perform(.deviceRevoke) { try await $0.revokeDevice(id: device.id) }
+        if revoked { notice = "Account session revoked." }
+        return revoked
+    }
+
+    @discardableResult
+    func loadRecoveryStatus() async -> Bool {
+        await recoveryOperation(.recoveryLoad) { client in
+            self.recoveryStatus = try await client.loadRecoveryStatus()
+        }
+    }
+
+    func generateRecoveryCodes(version: Int64) async -> Bool {
+        await recoveryOperation(.recoveryChange) { client in
+            let result = try await client.generateRecoveryCodes(version: version)
+            self.recoveryStatus = result.status
+            self.recoveryCodes = result
+            self.notice = "New recovery codes are ready. Earlier codes no longer work."
+        }
+    }
+
+    func revokeRecoveryCodes(version: Int64) async -> Bool {
+        await recoveryOperation(.recoveryChange) { client in
+            self.recoveryStatus = try await client.revokeRecoveryCodes(version: version)
+            self.recoveryCodes = nil
+            self.notice = "Unused recovery codes revoked. Sessions unchanged."
+        }
+    }
+
+    func forgetRecoveryCodes() {
+        recoveryCodes = nil
+    }
+
+    private func recoveryOperation(_ action: Action, _ operation: (AccountSession) async throws -> Void) async -> Bool {
+        guard canUseAccount, let client, begin() else { return false }
+        defer { busy = false }
+        do {
+            try await operation(client)
+            recoveryRequiresReauthentication = false
+            recoveryNeedsRefresh = false
+            return true
+        } catch {
+            recoveryRequiresReauthentication = error as? AccountError == .server(status: 401, code: .reauthenticationRequired)
+            // Without a readable reply the codes may already have changed, and new codes cannot be fetched again.
+            if action == .recoveryChange, !recoveryRequiresReauthentication {
+                switch error {
+                case AccountError.server(let status, _) where status < 500 && status != 429: break
+                case AccountError.invalidInput, AccountError.operationInProgress, AccountError.credentialStorage, is KeychainError: break
+                default: recoveryNeedsRefresh = true
+                }
+            }
+            await failed(error, action: action, client: client)
+            return false
+        }
+    }
+
+    func reauthenticate(accountID: UUID, code: String, label: String, forRecovery: Bool = false) async -> Bool {
         let verified = await perform(.reauthenticate) {
             try await $0.reauthenticate(accountID: accountID, code: code, deviceLabel: label)
         }
         if verified {
-            deletionRequiresReauthentication = false
-            notice = "Email verified. Review the deletion warning and enter your email again to continue."
+            if forRecovery {
+                recoveryRequiresReauthentication = false
+                notice = "Email verified. You can now change your recovery codes."
+            } else {
+                deletionRequiresReauthentication = false
+                notice = "Email verified. Review the deletion warning and enter your email again to continue."
+            }
         }
         return verified
     }
@@ -801,6 +890,12 @@ final class AccountModel {
 
     private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
         defer { analytics?.updateAccount(canUseAccount ? state : nil) }
+        if next?.account?.id != state?.account?.id || next?.isSignedIn != true {
+            recoveryStatus = nil
+            recoveryCodes = nil
+            recoveryRequiresReauthentication = false
+            recoveryNeedsRefresh = false
+        }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true || membershipNeedsRefresh {
             invitations = nil
@@ -937,6 +1032,7 @@ final class AccountModel {
         case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
+        case profile, deviceRevoke, recoveryLoad, recoveryChange
 
         var isChore: Bool {
             self == .addChore || self == .editChore || self == .archiveChore || self == .completeChore || self == .undoChore
@@ -1028,6 +1124,38 @@ final class AccountModel {
                 return "Another account action is still running."
             default:
                 return "Could not confirm account deletion. Check deletion status before trying again."
+            }
+        }
+        if action == .profile || action == .deviceRevoke || action == .recoveryLoad || action == .recoveryChange {
+            switch error {
+            case is KeychainError, AccountError.credentialStorage:
+                return "Saved access could not be read securely. Unlock this device and try again."
+            case AccountError.server(_, .some(.accountSessionRequired)):
+                return "Your session has expired. Sign in again."
+            case AccountError.server(_, .some(.accountDeletionPending)):
+                return "Account deletion is pending. Check its status or retry deletion here."
+            case AccountError.server(_, .some(.reauthenticationRequired)):
+                return "Verify your email again before changing recovery codes."
+            case AccountError.server(409, _) where action == .recoveryChange:
+                return "Your recovery codes changed on another device. Refresh their status and try again."
+            case AccountError.server(404, _) where action == .deviceRevoke:
+                return "That device is no longer signed in. Refresh your account to see current devices."
+            case AccountError.invalidInput(.name), AccountError.invalidInput(.deviceLabel), AccountError.server(400, _):
+                return "Enter a name from 1 to 50 characters."
+            case AccountError.invalidInput(.deviceID):
+                return "Use Sign out to end this device's session."
+            case AccountError.server(429, _):
+                return "Too many attempts. Wait a few minutes before trying again."
+            case AccountError.operationInProgress:
+                return "Another account action is still running."
+            default:
+                switch action {
+                case .recoveryLoad: return "Recovery code status could not be loaded. Try again."
+                case .recoveryChange:
+                    return "The recovery code change could not be confirmed. Refresh their status before trying again. Codes from an unconfirmed change cannot be shown again."
+                case .deviceRevoke: return "Signing out that device could not be confirmed. Refresh your account before trying again."
+                default: return "The change could not be confirmed. Refresh your account before trying again."
+                }
             }
         }
         if action == .householdAccessLoad || action == .ownershipTransfer || action == .removeMember || action == .leaveHousehold {
