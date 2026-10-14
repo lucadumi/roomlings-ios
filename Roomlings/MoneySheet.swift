@@ -36,12 +36,13 @@ struct MoneySheet: View {
     }
 
     private enum Section: String, CaseIterable {
-        case balances = "Balances", receipts = "Receipts"
+        case balances = "Balances", receipts = "Receipts", bills = "Bills"
     }
 
     private enum Page {
         case board, expense, removeReceipt(HouseholdExpense)
         case settle(SuggestedTransfer), undo(HouseholdSettlement)
+        case newBill, editBill(Bill), payBill(Bill, BillOccurrence)
 
         var id: String {
             switch self {
@@ -50,6 +51,9 @@ struct MoneySheet: View {
             case .removeReceipt(let expense): "remove-receipt-\(expense.id)"
             case .settle(let transfer): "settle-\(transfer.id)"
             case .undo(let settlement): "undo-\(settlement.id)"
+            case .newBill: "new-bill"
+            case .editBill(let bill): "edit-bill-\(bill.id.uuidString.lowercased())"
+            case .payBill(let bill, let occ): "pay-bill-\(bill.id.uuidString.lowercased())-\(occ.month)"
             }
         }
 
@@ -60,6 +64,9 @@ struct MoneySheet: View {
             case .removeReceipt: "Remove this receipt?"
             case .settle: "Record a repayment."
             case .undo: "Undo this repayment?"
+            case .newBill: "New monthly bill."
+            case .editBill: "Edit this monthly bill."
+            case .payBill: "Record a bill payment."
             }
         }
     }
@@ -67,6 +74,8 @@ struct MoneySheet: View {
     private enum Change {
         case record(ExpenseDraft), removeReceipt(HouseholdExpense)
         case settle(from: UUID, to: UUID, amount: Int64), undo(HouseholdSettlement)
+        case createBill(BillDraft), editBill(UUID, BillEditDraft)
+        case pauseBill(UUID, Bool), payBill(UUID, BillPaymentDraft)
     }
 
     private struct Save {
@@ -101,6 +110,9 @@ struct MoneySheet: View {
                             case .board: board(ledger, currency: currency, memberID: session.memberID)
                             case .expense: expenseForm(ledger, currency: currency, memberID: session.memberID)
                             case .removeReceipt(let expense): receiptRemoval(expense, ledger: ledger, currency: currency, memberID: session.memberID)
+                            case .newBill: newBillForm(currency: currency, memberID: session.memberID)
+                            case .editBill(let bill): editBillForm(bill, currency: currency, memberID: session.memberID)
+                            case .payBill(let bill, let occ): payBillForm(bill, occ, currency: currency, memberID: session.memberID)
                             case .settle(let transfer): settleForm(transfer, ledger: ledger, currency: currency)
                             case .undo(let settlement): undoForm(settlement, ledger: ledger, currency: currency)
                             }
@@ -210,13 +222,90 @@ struct MoneySheet: View {
             Text("Roomlings only tracks what everyone owes. It never moves money between you.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 .accessibilityIdentifier("money-disclaimer")
-            if section == .balances {
+            switch section {
+            case .balances:
                 balanceList(ledger, currency: currency)
                 repaymentList(ledger, currency: currency)
                 settlementHistory(ledger, currency: currency)
-            } else {
+            case .receipts:
                 receiptList(ledger, currency: currency, memberID: memberID)
+            case .bills:
+                billsBoard(currency: currency)
             }
+        }
+    }
+    
+    @ViewBuilder private func newBillForm(currency: HouseholdCurrency, memberID: UUID) -> some View {
+        let members = model.ledger?.activeMembers ?? []
+        BillEditorForm(
+            mode: .new(defaultMember: memberID),
+            members: members,
+            currency: currency,
+            disabled: changesBlocked,
+            onSave: { draft in
+                formError = nil
+                start(.createBill(draft))
+            },
+            onCancel: {
+                page = .board
+                model.clearFeedback()
+                formError = nil
+            }
+        )
+    }
+
+    @ViewBuilder private func editBillForm(_ bill: Bill, currency: HouseholdCurrency, memberID: UUID) -> some View {
+        let members = model.ledger?.activeMembers ?? []
+        BillEditorForm(
+            mode: .edit(bill),
+            members: members,
+            currency: currency,
+            disabled: changesBlocked,
+            onSaveEdit: { draft in
+                formError = nil
+                start(.editBill(bill.id, draft))
+            },
+            onCancel: {
+                page = .board
+                model.clearFeedback()
+                formError = nil
+            }
+        )
+    }
+
+    @ViewBuilder private func payBillForm(
+        _ bill: Bill, _ occurrence: BillOccurrence, currency: HouseholdCurrency, memberID: UUID
+    ) -> some View {
+        let members = model.ledger?.activeMembers ?? []
+        BillPaymentForm(
+            bill: bill,
+            occurrence: occurrence,
+            members: members,
+            currency: currency,
+            defaultMember: memberID,
+            disabled: changesBlocked
+        ) { draft in
+            formError = nil
+            start(.payBill(bill.id, draft))
+        } onCancel: {
+            page = .board; model.clearFeedback(); formError = nil
+        }
+    }
+    
+    @ViewBuilder private func billsBoard(currency: HouseholdCurrency) -> some View {
+        if let bills = model.bills {
+            BillsBoardView(
+                bills: bills,
+                currency: currency,
+                today: Date(),
+                blocked: changesBlocked,
+                onNew: { model.clearFeedback(); page = .newBill },
+                onEdit: { model.clearFeedback(); page = .editBill($0) },
+                onPay: { model.clearFeedback(); page = .payBill($0, $1) },
+                onTogglePause: { bill in start(.pauseBill(bill.id, !bill.isPaused)) }
+            )
+        } else {
+            unavailable("Monthly bills are unavailable. Refresh money and try again.")
         }
     }
 
@@ -508,13 +597,30 @@ struct MoneySheet: View {
         case .undo(let settlement):
             saved = await model.removeSettlement(settlement, householdID: save.householdID,
                                                  version: save.version, mutationID: save.mutationID)
+        case .createBill(let draft):
+            saved = await model.createBill(draft, householdID: save.householdID,
+                                           version: save.version, mutationID: save.mutationID)
+        case .editBill(let id, let draft):
+            saved = await model.editBill(id: id, draft: draft, householdID: save.householdID,
+                                         version: save.version, mutationID: save.mutationID)
+        case .pauseBill(let id, let paused):
+            saved = await model.setBillPaused(id: id, paused: paused, householdID: save.householdID,
+                                              version: save.version, mutationID: save.mutationID)
+        case .payBill(let id, let draft):
+            saved = await model.recordBillPayment(id: id, draft: draft, householdID: save.householdID,
+                                                  version: save.version, mutationID: save.mutationID)
         }
         if saved {
             pending = nil
             reviewRequired = false
             page = .board
             formError = nil
-            if case .record = save.change { section = .receipts } else { section = .balances }
+            if case .record = save.change { section = .receipts }
+            else if case .payBill = save.change { section = .receipts }
+            else if case .createBill = save.change { section = .bills }
+            else if case .editBill = save.change { section = .bills }
+            else if case .pauseBill = save.change { section = .bills }
+            else { section = .balances }
         } else {
             switch model.ledgerSaveFailure {
             case .retrySameChange: pending = save

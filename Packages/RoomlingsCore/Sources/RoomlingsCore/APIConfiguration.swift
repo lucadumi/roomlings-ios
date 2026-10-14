@@ -59,6 +59,7 @@ enum APIEndpoint: Equatable {
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case recordAnalytics(UUID)
     case addChore, editChore(UUID), setChoreArchived(UUID), completeChore(UUID), undoChoreCompletion(UUID)
+    case addBill, editBill(UUID), pauseBill(UUID), payBill(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
@@ -68,7 +69,7 @@ enum APIEndpoint: Equatable {
         switch self {
         case .account, .householdInvitations, .notificationSettings: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
-        case .editShoppingItem, .editChore, .setChoreArchived, .updateHouseholdSettings: "PATCH"
+        case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
              .deleteAccount, .leaveHousehold, .removeHouseholdMember: "DELETE"
         default: "POST"
@@ -107,6 +108,10 @@ enum APIEndpoint: Equatable {
         case .editShoppingItem(let id), .removeShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())"
         case .claimShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/claim"
         case .pickShoppingItem(let id): "api/shopping/items/\(id.uuidString.lowercased())/pick"
+        case .addBill: "api/bills"
+        case .editBill(let id): "api/bills/\(id.uuidString.lowercased())"
+        case .pauseBill(let id): "api/bills/\(id.uuidString.lowercased())/pause"
+        case .payBill(let id): "api/bills/\(id.uuidString.lowercased())/payments"
         case .recordExpense: "api/expenses"
         case .removeExpense(let id): "api/expenses/\(id.uuidString.lowercased())"
         case .checkoutShopping: "api/shopping/checkout"

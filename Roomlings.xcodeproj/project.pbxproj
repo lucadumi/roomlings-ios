@@ -58,6 +58,7 @@
 		A00000000000000000000031 /* MembershipModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000039 /* MembershipModelTests.swift */; };
 		A00000000000000000000032 /* MembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* MembershipUITests.swift */; };
 		A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* ChoreManagementUITests.swift */; };
+		A00000000000000000000034 /* BillsBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003D /* BillsBoard.swift */; };
 		A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003E /* AccountHouseRulesSection.swift */; };
 		A00000000000000000000036 /* HouseRulesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003F /* HouseRulesUITests.swift */; };
 /* End PBXBuildFile section */
@@ -133,6 +134,7 @@
 		B0000000000000000000003A /* MembershipUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipUITests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003B /* RoomlingsLinks.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RoomlingsLinks.entitlements; sourceTree = "<group>"; };
 		B0000000000000000000003C /* ChoreManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreManagementUITests.swift; sourceTree = "<group>"; };
+		B0000000000000000000003D /* BillsBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillsBoard.swift; sourceTree = "<group>"; };
 		B0000000000000000000003E /* AccountHouseRulesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHouseRulesSection.swift; sourceTree = "<group>"; };
 		B0000000000000000000003F /* HouseRulesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseRulesUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -201,6 +203,7 @@
 				B0000000000000000000001E /* ReceiptForm.swift */,
 				B0000000000000000000001F /* Money.swift */,
 				B00000000000000000000020 /* MoneySheet.swift */,
+				B0000000000000000000003D /* BillsBoard.swift */,
 				B00000000000000000000022 /* AccountInvitationsSection.swift */,
 				B00000000000000000000031 /* AccountHouseholdMembersSection.swift */,
 				B0000000000000000000003E /* AccountHouseRulesSection.swift */,
@@ -425,6 +428,7 @@
 				A00000000000000000000017 /* ReceiptForm.swift in Sources */,
 				A00000000000000000000018 /* Money.swift in Sources */,
 				A00000000000000000000019 /* MoneySheet.swift in Sources */,
+				A00000000000000000000034 /* BillsBoard.swift in Sources */,
 				A0000000000000000000001B /* AccountInvitationsSection.swift in Sources */,
 				A00000000000000000000029 /* AccountHouseholdMembersSection.swift in Sources */,
 				A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */,
