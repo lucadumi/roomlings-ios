@@ -8,7 +8,7 @@ public enum AccountInputField: String, Sendable {
     case billName, dueDay, month
     case expenseDescription = "description"
     case amount, paidBy, participants, date, checkoutID
-    case pushToken, currency
+    case pushToken, currency, roomStyle, deviceID
 }
 
 public enum AccountServerCode: String, Sendable, Codable {
@@ -97,6 +97,10 @@ enum AccountValidation {
         guard let date = formatter.date(from: value) else { return nil }
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.string(from: date).prefix(19) == value.prefix(19) ? date : nil
+    }
+
+    static func recoveryCode(_ value: String) -> Bool {
+        matches(value, #"^roomlings-account-[a-f0-9]{4}(?:-[a-f0-9]{4}){7}$"#)
     }
 
     static func matches(_ value: String, _ pattern: String) -> Bool {

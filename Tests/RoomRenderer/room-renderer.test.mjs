@@ -16,6 +16,8 @@ const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 }
 const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
 const { cameraFraming } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
+const { roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { roomPresets } = await import(pathToFileURL(join(web, 'src/roomStyles.ts')).href)
 
 test('native error colours are generated from the shared feedback rule', async () => {
   const css = requireWeb('postcss').parse(await readFile(join(web, 'src/style.css'), 'utf8'))
@@ -34,6 +36,18 @@ test('native error colours are generated from the shared feedback rule', async (
     assert.match(generated, new RegExp(`static let ${native}: UInt32 = 0x${color.slice(1)}`, 'i'))
   }
   assert.equal(resolveColor(error.get('--feedback-border')), resolveColor(error.get('--feedback-surface')))
+})
+
+test('the native room style picker uses every shared style and its own preset colours', async () => {
+  const catalog = JSON.parse(await readFile(join(project, 'Build/RoomRenderer/room-styles.json'), 'utf8'))
+  assert.equal(catalog.version, 1)
+  assert.deepEqual(catalog.styles.map((style) => style.id), roomStyleSchema.options)
+  for (const style of catalog.styles) {
+    const preset = roomPresets[style.id]
+    assert.equal(style.name, style.id === 'original' ? 'Roomlings' : preset.name)
+    assert.equal(style.description, preset.description)
+    for (const [surface, color] of Object.entries(style.colors)) assert.equal(color, preset.colors[surface])
+  }
 })
 
 test('the native chore catalog is generated from the shared rooms and object definitions', async () => {

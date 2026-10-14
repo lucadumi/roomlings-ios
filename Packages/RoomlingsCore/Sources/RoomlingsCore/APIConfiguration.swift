@@ -63,22 +63,27 @@ enum APIEndpoint: Equatable {
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
-    case updateHouseholdSettings
+    case updateHouseholdSettings, updateRoomStyle
+    case recoveryStatus, generateRecoveryCodes, revokeRecoveryCodes, updateProfile, renameDevice, revokeDevice(UUID)
 
     var method: String {
         switch self {
-        case .account, .householdInvitations, .notificationSettings: "GET"
+        case .account, .householdInvitations, .notificationSettings, .recoveryStatus: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
-        case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings: "PATCH"
+        case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings, .updateRoomStyle,
+             .updateProfile, .renameDevice: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
-             .deleteAccount, .leaveHousehold, .removeHouseholdMember: "DELETE"
+             .deleteAccount, .leaveHousehold, .removeHouseholdMember, .revokeRecoveryCodes, .revokeDevice: "DELETE"
         default: "POST"
         }
     }
 
     var path: String {
         switch self {
-        case .account, .deleteAccount: "api/account"
+        case .account, .deleteAccount, .updateProfile: "api/account"
+        case .recoveryStatus, .generateRecoveryCodes, .revokeRecoveryCodes: "api/account/recovery"
+        case .renameDevice: "api/account/device"
+        case .revokeDevice(let id): "api/account/devices/\(id.uuidString.lowercased())"
         case .code: "api/account/code"
         case .verify: "api/account/verify"
         case .recover: "api/account/recover"
@@ -118,6 +123,7 @@ enum APIEndpoint: Equatable {
         case .recordSettlement: "api/settlements"
         case .removeSettlement(let id): "api/settlements/\(id.uuidString.lowercased())"
         case .updateHouseholdSettings: "api/household"
+        case .updateRoomStyle: "api/household/room-style"
         }
     }
 }
