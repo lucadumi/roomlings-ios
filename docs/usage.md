@@ -20,6 +20,8 @@ Stored-object chores must wait for their object to return before editing or rest
 
 | Section | What it does |
 | --- | --- |
+| **Edit profile**, **Account sessions** | Rename your account or this device, sign out another device, or sign out everywhere. |
+| **Recovery codes** | Generate, replace or revoke ten single-use codes. New codes are shown once; copying keeps them on this device for two minutes. |
 | **House rules** | Any roommate can change the household name, monthly grocery budget and currency. Currency stays fixed after expenses, repayments or monthly bills. |
 | **Room style** | Owners and room admins apply one shared look to the room for everyone. Other roommates can browse the styles. |
 | Invitations | Owners share seven-day invitations and revoke pending links. See [invitation setup](invitations.md). |

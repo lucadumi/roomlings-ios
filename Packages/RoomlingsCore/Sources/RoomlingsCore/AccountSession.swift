@@ -352,7 +352,7 @@ public actor AccountSession {
     }
 
     public func loadNotificationSettings(householdID: UUID) async throws -> HouseholdNotificationSettings {
-        try await withNotificationAccount(householdID: householdID) { [notificationAPI] token, memberID in
+        try await withSignedInAccount(householdID: householdID) { [notificationAPI] token, memberID in
             guard let memberID else { throw AccountError.accountStateRequired }
             return try await notificationAPI.load(householdID: householdID, memberID: memberID, token: token)
         }
@@ -361,14 +361,14 @@ public actor AccountSession {
     public func saveNotificationSettings(
         _ preferences: NotificationPreferences, householdID: UUID
     ) async throws -> HouseholdNotificationSettings {
-        try await withNotificationAccount(householdID: householdID) { [notificationAPI] token, memberID in
+        try await withSignedInAccount(householdID: householdID) { [notificationAPI] token, memberID in
             guard let memberID else { throw AccountError.accountStateRequired }
             return try await notificationAPI.save(preferences, householdID: householdID, memberID: memberID, token: token)
         }
     }
 
     public func registerPushDevice(installationID: UUID, token: APNsDeviceToken, environment: APNsEnvironment) async throws {
-        try await withNotificationAccount { [notificationAPI] credential, _ in
+        try await withSignedInAccount { [notificationAPI] credential, _ in
             try await notificationAPI.register(
                 installationID: installationID, token: token, environment: environment, credential: credential
             )
@@ -376,7 +376,7 @@ public actor AccountSession {
     }
 
     public func unregisterPushDevice(installationID: UUID) async throws {
-        try await withNotificationAccount { [notificationAPI] token, _ in
+        try await withSignedInAccount { [notificationAPI] token, _ in
             try await notificationAPI.unregister(installationID: installationID, token: token)
         }
     }
@@ -689,7 +689,66 @@ public actor AccountSession {
         }
     }
 
-    private func withNotificationAccount<Response: Sendable>(
+    public func loadRecoveryStatus() async throws -> AccountRecoveryStatus {
+        try await withSignedInAccount { [api] token, _ in try await api.recoveryStatus(token: token) }
+    }
+
+    public func generateRecoveryCodes(version: Int64) async throws -> AccountRecoveryCodes {
+        try await withSignedInAccount { [api] token, _ in try await api.generateRecoveryCodes(version: version, token: token) }
+    }
+
+    public func revokeRecoveryCodes(version: Int64) async throws -> AccountRecoveryStatus {
+        try await withSignedInAccount { [api] token, _ in try await api.revokeRecoveryCodes(version: version, token: token) }
+    }
+
+    @discardableResult
+    public func updateProfile(name: String) async throws -> AccountState {
+        try await updateAccount { [api] token in try await api.updateProfile(name: name, token: token) }
+    }
+
+    @discardableResult
+    public func renameDevice(label: String) async throws -> AccountState {
+        try await updateAccount { [api] token in try await api.renameDevice(label: label, token: token) }
+    }
+
+    /// Revokes another device. Signing out this device goes through `logout`, which also clears the Keychain.
+    @discardableResult
+    public func revokeDevice(id: UUID) async throws -> AccountState {
+        guard state?.devices.contains(where: { $0.id == id && !$0.current }) == true else {
+            throw AccountError.invalidInput(.deviceID)
+        }
+        return try await updateAccount { [api] token in try await api.revokeDevice(id: id, token: token) }
+    }
+
+    private func updateAccount(_ operation: @Sendable (SessionToken) async throws -> AccountState) async throws -> AccountState {
+        try beginOperation()
+        defer { isBusy = false }
+        guard let original = state, original.isSignedIn, !original.deletionPending,
+              let account = original.account, let device = original.devices.first(where: \.current) else {
+            throw AccountError.accountStateRequired
+        }
+        let stored = try await readCredential()
+        try Task.checkCancellation()
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        do {
+            let response = try await operation(token)
+            try Task.checkCancellation()
+            guard response.isSignedIn, !response.deletionPending, response.account?.id == account.id,
+                  response.account?.email == account.email,
+                  response.devices.first(where: \.current)?.id == device.id,
+                  response.session?.household.id == original.session?.household.id else {
+                throw AccountError.invalidResponse
+            }
+            try await confirmAccountIdentity(original, token: token)
+            state = response
+            return response
+        } catch {
+            try await handleConfirmedExpiry(error)
+            throw error
+        }
+    }
+
+    private func withSignedInAccount<Response: Sendable>(
         householdID: UUID? = nil,
         _ operation: @Sendable (SessionToken, UUID?) async throws -> Response
     ) async throws -> Response {

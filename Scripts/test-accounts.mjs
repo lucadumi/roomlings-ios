@@ -732,6 +732,18 @@ app.post('/_fixture/settings/remote', express.json(), async (request, response) 
   await store.save(household)
   response.json({ version: household.version })
 })
+app.post('/_fixture/account/other-session', express.json(), async (request, response) => {
+  // The same account signed in on another device, for session revocation.
+  await store.accounts.signIn(identity(accountEmailSchema.parse(request.body.email)), 'Ada', 'Old laptop')
+  response.json({ created: true })
+})
+app.post('/_fixture/account/state', express.json(), async (request, response) => {
+  const account = await database.prepare('SELECT id, name FROM accounts WHERE email = ?').get(accountEmailSchema.parse(request.body.email))
+  if (!account) throw new Error('The account fixture is missing.')
+  const sessions = await database.prepare('SELECT label FROM account_sessions WHERE account_id = ? ORDER BY label').all(account.id)
+  const codes = await database.prepare('SELECT COUNT(*) AS count FROM account_recovery_codes WHERE account_id = ?').get(account.id)
+  response.json({ name: account.name, sessions: sessions.map((row) => row.label), recoveryCodes: Number(codes.count) })
+})
 app.use((error, _request, response, _next) => {
   console.error('Account fixture failed:', error.message)
   response.status(500).json({ error: 'Account fixture failed' })
