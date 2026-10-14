@@ -22,8 +22,13 @@ struct AccountSheet: View {
     @State private var headerHeight: CGFloat = 64
     @State private var deletionConfirmation = ""
 
-    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers }
+    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers, houseRules, roomStyle, profile, devices, recoveryCodes }
     @State private var invitation = ""
+    @State private var houseRules = AccountHouseRulesSection.Form()
+    @State private var roomStyle = AccountRoomStyleSection.Form()
+    @State private var profileName = ""
+    @State private var profileDevice = ""
+    @State private var reauthenticatingForRecovery = false
     private let currencies: [HouseholdCurrency] = [.eur, .usd, .gbp, .ron]
 
     var body: some View {
@@ -50,14 +55,7 @@ struct AccountSheet: View {
             .confirmationDialog("Sign out on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) {
                     Task {
-                        if await model.signOut() {
-                            email = ""
-                            emailCode = ""
-                            recoveryCode = ""
-                            displayName = ""
-                            memberName = ""
-                            page = .email
-                        }
+                        if await model.signOut() { resetAfterSignOut() }
                     }
                 }
             } message: {
@@ -81,7 +79,14 @@ struct AccountSheet: View {
             invitation = model.pendingInvitation?.value ?? ""
             memberName = model.state?.account?.name ?? ""
         }
-        .onDisappear { model.clearInvitationLink() }
+        .onDisappear {
+            model.clearInvitationLink()
+            model.forgetRecoveryCodes()
+        }
+        .onChange(of: page) { _, page in
+            // New recovery codes are shown once and never survive leaving their page.
+            if page != .recoveryCodes { model.forgetRecoveryCodes() }
+        }
         .onChange(of: model.signedIn) { _, signedIn in
             page = signedIn ? (model.pendingInvitation == nil ? .account : .join) : .email
             if signedIn { memberName = model.state?.account?.name ?? "" }
@@ -97,10 +102,12 @@ struct AccountSheet: View {
                 householdName = ""
                 invitation = ""
             }
-            if page == .deleteAccount || page == .reauthenticate || page == .householdMembers { page = .account }
+            if [.deleteAccount, .reauthenticate, .householdMembers, .houseRules, .roomStyle, .profile, .devices, .recoveryCodes].contains(page) {
+                page = .account
+            }
         }
         .onChange(of: model.state?.session?.household.id) { _, _ in
-            if page == .householdMembers { page = .account }
+            if page == .householdMembers || page == .houseRules || page == .roomStyle { page = .account }
         }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
@@ -148,6 +155,36 @@ struct AccountSheet: View {
             AccountHouseholdMembersSection(model: model)
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
+        case .profile:
+            AccountProfileSection(model: model, name: $profileName, deviceLabel: $profileDevice)
+            backToAccount
+        case .devices:
+            AccountDevicesSection(model: model) { resetAfterSignOut() }
+            backToAccount
+        case .recoveryCodes:
+            AccountRecoveryCodesSection(model: model) {
+                model.clearFeedback()
+                emailCode = ""
+                reauthenticatingForRecovery = true
+                page = .reauthenticate
+            }
+            if model.recoveryCodes == nil { backToAccount }
+        case .roomStyle:
+            AccountRoomStyleSection(model: model, form: $roomStyle) { page = .account }
+            Button("Back to account") {
+                model.clearFeedback()
+                page = .account
+            }
+            .buttonStyle(RoomButtonStyle(kind: .text))
+            .disabled(model.busy)
+        case .houseRules:
+            AccountHouseRulesSection(model: model, form: $houseRules) { page = .account }
+            Button("Back to account") {
+                model.clearFeedback()
+                page = .account
+            }
+            .buttonStyle(RoomButtonStyle(kind: .text))
+            .disabled(model.busy)
         case .deleteAccount:
             if let account = model.state?.account { deletionForm(account) }
         case .reauthenticate:
@@ -368,6 +405,22 @@ struct AccountSheet: View {
                 if let account = model.state?.account {
                     Text(account.name)
                     Text(account.email).foregroundStyle(RoomTheme.muted)
+                    Button("Edit profile") {
+                        model.clearFeedback()
+                        profileName = account.name
+                        profileDevice = model.state?.devices.first(where: \.current)?.label ?? ""
+                        page = .profile
+                    }
+                    .accessibilityIdentifier("open-profile")
+                    Button("Account sessions") {
+                        model.clearFeedback()
+                        page = .devices
+                    }
+                    .accessibilityIdentifier("open-devices")
+                    Button("Recovery codes") {
+                        Task { if await model.loadRecoveryStatus() { page = .recoveryCodes } }
+                    }
+                    .accessibilityIdentifier("open-recovery-codes")
                 }
             }
             AccountSection("Your households") {
@@ -404,6 +457,18 @@ struct AccountSheet: View {
             }
             if let householdID = model.state?.session?.household.id {
                 AccountSection {
+                    Button("House rules") {
+                        model.clearFeedback()
+                        houseRules = AccountHouseRulesSection.Form()
+                        page = .houseRules
+                    }
+                    .accessibilityIdentifier("open-house-rules")
+                    Button("Room style") {
+                        model.clearFeedback()
+                        roomStyle = AccountRoomStyleSection.Form()
+                        page = .roomStyle
+                    }
+                    .accessibilityIdentifier("open-room-style")
                     Button("Household members") {
                         Task {
                             if await model.loadHouseholdAccess() { page = .householdMembers }
@@ -453,6 +518,7 @@ struct AccountSheet: View {
                 model.clearFeedback()
                 emailCode = ""
                 deletionConfirmation = ""
+                reauthenticatingForRecovery = false
                 page = .reauthenticate
             }
             .accessibilityIdentifier("reauthenticate-account")
@@ -478,9 +544,11 @@ struct AccountSheet: View {
     }
 
     private func reauthenticationForm(_ account: Account, device: AccountDevice) -> some View {
-        AccountSection("Verify before deleting") {
+        AccountSection(reauthenticatingForRecovery ? "Verify before changing recovery codes" : "Verify before deleting") {
             Text(account.email)
-            Text("Verification only refreshes your sign-in. You will review and confirm deletion again afterwards.")
+            Text(reauthenticatingForRecovery
+                 ? "Verification only refreshes your sign-in. Your recovery codes stay unchanged until you replace or revoke them."
+                 : "Verification only refreshes your sign-in. You will review and confirm deletion again afterwards.")
                 .foregroundStyle(RoomTheme.muted)
             Button("Send verification code") { Task { await model.sendCode(email: account.email) } }
                 .accessibilityIdentifier("send-deletion-verification")
@@ -489,10 +557,13 @@ struct AccountSheet: View {
                 .textContentType(.oneTimeCode)
             Button("Verify email") {
                 Task {
-                    if await model.reauthenticate(accountID: account.id, code: emailCode, label: device.label) {
+                    let forRecovery = reauthenticatingForRecovery
+                    if await model.reauthenticate(accountID: account.id, code: emailCode, label: device.label,
+                                                  forRecovery: forRecovery) {
                         emailCode = ""
                         deletionConfirmation = ""
-                        page = .deleteAccount
+                        reauthenticatingForRecovery = false
+                        page = forRecovery ? .recoveryCodes : .deleteAccount
                     }
                 }
             }
@@ -502,7 +573,8 @@ struct AccountSheet: View {
             Button("Cancel") {
                 emailCode = ""
                 model.clearFeedback()
-                page = .account
+                page = reauthenticatingForRecovery ? .recoveryCodes : .account
+                reauthenticatingForRecovery = false
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
         }
@@ -594,6 +666,24 @@ struct AccountSheet: View {
             .buttonStyle(RoomButtonStyle(kind: .primary))
             .disabled(invitation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || memberName.isEmpty)
         }
+    }
+
+    private var backToAccount: some View {
+        Button("Back to account") {
+            model.clearFeedback()
+            page = .account
+        }
+        .buttonStyle(RoomButtonStyle(kind: .text))
+        .disabled(model.busy)
+    }
+
+    private func resetAfterSignOut() {
+        email = ""
+        emailCode = ""
+        recoveryCode = ""
+        displayName = ""
+        memberName = ""
+        page = .email
     }
 
     private func finishEntry() {

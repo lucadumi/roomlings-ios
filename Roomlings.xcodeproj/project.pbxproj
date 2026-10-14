@@ -59,6 +59,13 @@
 		A00000000000000000000032 /* MembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* MembershipUITests.swift */; };
 		A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* ChoreManagementUITests.swift */; };
 		A00000000000000000000034 /* BillsBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003D /* BillsBoard.swift */; };
+		A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003E /* AccountHouseRulesSection.swift */; };
+		A0000000000000000000003A /* AccountManagementSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000043 /* AccountManagementSections.swift */; };
+		A00000000000000000000038 /* RoomStyleCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000041 /* RoomStyleCatalog.swift */; };
+		A00000000000000000000037 /* AccountRoomStyleSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000040 /* AccountRoomStyleSection.swift */; };
+		A00000000000000000000036 /* HouseRulesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003F /* HouseRulesUITests.swift */; };
+		A0000000000000000000003B /* AccountManagementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000044 /* AccountManagementUITests.swift */; };
+		A00000000000000000000039 /* RoomStyleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000042 /* RoomStyleUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -133,6 +140,13 @@
 		B0000000000000000000003B /* RoomlingsLinks.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RoomlingsLinks.entitlements; sourceTree = "<group>"; };
 		B0000000000000000000003C /* ChoreManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreManagementUITests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003D /* BillsBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillsBoard.swift; sourceTree = "<group>"; };
+		B0000000000000000000003E /* AccountHouseRulesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHouseRulesSection.swift; sourceTree = "<group>"; };
+		B00000000000000000000043 /* AccountManagementSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagementSections.swift; sourceTree = "<group>"; };
+		B00000000000000000000041 /* RoomStyleCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStyleCatalog.swift; sourceTree = "<group>"; };
+		B00000000000000000000040 /* AccountRoomStyleSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountRoomStyleSection.swift; sourceTree = "<group>"; };
+		B0000000000000000000003F /* HouseRulesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseRulesUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000044 /* AccountManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagementUITests.swift; sourceTree = "<group>"; };
+		B00000000000000000000042 /* RoomStyleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStyleUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -202,6 +216,10 @@
 				B0000000000000000000003D /* BillsBoard.swift */,
 				B00000000000000000000022 /* AccountInvitationsSection.swift */,
 				B00000000000000000000031 /* AccountHouseholdMembersSection.swift */,
+				B0000000000000000000003E /* AccountHouseRulesSection.swift */,
+				B00000000000000000000043 /* AccountManagementSections.swift */,
+				B00000000000000000000041 /* RoomStyleCatalog.swift */,
+				B00000000000000000000040 /* AccountRoomStyleSection.swift */,
 				B0000000000000000000002C /* InvitationShareSheet.swift */,
 				B0000000000000000000002B /* NativeAnalytics.swift */,
 				B00000000000000000000025 /* NativeNotifications.swift */,
@@ -241,6 +259,9 @@
 				B00000000000000000000030 /* AccountDeletionUITests.swift */,
 				B00000000000000000000033 /* OwnershipUITests.swift */,
 				B0000000000000000000003A /* MembershipUITests.swift */,
+				B0000000000000000000003F /* HouseRulesUITests.swift */,
+				B00000000000000000000044 /* AccountManagementUITests.swift */,
+				B00000000000000000000042 /* RoomStyleUITests.swift */,
 				B0000000000000000000003C /* ChoreManagementUITests.swift */,
 				B00000000000000000000015 /* Wait.swift */,
 				B00000000000000000000014 /* Info.plist */,
@@ -425,6 +446,10 @@
 				A00000000000000000000034 /* BillsBoard.swift in Sources */,
 				A0000000000000000000001B /* AccountInvitationsSection.swift in Sources */,
 				A00000000000000000000029 /* AccountHouseholdMembersSection.swift in Sources */,
+				A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */,
+				A0000000000000000000003A /* AccountManagementSections.swift in Sources */,
+				A00000000000000000000038 /* RoomStyleCatalog.swift in Sources */,
+				A00000000000000000000037 /* AccountRoomStyleSection.swift in Sources */,
 				A00000000000000000000024 /* InvitationShareSheet.swift in Sources */,
 				A00000000000000000000023 /* NativeAnalytics.swift in Sources */,
 				A0000000000000000000001E /* NativeNotifications.swift in Sources */,
@@ -462,6 +487,9 @@
 				A00000000000000000000028 /* AccountDeletionUITests.swift in Sources */,
 				A0000000000000000000002B /* OwnershipUITests.swift in Sources */,
 				A00000000000000000000032 /* MembershipUITests.swift in Sources */,
+				A00000000000000000000036 /* HouseRulesUITests.swift in Sources */,
+				A0000000000000000000003B /* AccountManagementUITests.swift in Sources */,
+				A00000000000000000000039 /* RoomStyleUITests.swift in Sources */,
 				A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */,
 				A0000000000000000000000E /* Wait.swift in Sources */,
 			);

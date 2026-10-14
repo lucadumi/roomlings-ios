@@ -33,7 +33,7 @@ struct AccountAPI: Sendable {
         email: String, recoveryCode: String, deviceLabel: String, token: SessionToken?
     ) async throws -> NativeSignInResponse {
         let code = recoveryCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard AccountValidation.matches(code, #"^roomlings-account-[a-f0-9]{4}(?:-[a-f0-9]{4}){7}$"#) else {
+        guard AccountValidation.recoveryCode(code) else {
             throw AccountError.invalidInput(.recoveryCode)
         }
         let payload = RecoveryRequest(
@@ -145,7 +145,7 @@ struct AccountAPI: Sendable {
         return email
     }
 
-    private func nameInput(_ name: String, field: AccountInputField) throws -> String {
+    func nameInput(_ name: String, field: AccountInputField) throws -> String {
         guard let name = AccountValidation.name(name) else { throw AccountError.invalidInput(field) }
         return name
     }

@@ -27,6 +27,13 @@ final class AccountModel {
     private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
     private(set) var bills: HouseholdBills?
     private(set) var billsFailure: String?
+    private(set) var houseRules: HouseholdSettings?
+    private(set) var houseRulesFailure: String?
+    private(set) var houseRulesSaveFailure = HouseholdSaveFailure.none
+    private(set) var roomStyle: HouseholdRoomStyle?
+    private(set) var roomStyleCatalog: RoomStyleCatalog?
+    private(set) var roomStyleFailure: String?
+    private(set) var roomStyleSaveFailure = HouseholdSaveFailure.none
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -34,6 +41,12 @@ final class AccountModel {
     private(set) var incomingInvitationError: String?
     private(set) var deletionStatus = AccountDeletionStatus.none
     private(set) var deletionRequiresReauthentication = false
+    private(set) var recoveryStatus: AccountRecoveryStatus?
+    /// Shown once, then dropped. Never persisted or logged.
+    private(set) var recoveryCodes: AccountRecoveryCodes?
+    private(set) var recoveryRequiresReauthentication = false
+    /// A recovery change may have reached the server without a readable reply.
+    private(set) var recoveryNeedsRefresh = false
     private(set) var pendingHouseholdDeparture: UUID?
     var message: String?
     var notice: String?
@@ -222,13 +235,96 @@ final class AccountModel {
         return signedOut
     }
 
-    func reauthenticate(accountID: UUID, code: String, label: String) async -> Bool {
+    func signOutEverywhere() async -> Bool {
+        let signedOut = await perform(.logout) { try await $0.logout(allDevices: true) }
+        if signedOut {
+            dismissInvitation()
+            notice = "Signed out on every device. Use an email code or an unused recovery code to return."
+        }
+        return signedOut
+    }
+
+    func updateProfile(name: String) async -> Bool {
+        let saved = await perform(.profile) { try await $0.updateProfile(name: name) }
+        if saved { notice = "Account name saved. Ledger names unchanged." }
+        return saved
+    }
+
+    func renameDevice(label: String) async -> Bool {
+        let saved = await perform(.profile) { try await $0.renameDevice(label: label) }
+        if saved { notice = "Device name saved." }
+        return saved
+    }
+
+    func revokeDevice(_ device: AccountDevice) async -> Bool {
+        let revoked = await perform(.deviceRevoke) { try await $0.revokeDevice(id: device.id) }
+        if revoked { notice = "Account session revoked." }
+        return revoked
+    }
+
+    @discardableResult
+    func loadRecoveryStatus() async -> Bool {
+        await recoveryOperation(.recoveryLoad) { client in
+            self.recoveryStatus = try await client.loadRecoveryStatus()
+        }
+    }
+
+    func generateRecoveryCodes(version: Int64) async -> Bool {
+        await recoveryOperation(.recoveryChange) { client in
+            let result = try await client.generateRecoveryCodes(version: version)
+            self.recoveryStatus = result.status
+            self.recoveryCodes = result
+            self.notice = "New recovery codes are ready. Earlier codes no longer work."
+        }
+    }
+
+    func revokeRecoveryCodes(version: Int64) async -> Bool {
+        await recoveryOperation(.recoveryChange) { client in
+            self.recoveryStatus = try await client.revokeRecoveryCodes(version: version)
+            self.recoveryCodes = nil
+            self.notice = "Unused recovery codes revoked. Sessions unchanged."
+        }
+    }
+
+    func forgetRecoveryCodes() {
+        recoveryCodes = nil
+    }
+
+    private func recoveryOperation(_ action: Action, _ operation: (AccountSession) async throws -> Void) async -> Bool {
+        guard canUseAccount, let client, begin() else { return false }
+        defer { busy = false }
+        do {
+            try await operation(client)
+            recoveryRequiresReauthentication = false
+            recoveryNeedsRefresh = false
+            return true
+        } catch {
+            recoveryRequiresReauthentication = error as? AccountError == .server(status: 401, code: .reauthenticationRequired)
+            // Without a readable reply the codes may already have changed, and new codes cannot be fetched again.
+            if action == .recoveryChange, !recoveryRequiresReauthentication {
+                switch error {
+                case AccountError.server(let status, _) where status < 500 && status != 429: break
+                case AccountError.invalidInput, AccountError.operationInProgress, AccountError.credentialStorage, is KeychainError: break
+                default: recoveryNeedsRefresh = true
+                }
+            }
+            await failed(error, action: action, client: client)
+            return false
+        }
+    }
+
+    func reauthenticate(accountID: UUID, code: String, label: String, forRecovery: Bool = false) async -> Bool {
         let verified = await perform(.reauthenticate) {
             try await $0.reauthenticate(accountID: accountID, code: code, deviceLabel: label)
         }
         if verified {
-            deletionRequiresReauthentication = false
-            notice = "Email verified. Review the deletion warning and enter your email again to continue."
+            if forRecovery {
+                recoveryRequiresReauthentication = false
+                notice = "Email verified. You can now change your recovery codes."
+            } else {
+                deletionRequiresReauthentication = false
+                notice = "Email verified. Review the deletion warning and enter your email again to continue."
+            }
         }
         return verified
     }
@@ -692,6 +788,28 @@ final class AccountModel {
         return saved
     }
 
+    func saveHouseRules(_ draft: HouseholdSettingsDraft, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.houseRules) {
+            try await $0.updateHouseholdSettings(draft, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "House rules saved." }
+        return saved
+    }
+
+    /// Owners and room admins may restyle the room. The server enforces the same rule.
+    var canEditRoom: Bool {
+        guard let session = state?.session else { return false }
+        return state?.memberships.first { $0.householdID == session.household.id }.map { $0.role != .member } ?? false
+    }
+
+    func saveRoomStyle(_ style: String, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.roomStyle) {
+            try await $0.updateRoomStyle(style, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Room style saved for everyone." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -714,6 +832,8 @@ final class AccountModel {
         if action.isChore { choreSaveFailure = .none }
         if action == .shopping { shoppingSaveFailure = .none }
         if action == .ledger { ledgerSaveFailure = .none }
+        if action == .houseRules { houseRulesSaveFailure = .none }
+        if action == .roomStyle { roomStyleSaveFailure = .none }
         let previousDeletion = deletionStatus
         let previousDeparture = pendingHouseholdDeparture
         do {
@@ -751,6 +871,16 @@ final class AccountModel {
                 ledgerSaveFailure = .retrySameChange
                 return false
             }
+            if action == .roomStyle, let roomStyleFailure {
+                message = roomStyleFailure
+                roomStyleSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .houseRules, let houseRulesFailure {
+                message = houseRulesFailure
+                houseRulesSaveFailure = .retrySameChange
+                return false
+            }
             return published
         } catch {
             await failed(error, action: action, client: client)
@@ -760,6 +890,12 @@ final class AccountModel {
 
     private func publish(_ next: AccountState?, requestFailed: Bool = false) -> Bool {
         defer { analytics?.updateAccount(canUseAccount ? state : nil) }
+        if next?.account?.id != state?.account?.id || next?.isSignedIn != true {
+            recoveryStatus = nil
+            recoveryCodes = nil
+            recoveryRequiresReauthentication = false
+            recoveryNeedsRefresh = false
+        }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true || membershipNeedsRefresh {
             invitations = nil
@@ -783,6 +919,10 @@ final class AccountModel {
         ledgerFailure = nil
         bills = nil
         billsFailure = nil
+        houseRules = nil
+        houseRulesFailure = nil
+        roomStyle = nil
+        roomStyleFailure = nil
         guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
@@ -810,6 +950,20 @@ final class AccountModel {
             bills = try HouseholdBills(household: household)
         } catch {
             billsFailure = "Your monthly bills could not be displayed. Refresh money before making changes."
+        }
+        do {
+            let catalog = try roomStyleCatalog ?? RoomStyleCatalog.load()
+            roomStyleCatalog = catalog
+            let current = try HouseholdRoomStyle(household: household)
+            guard catalog.style(current.style) != nil else { throw AccountError.invalidResponse }
+            roomStyle = current
+        } catch {
+            roomStyleFailure = "Your room style could not be displayed. Refresh your account. If this continues, rebuild the app with the shared web source."
+        }
+        do {
+            houseRules = try HouseholdSettings(household: household)
+        } catch {
+            houseRulesFailure = "Your house rules could not be displayed. Refresh your account before changing them."
         }
         do {
             let catalog = try choreCatalog ?? ChoreCatalog.load()
@@ -848,7 +1002,7 @@ final class AccountModel {
         let latest = await client.state
         if latest?.isSignedIn != true { deletionBlocked = false }
         _ = publish(latest, requestFailed: true)
-        if action.isChore || action == .shopping || action == .ledger {
+        if action.resource != nil {
             let failure: HouseholdSaveFailure
             switch error {
             case AccountError.server(let status, _) where [403, 404, 409].contains(status):
@@ -864,6 +1018,8 @@ final class AccountModel {
             }
             if action.isChore { choreSaveFailure = failure }
             else if action == .shopping { shoppingSaveFailure = failure }
+            else if action == .houseRules { houseRulesSaveFailure = failure }
+            else if action == .roomStyle { roomStyleSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
         message = deletionCleanupRequired
@@ -873,9 +1029,10 @@ final class AccountModel {
 
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
-        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger
+        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
+        case profile, deviceRevoke, recoveryLoad, recoveryChange
 
         var isChore: Bool {
             self == .addChore || self == .editChore || self == .archiveChore || self == .completeChore || self == .undoChore
@@ -886,19 +1043,23 @@ final class AccountModel {
         var resource: Resource? {
             if isChore { return .chores }
             if self == .shopping { return .shopping }
+            if self == .houseRules { return .houseRules }
+            if self == .roomStyle { return .roomStyle }
             return self == .ledger ? .ledger : nil
         }
     }
 
     /// Wording for the household collection a failed mutation touched.
     private enum Resource {
-        case chores, shopping, ledger
+        case chores, shopping, ledger, houseRules, roomStyle
 
         var name: String {
             switch self {
             case .chores: "chores"
             case .shopping: "shopping"
             case .ledger: "receipts"
+            case .houseRules: "house rules"
+            case .roomStyle: "the room style"
             }
         }
 
@@ -907,6 +1068,8 @@ final class AccountModel {
             case .chores: "Chores"
             case .shopping: "Shopping"
             case .ledger: "Receipts"
+            case .houseRules: "House rules"
+            case .roomStyle: "The room style"
             }
         }
 
@@ -915,6 +1078,8 @@ final class AccountModel {
             case .chores: "chore"
             case .shopping: "item"
             case .ledger: "receipt"
+            case .houseRules: "household"
+            case .roomStyle: "household"
             }
         }
 
@@ -923,6 +1088,8 @@ final class AccountModel {
             case .chores: "chore"
             case .shopping: "shopping"
             case .ledger: "receipt"
+            case .houseRules: "house rules"
+            case .roomStyle: "room style"
             }
         }
 
@@ -931,6 +1098,8 @@ final class AccountModel {
             case .chores: "Check the chore name, date, repeat interval, object and active roommates."
             case .shopping: "Check the item name, quantity and notes, then review its current claim."
             case .ledger: "Check the description, amount, who paid, the split and the date."
+            case .houseRules: "Check the household name and a budget from 0.01 to 1,000,000.00. Currency stays fixed after money is recorded."
+            case .roomStyle: "Choose one of the shared room styles."
             }
         }
     }
@@ -955,6 +1124,38 @@ final class AccountModel {
                 return "Another account action is still running."
             default:
                 return "Could not confirm account deletion. Check deletion status before trying again."
+            }
+        }
+        if action == .profile || action == .deviceRevoke || action == .recoveryLoad || action == .recoveryChange {
+            switch error {
+            case is KeychainError, AccountError.credentialStorage:
+                return "Saved access could not be read securely. Unlock this device and try again."
+            case AccountError.server(_, .some(.accountSessionRequired)):
+                return "Your session has expired. Sign in again."
+            case AccountError.server(_, .some(.accountDeletionPending)):
+                return "Account deletion is pending. Check its status or retry deletion here."
+            case AccountError.server(_, .some(.reauthenticationRequired)):
+                return "Verify your email again before changing recovery codes."
+            case AccountError.server(409, _) where action == .recoveryChange:
+                return "Your recovery codes changed on another device. Refresh their status and try again."
+            case AccountError.server(404, _) where action == .deviceRevoke:
+                return "That device is no longer signed in. Refresh your account to see current devices."
+            case AccountError.invalidInput(.name), AccountError.invalidInput(.deviceLabel), AccountError.server(400, _):
+                return "Enter a name from 1 to 50 characters."
+            case AccountError.invalidInput(.deviceID):
+                return "Use Sign out to end this device's session."
+            case AccountError.server(429, _):
+                return "Too many attempts. Wait a few minutes before trying again."
+            case AccountError.operationInProgress:
+                return "Another account action is still running."
+            default:
+                switch action {
+                case .recoveryLoad: return "Recovery code status could not be loaded. Try again."
+                case .recoveryChange:
+                    return "The recovery code change could not be confirmed. Refresh their status before trying again. Codes from an unconfirmed change cannot be shown again."
+                case .deviceRevoke: return "Signing out that device could not be confirmed. Refresh your account before trying again."
+                default: return "The change could not be confirmed. Refresh your account before trying again."
+                }
             }
         }
         if action == .householdAccessLoad || action == .ownershipTransfer || action == .removeMember || action == .leaveHousehold {
@@ -1071,6 +1272,8 @@ final class AccountModel {
             return code == .mutationTooOld
                 ? "This save is too old to confirm. Refresh \(name) and review the current list."
                 : "\(resource.subject) changed elsewhere. Refresh \(name) and review the latest state before trying again."
+        case AccountError.server(403, _) where resource == .roomStyle:
+            return "Only a household owner or admin can change the room style. Ask an admin for room editing access."
         case AccountError.server(let status, _) where status == 403 || status == 404:
             return "This \(resource.item) or household is no longer available. Refresh \(name) before trying again."
         case AccountError.server(429, _):

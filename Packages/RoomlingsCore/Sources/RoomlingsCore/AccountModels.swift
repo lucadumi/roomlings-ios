@@ -16,7 +16,7 @@ public enum AccountDeletionStatus: Sendable, Equatable {
     }
 }
 
-public enum HouseholdCurrency: String, Sendable, Codable {
+public enum HouseholdCurrency: String, Sendable, Codable, CaseIterable {
     case eur = "EUR"
     case usd = "USD"
     case gbp = "GBP"
@@ -281,9 +281,10 @@ public struct AccountState: Sendable, Codable, Equatable,
     private init(replacing original: AccountState, session: AccountKitchenSession, role: AccountRole?) {
         configured = original.configured
         account = original.account
+        // Memberships echo the selected household's name and currency, which house rules can change.
         memberships = original.memberships.map { membership in
-            guard let role, membership.householdID == session.household.id else { return membership }
-            return AccountMembership(replacing: membership, household: session.household, role: role)
+            guard membership.householdID == session.household.id else { return membership }
+            return AccountMembership(replacing: membership, household: session.household, role: role ?? membership.role)
         }
         devices = original.devices
         self.session = session

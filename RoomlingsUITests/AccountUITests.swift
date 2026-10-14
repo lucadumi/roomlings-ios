@@ -130,7 +130,9 @@ final class AccountUITests: XCTestCase {
         let identifier = button.identifier
         let name = identifier.isEmpty ? button.label : identifier
         let scroll = app.scrollViews.containing(button.elementType, identifier: name).firstMatch
-        for attempt in 0...8 {
+        // A fitted iPad sheet can be much shorter than its content, so allow enough short scrolls to cross it.
+        let scrollLimit = 20
+        for attempt in 0...scrollLimit {
             let appFrame = app.frame
             let frame = button.frame
             let canScroll = scroll.exists
@@ -155,7 +157,7 @@ final class AccountUITests: XCTestCase {
                 button.tap()
                 return
             }
-            guard canScroll, attempt < 8 else { throw FlowError.missingElement("\(button.description) could not be reached") }
+            guard canScroll, attempt < scrollLimit else { throw FlowError.missingElement("\(button.description) could not be reached") }
             guard area.height > 44 else { throw FlowError.missingElement("A visible scroll area for \(button.description)") }
             let down = frame.minY < area.minY
             let gap = down ? area.minY - frame.minY : frame.maxY - area.maxY
@@ -170,6 +172,19 @@ final class AccountUITests: XCTestCase {
             // Settle before lifting so a short fitted sheet cannot fling past the target in both directions.
             start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
+    }
+
+    /// iPad can drop a tap while the keyboard is up. Tapping again only while the button is still
+    /// present and enabled retries a tap the app never received; an action that started replaces
+    /// or disables the button first.
+    @MainActor
+    func tap(_ button: XCUIElement, in app: XCUIApplication, until outcome: XCUIElement) throws {
+        for _ in 1...3 {
+            try tap(button, in: app)
+            if outcome.waitForExistence(timeout: Wait.flip) { return }
+            guard button.exists, button.isEnabled else { break }
+        }
+        XCTAssertTrue(outcome.waitForExistence(timeout: Wait.control), "\(outcome.description) after tapping \(button.description)")
     }
 
     @MainActor

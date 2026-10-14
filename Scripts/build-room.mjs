@@ -119,6 +119,22 @@ await writeFile(join(output, 'chores.json'), JSON.stringify({
     id, name, kind, roomId, slotId, installed,
   })),
 }, null, 2) + '\n')
+const { roomStyleSchema } = await import(pathToFileURL(join(source, 'shared/domain.ts')).href)
+const { roomPresets } = await import(pathToFileURL(join(source, 'src/roomStyles.ts')).href)
+const swatchSurfaces = ['wall', 'floor', 'floorAlternate', 'fridgeDoor', 'cabinetPanel', 'counter', 'lightWood']
+await writeFile(join(output, 'room-styles.json'), JSON.stringify({
+  version: 1,
+  styles: roomStyleSchema.options.map((id) => {
+    const preset = roomPresets[id]
+    const colors = Object.fromEntries(swatchSurfaces.map((surface) => {
+      const color = preset?.colors[surface]
+      if (!/^#[\da-f]{6}$/i.test(color ?? '')) throw new Error(`The shared ${id} room style needs a hex ${surface} colour.`)
+      return [surface, color]
+    }))
+    // The web picker labels the default look with the product name.
+    return { id, name: id === 'original' ? 'Roomlings' : preset.name, description: preset.description, colors }
+  }),
+}, null, 2) + '\n')
 await writeFile(join(output, 'source.json'), JSON.stringify({
   bridgeVersion: 1,
   webRevision: revision,
