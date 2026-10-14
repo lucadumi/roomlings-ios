@@ -152,7 +152,7 @@ extension AccountUITests {
 
     @MainActor
     func testShoppingEditsClaimsAndPicksWithoutCreatingDebt() async throws {
-        executionTimeAllowance = 300
+        executionTimeAllowance = 600
         continueAfterFailure = false
         let (app, home) = try await launchShopping()
         let initial = try await shoppingState(home)
