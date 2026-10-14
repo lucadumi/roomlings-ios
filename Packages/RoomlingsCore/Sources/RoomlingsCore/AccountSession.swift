@@ -598,6 +598,17 @@ public actor AccountSession {
         }
     }
 
+    @discardableResult
+    public func updateRoomStyle(
+        _ style: String, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, current in
+            try await api.updateRoomStyle(
+                style, version: version, mutationID: mutationID, memberID: memberID, current: current, token: token
+            )
+        }
+    }
+
     private func mutateLedger(
         _ change: LedgerChange, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {

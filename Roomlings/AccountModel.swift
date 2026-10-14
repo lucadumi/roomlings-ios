@@ -30,6 +30,10 @@ final class AccountModel {
     private(set) var houseRules: HouseholdSettings?
     private(set) var houseRulesFailure: String?
     private(set) var houseRulesSaveFailure = HouseholdSaveFailure.none
+    private(set) var roomStyle: HouseholdRoomStyle?
+    private(set) var roomStyleCatalog: RoomStyleCatalog?
+    private(set) var roomStyleFailure: String?
+    private(set) var roomStyleSaveFailure = HouseholdSaveFailure.none
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -703,6 +707,20 @@ final class AccountModel {
         return saved
     }
 
+    /// Owners and room admins may restyle the room. The server enforces the same rule.
+    var canEditRoom: Bool {
+        guard let session = state?.session else { return false }
+        return state?.memberships.first { $0.householdID == session.household.id }.map { $0.role != .member } ?? false
+    }
+
+    func saveRoomStyle(_ style: String, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        let saved = await perform(.roomStyle) {
+            try await $0.updateRoomStyle(style, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Room style saved for everyone." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -726,6 +744,7 @@ final class AccountModel {
         if action == .shopping { shoppingSaveFailure = .none }
         if action == .ledger { ledgerSaveFailure = .none }
         if action == .houseRules { houseRulesSaveFailure = .none }
+        if action == .roomStyle { roomStyleSaveFailure = .none }
         let previousDeletion = deletionStatus
         let previousDeparture = pendingHouseholdDeparture
         do {
@@ -761,6 +780,11 @@ final class AccountModel {
             if action == .ledger, let failureMessage = ledgerFailure ?? billsFailure {
                 message = failureMessage
                 ledgerSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .roomStyle, let roomStyleFailure {
+                message = roomStyleFailure
+                roomStyleSaveFailure = .retrySameChange
                 return false
             }
             if action == .houseRules, let houseRulesFailure {
@@ -802,6 +826,8 @@ final class AccountModel {
         billsFailure = nil
         houseRules = nil
         houseRulesFailure = nil
+        roomStyle = nil
+        roomStyleFailure = nil
         guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
@@ -829,6 +855,15 @@ final class AccountModel {
             bills = try HouseholdBills(household: household)
         } catch {
             billsFailure = "Your monthly bills could not be displayed. Refresh money before making changes."
+        }
+        do {
+            let catalog = try roomStyleCatalog ?? RoomStyleCatalog.load()
+            roomStyleCatalog = catalog
+            let current = try HouseholdRoomStyle(household: household)
+            guard catalog.style(current.style) != nil else { throw AccountError.invalidResponse }
+            roomStyle = current
+        } catch {
+            roomStyleFailure = "Your room style could not be displayed. Refresh your account. If this continues, rebuild the app with the shared web source."
         }
         do {
             houseRules = try HouseholdSettings(household: household)
@@ -889,6 +924,7 @@ final class AccountModel {
             if action.isChore { choreSaveFailure = failure }
             else if action == .shopping { shoppingSaveFailure = failure }
             else if action == .houseRules { houseRulesSaveFailure = failure }
+            else if action == .roomStyle { roomStyleSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
         message = deletionCleanupRequired
@@ -898,7 +934,7 @@ final class AccountModel {
 
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
-        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules
+        case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold
 
@@ -912,13 +948,14 @@ final class AccountModel {
             if isChore { return .chores }
             if self == .shopping { return .shopping }
             if self == .houseRules { return .houseRules }
+            if self == .roomStyle { return .roomStyle }
             return self == .ledger ? .ledger : nil
         }
     }
 
     /// Wording for the household collection a failed mutation touched.
     private enum Resource {
-        case chores, shopping, ledger, houseRules
+        case chores, shopping, ledger, houseRules, roomStyle
 
         var name: String {
             switch self {
@@ -926,6 +963,7 @@ final class AccountModel {
             case .shopping: "shopping"
             case .ledger: "receipts"
             case .houseRules: "house rules"
+            case .roomStyle: "the room style"
             }
         }
 
@@ -935,6 +973,7 @@ final class AccountModel {
             case .shopping: "Shopping"
             case .ledger: "Receipts"
             case .houseRules: "House rules"
+            case .roomStyle: "The room style"
             }
         }
 
@@ -944,6 +983,7 @@ final class AccountModel {
             case .shopping: "item"
             case .ledger: "receipt"
             case .houseRules: "household"
+            case .roomStyle: "household"
             }
         }
 
@@ -953,6 +993,7 @@ final class AccountModel {
             case .shopping: "shopping"
             case .ledger: "receipt"
             case .houseRules: "house rules"
+            case .roomStyle: "room style"
             }
         }
 
@@ -962,6 +1003,7 @@ final class AccountModel {
             case .shopping: "Check the item name, quantity and notes, then review its current claim."
             case .ledger: "Check the description, amount, who paid, the split and the date."
             case .houseRules: "Check the household name and a budget from 0.01 to 1,000,000.00. Currency stays fixed after money is recorded."
+            case .roomStyle: "Choose one of the shared room styles."
             }
         }
     }
@@ -1102,6 +1144,8 @@ final class AccountModel {
             return code == .mutationTooOld
                 ? "This save is too old to confirm. Refresh \(name) and review the current list."
                 : "\(resource.subject) changed elsewhere. Refresh \(name) and review the latest state before trying again."
+        case AccountError.server(403, _) where resource == .roomStyle:
+            return "Only a household owner or admin can change the room style. Ask an admin for room editing access."
         case AccountError.server(let status, _) where status == 403 || status == 404:
             return "This \(resource.item) or household is no longer available. Refresh \(name) before trying again."
         case AccountError.server(429, _):

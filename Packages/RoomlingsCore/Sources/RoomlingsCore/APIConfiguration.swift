@@ -63,13 +63,13 @@ enum APIEndpoint: Equatable {
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
-    case updateHouseholdSettings
+    case updateHouseholdSettings, updateRoomStyle
 
     var method: String {
         switch self {
         case .account, .householdInvitations, .notificationSettings: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
-        case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings: "PATCH"
+        case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings, .updateRoomStyle: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
              .deleteAccount, .leaveHousehold, .removeHouseholdMember: "DELETE"
         default: "POST"
@@ -118,6 +118,7 @@ enum APIEndpoint: Equatable {
         case .recordSettlement: "api/settlements"
         case .removeSettlement(let id): "api/settlements/\(id.uuidString.lowercased())"
         case .updateHouseholdSettings: "api/household"
+        case .updateRoomStyle: "api/household/room-style"
         }
     }
 }

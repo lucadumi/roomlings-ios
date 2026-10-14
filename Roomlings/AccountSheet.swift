@@ -22,9 +22,10 @@ struct AccountSheet: View {
     @State private var headerHeight: CGFloat = 64
     @State private var deletionConfirmation = ""
 
-    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers, houseRules }
+    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers, houseRules, roomStyle }
     @State private var invitation = ""
     @State private var houseRules = AccountHouseRulesSection.Form()
+    @State private var roomStyle = AccountRoomStyleSection.Form()
     private let currencies: [HouseholdCurrency] = [.eur, .usd, .gbp, .ron]
 
     var body: some View {
@@ -98,10 +99,10 @@ struct AccountSheet: View {
                 householdName = ""
                 invitation = ""
             }
-            if page == .deleteAccount || page == .reauthenticate || page == .householdMembers || page == .houseRules { page = .account }
+            if page == .deleteAccount || page == .reauthenticate || page == .householdMembers || page == .houseRules || page == .roomStyle { page = .account }
         }
         .onChange(of: model.state?.session?.household.id) { _, _ in
-            if page == .householdMembers || page == .houseRules { page = .account }
+            if page == .householdMembers || page == .houseRules || page == .roomStyle { page = .account }
         }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
@@ -149,6 +150,14 @@ struct AccountSheet: View {
             AccountHouseholdMembersSection(model: model)
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
+        case .roomStyle:
+            AccountRoomStyleSection(model: model, form: $roomStyle) { page = .account }
+            Button("Back to account") {
+                model.clearFeedback()
+                page = .account
+            }
+            .buttonStyle(RoomButtonStyle(kind: .text))
+            .disabled(model.busy)
         case .houseRules:
             AccountHouseRulesSection(model: model, form: $houseRules) { page = .account }
             Button("Back to account") {
@@ -419,6 +428,12 @@ struct AccountSheet: View {
                         page = .houseRules
                     }
                     .accessibilityIdentifier("open-house-rules")
+                    Button("Room style") {
+                        model.clearFeedback()
+                        roomStyle = AccountRoomStyleSection.Form()
+                        page = .roomStyle
+                    }
+                    .accessibilityIdentifier("open-room-style")
                     Button("Household members") {
                         Task {
                             if await model.loadHouseholdAccess() { page = .householdMembers }

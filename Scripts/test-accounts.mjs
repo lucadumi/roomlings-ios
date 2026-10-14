@@ -718,7 +718,10 @@ app.post('/_fixture/ledger/state', express.json(), async (request, response) => 
 app.post('/_fixture/settings/state', express.json(), async (request, response) => {
   const household = await store.get(z.string().uuid().parse(request.body.householdId))
   if (!household) throw new Error('The house rules fixture household is missing.')
-  response.json({ version: household.version, name: household.name, budget: household.budget, currency: household.currency })
+  response.json({
+    version: household.version, name: household.name, budget: household.budget, currency: household.currency,
+    roomStyle: household.roomStyle,
+  })
 })
 app.post('/_fixture/settings/remote', express.json(), async (request, response) => {
   const household = await store.get(z.string().uuid().parse(request.body.householdId))
