@@ -95,7 +95,7 @@ jobs:
       - run: node --test Tests/RoomRenderer/room-renderer.test.mjs
 
   native:
-    name: Native (${{ matrix.name }}, ${{ matrix.shard }}/2)
+    name: Native (${{ matrix.name }}, ${{ matrix.shard }}/3)
     needs: web-revision
     runs-on: macos-26
     timeout-minutes: 75
@@ -103,7 +103,7 @@ jobs:
       fail-fast: false
       matrix:
         name: [iPhone, iPad]
-        shard: [1, 2]
+        shard: [1, 2, 3]
         include:
           - name: iPhone
             simulator: iPhone 17 Pro
@@ -183,7 +183,7 @@ jobs:
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
           SHARD: ${{ matrix.shard }}
-        run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room --shard "$SHARD/2"
+        run: node Scripts/test-accounts.mjs --destination "$DESTINATION" --include-room --shard "$SHARD/3"
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() && failure() }}
         with:
