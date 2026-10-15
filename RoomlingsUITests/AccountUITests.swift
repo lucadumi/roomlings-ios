@@ -104,6 +104,9 @@ final class AccountUITests: XCTestCase {
         // confirm what actually landed rather than trusting a single typeText.
         for _ in 1...3 {
             try tap(field, in: XCUIApplication())
+            // iPad can drop the focusing tap, and typing into an unfocused field fails the test outright.
+            let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: field)
+            guard XCTWaiter.wait(for: [focused], timeout: Wait.flip) == .completed else { continue }
             if let existing = field.value as? String, existing != field.placeholderValue, !existing.isEmpty {
                 field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
             }

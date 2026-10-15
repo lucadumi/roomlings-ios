@@ -63,8 +63,9 @@ CI covers Swift, the shared renderer and native flows on iPhone and iPad.
 Each device's UI coverage is split using Xcode's compiled test inventory. Model tests run once per device, on shard 1; result bundles must contain exactly the assigned tests, all passing without skips.
 
 ```sh
-node Scripts/test-accounts.mjs --include-room --shard 1/2
-node Scripts/test-accounts.mjs --include-room --shard 2/2
+node Scripts/test-accounts.mjs --include-room --shard 1/3
+node Scripts/test-accounts.mjs --include-room --shard 2/3
+node Scripts/test-accounts.mjs --include-room --shard 3/3
 ```
 
 Run local shards sequentially because they share build output.
