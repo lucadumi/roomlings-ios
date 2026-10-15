@@ -64,6 +64,7 @@ enum APIEndpoint: Equatable {
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
     case updateHouseholdSettings, updateRoomStyle
+    case setRoomRole(UUID)
     case recoveryStatus, generateRecoveryCodes, revokeRecoveryCodes, updateProfile, renameDevice, revokeDevice(UUID)
 
     var method: String {
@@ -71,7 +72,7 @@ enum APIEndpoint: Equatable {
         case .account, .householdInvitations, .notificationSettings, .recoveryStatus: "GET"
         case .saveNotificationSettings, .registerPushDevice: "PUT"
         case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings, .updateRoomStyle,
-             .updateProfile, .renameDevice: "PATCH"
+             .updateProfile, .renameDevice, .setRoomRole: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
              .deleteAccount, .leaveHousehold, .removeHouseholdMember, .revokeRecoveryCodes, .revokeDevice: "DELETE"
         default: "POST"
@@ -83,6 +84,7 @@ enum APIEndpoint: Equatable {
         case .account, .deleteAccount, .updateProfile: "api/account"
         case .recoveryStatus, .generateRecoveryCodes, .revokeRecoveryCodes: "api/account/recovery"
         case .renameDevice: "api/account/device"
+        case .setRoomRole(let id): "api/household/room-access/\(id.uuidString.lowercased())"
         case .revokeDevice(let id): "api/account/devices/\(id.uuidString.lowercased())"
         case .code: "api/account/code"
         case .verify: "api/account/verify"

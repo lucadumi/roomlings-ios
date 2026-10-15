@@ -14,6 +14,7 @@ struct AccountHouseholdMembersSection: View {
 
         enum Action {
             case transfer(HouseholdAccessMember), remove(HouseholdAccessMember), leave(String)
+            case admin(HouseholdAccessMember, Bool)
         }
 
         var title: String {
@@ -21,6 +22,7 @@ struct AccountHouseholdMembersSection: View {
             case .transfer: "Transfer household ownership?"
             case .remove: "Remove this roommate's access?"
             case .leave: "Leave this household?"
+            case .admin(let member, let grant): grant ? "Make \(member.name) an admin?" : "Remove admin rights from \(member.name)?"
             }
         }
 
@@ -29,7 +31,13 @@ struct AccountHouseholdMembersSection: View {
             case .transfer: "Transfer ownership"
             case .remove: "Remove access"
             case .leave: "Leave household"
+            case .admin(_, let grant): grant ? "Confirm admin access" : "Confirm removal of admin rights"
             }
+        }
+
+        var destructive: Bool {
+            if case .admin(_, true) = action { return false }
+            return true
         }
 
         var message: String {
@@ -38,6 +46,10 @@ struct AccountHouseholdMembersSection: View {
                 "\(member.name) will manage household membership and invitations. You will remain a member and can still edit the ledger. Only the new owner can transfer ownership back."
             case .remove(let member):
                 "\(member.name) will lose account, browser and recovery access to this household. Their shopping claims will be released. Their account, existing debts and financial records stay."
+            case .admin(let member, true):
+                "\(member.name) will be able to change room components and grant or revoke other admins. They will not gain the owner's invitation, removal or ownership powers."
+            case .admin(let member, false):
+                "\(member.name) will keep shared shopping, chores, ledger and daily room access, but will no longer be able to configure room components or manage admins."
             case .leave(let name):
                 "You will lose access to \(name), including through old browser sessions and recovery codes. Your shopping claims will be released. Shared debts and history remain. If you are the only active roommate, new access will close."
             }
@@ -65,6 +77,15 @@ struct AccountHouseholdMembersSection: View {
                             .accessibilityIdentifier("transfer-ownership-\(member.id.uuidString.lowercased())")
                             .disabled(model.invitationNeedsRefresh || !model.canUseAccount)
                         }
+                        if access.role != .member, member.active, member.role != .owner {
+                            let grant = member.role == .member
+                            Button(grant ? "Make admin" : "Remove admin rights") {
+                                present(.admin(member, grant), access: access)
+                            }
+                            .accessibilityLabel(grant ? "Make \(member.name) an admin" : "Remove admin rights from \(member.name)")
+                            .accessibilityIdentifier("room-admin-\(member.id.uuidString.lowercased())")
+                            .disabled(model.invitationNeedsRefresh || !model.canUseAccount)
+                        }
                         if access.removalCandidates.contains(where: { $0.id == member.id }) {
                             Button("Remove access", role: .destructive) {
                                 present(.remove(member), access: access)
@@ -77,6 +98,10 @@ struct AccountHouseholdMembersSection: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("household-member-\(member.id.uuidString.lowercased())")
                 }
+                Text(access.role == .member
+                     ? "Owners and admins can change the room and its objects. Ask the owner or an admin if you need room editing access."
+                     : "Owners and admins can change the room and its objects, and grant or remove admin rights. Everyone can use shopping, chores and the ledger.")
+                    .foregroundStyle(RoomTheme.muted)
                 if access.role != .owner {
                     Text("Only the current owner can transfer ownership.").foregroundStyle(RoomTheme.muted)
                 } else if access.ownershipCandidates.isEmpty {
@@ -106,7 +131,7 @@ struct AccountHouseholdMembersSection: View {
         .accessibilityIdentifier("household-members")
         .confirmationDialog(confirmation?.title ?? "Confirm household change", isPresented: $confirming,
                             titleVisibility: .visible, presenting: confirmation) { confirmation in
-            Button(confirmation.button, role: .destructive) {
+            Button(confirmation.button, role: confirmation.destructive ? .destructive : nil) {
                 Task {
                     switch confirmation.action {
                     case .transfer(let member):
@@ -122,6 +147,9 @@ struct AccountHouseholdMembersSection: View {
                     case .leave:
                         await model.leaveHousehold(householdID: confirmation.householdID,
                                                    version: confirmation.version, accountID: confirmation.accountID)
+                    case .admin(let member, let grant):
+                        await model.setRoomRole(member, admin: grant, householdID: confirmation.householdID,
+                                                version: confirmation.version, accountID: confirmation.accountID)
                     }
                 }
             }

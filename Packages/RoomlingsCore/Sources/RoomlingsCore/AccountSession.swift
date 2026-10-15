@@ -609,6 +609,19 @@ public actor AccountSession {
         }
     }
 
+    /// Grants or removes room admin rights. Reload household access afterwards to read the confirmed roles.
+    @discardableResult
+    public func setRoomRole(
+        memberID target: UUID, role: AccountRole, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, roster in
+            try await api.setRoomRole(
+                memberID: target, role: role, version: version, mutationID: mutationID, memberID: memberID,
+                roster: roster, token: token
+            )
+        }
+    }
+
     private func mutateLedger(
         _ change: LedgerChange, householdID: UUID, version: Int64, mutationID: UUID
     ) async throws -> AccountState {
