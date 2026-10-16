@@ -372,7 +372,9 @@ final class AccountHeaderTests: XCTestCase {
         XCTAssertEqual(narrow.width, 320, accuracy: 0.5)
         XCTAssertEqual(wide.width, 1024, accuracy: 0.5)
         XCTAssertGreaterThanOrEqual(narrow.height, 126)
-        XCTAssertLessThanOrEqual(wide.height, 80)
+        // One plate row, plus the room selector below it once a household is open.
+        XCTAssertLessThanOrEqual(wide.height, 140)
+        XCTAssertGreaterThan(narrow.height, wide.height)
         for width in [CGFloat(320), 402, 550, 834, 874] {
             let accessible = headerSize(model: model, width: width, dynamicType: .accessibility5)
             XCTAssertEqual(accessible.width, width, accuracy: 0.5)

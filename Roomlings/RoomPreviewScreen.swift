@@ -335,12 +335,22 @@ struct RoomAccountHeader: View {
     let openAccount: () -> Void
 
     var body: some View {
+        // The room selector sits below the header, inside the measured area the room keeps clear.
+        VStack(alignment: .leading, spacing: 8) {
+            plate
+            roomEntry
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var plate: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 brand
                 householdEntry(singleLine: true)
                 Spacer(minLength: 0)
-                roomEntry
                 accountEntry
             }
             VStack(spacing: 4) {
@@ -350,7 +360,6 @@ struct RoomAccountHeader: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack {
-                    roomEntry
                     Spacer(minLength: 0)
                     accountEntry
                 }
@@ -361,9 +370,6 @@ struct RoomAccountHeader: View {
         .padding(.vertical, 7)
         .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
         .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("room-account-header")
     }
@@ -427,7 +433,7 @@ struct RoomAccountHeader: View {
                 .foregroundStyle(RoomTheme.ink)
                 .padding(.horizontal, 10)
                 .frame(minWidth: 44, minHeight: 44)
-                .background(RoomTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
                 .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
                 .contentShape(Rectangle())
             }
