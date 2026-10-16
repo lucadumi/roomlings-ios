@@ -15,7 +15,7 @@ const { chromium, expect: baseExpect } = requireWeb('@playwright/test')
 const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 })
 const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
-const { cameraFraming } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
+const { cameraFraming, roomCameraZoom } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
 const { roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { roomPresets } = await import(pathToFileURL(join(web, 'src/roomStyles.ts')).href)
 
@@ -589,6 +589,15 @@ test('@room the bundled bathroom and living room open native chores and shopping
       await expect(page.getByRole('status').filter({ hasText: `${name} ready` })).toHaveCount(1)
       await expect(page.locator(`.${roomId}-world`)).toHaveCSS('top', '100px')
       await expect(page.getByRole('navigation', { name: 'Household tools' }).getByRole('button')).toHaveCount(3)
+      // Every room enters at the kitchen's native scale, so switching rooms keeps the same zoom.
+      const roomZoom = 390 / 750 / 0.767
+      await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, roomId, roomZoom })
+      const camera = page.locator('canvas[data-camera-span]')
+      const kitchenZoom = roomCameraZoom(1, true, 'kitchen', roomZoom)
+      await expect(camera).toHaveAttribute('data-camera-zoom', kitchenZoom.toFixed(5))
+      await expect.poll(async () => Number(await camera.getAttribute('data-camera-span')))
+        .toBeCloseTo(2 * cameraFraming(390, 750, 'room', false).halfHeight / kitchenZoom, 4)
+      await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
 
       const markerIDs = await page.locator('.world-hotspot[data-component-id]').evaluateAll((buttons) =>
         buttons.map((button) => button.dataset.componentId))
