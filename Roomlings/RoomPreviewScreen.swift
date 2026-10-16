@@ -17,6 +17,8 @@ struct RoomPreviewScreen: View {
     @State private var sheetHouseholdID: UUID?
     @State private var moneyDestination: MoneySheet.Destination?
     @State private var roomID = RoomVisualState.defaultRoomID
+    @State private var roomsOpen = false
+    @State private var roomEntryFrame = CGRect.zero
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money
@@ -78,12 +80,30 @@ struct RoomPreviewScreen: View {
                     .ignoresSafeArea(.container)
                 }
                 roomFailure
-                RoomAccountHeader(accounts: accounts, roomID: $roomID) {
+                RoomAccountHeader(accounts: accounts, roomID: roomID, roomsOpen: $roomsOpen,
+                                  onRoomEntryFrame: { roomEntryFrame = $0 }) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                if roomsOpen, let rooms = accounts.choreCatalog?.rooms {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture { roomsOpen = false }
+                        .accessibilityHidden(true)
+                    RoomPickerMenu(rooms: rooms, selection: roomID) { room in
+                        roomID = room
+                        roomsOpen = false
+                    } onClose: {
+                        roomsOpen = false
+                    }
+                    .padding(.leading, max(12, roomEntryFrame.minX))
+                    .padding(.top, roomEntryFrame.maxY + 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
+            .coordinateSpace(.named(RoomAccountHeader.coordinateSpace))
             .onChange(of: viewport, initial: true) { _, viewport in
                 do {
                     roomZoom = try Self.roomZoom(for: viewport.size, safeAreaInsets: viewport.safeAreaInsets)
@@ -130,6 +150,7 @@ struct RoomPreviewScreen: View {
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
             if householdID == nil { roomID = RoomVisualState.defaultRoomID }
+            roomsOpen = false
             notifications.attach(to: accounts)
             if sheetHouseholdID != accounts.state?.session?.household.id {
                 choreObject = nil
@@ -330,8 +351,11 @@ struct RoomPreviewScreen: View {
 }
 
 struct RoomAccountHeader: View {
+    static let coordinateSpace = "room-screen"
     let accounts: AccountModel
-    @Binding var roomID: String
+    let roomID: String
+    @Binding var roomsOpen: Bool
+    var onRoomEntryFrame: (CGRect) -> Void = { _ in }
     let openAccount: () -> Void
 
     var body: some View {
@@ -416,33 +440,30 @@ struct RoomAccountHeader: View {
     @ViewBuilder private var roomEntry: some View {
         if accounts.room.householdID != nil, let rooms = accounts.choreCatalog?.rooms, rooms.count > 1 {
             let current = rooms.first { $0.id == roomID } ?? rooms[0]
-            Menu {
-                Picker("Rooms", selection: $roomID) {
-                    ForEach(rooms) { room in Text(room.name).tag(room.id) }
-                }
-            } label: {
+            Button { roomsOpen.toggle() } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "square.grid.2x2")
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Rooms").font(RoomTheme.body(14).weight(.semibold))
-                        Text(current.name).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
-                    }
-                    .lineLimit(1)
+                    Text(current.name)
+                        .font(RoomTheme.body(14).weight(.semibold))
+                        .lineLimit(1)
                 }
                 .foregroundStyle(RoomTheme.ink)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 16)
                 .frame(minWidth: 44, minHeight: 44)
                 .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
                 .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
                 .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .fixedSize()
             .disabled(accounts.busy)
             .accessibilityLabel("Rooms")
             .accessibilityValue(current.name)
             .accessibilityHint("Chooses which shared room to show")
+            .accessibilityAddTraits(roomsOpen ? .isSelected : [])
             .accessibilityIdentifier("room-entry")
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.coordinateSpace)) } action: { onRoomEntryFrame($0) }
         }
     }
 
@@ -486,5 +507,57 @@ struct RoomAccountHeader: View {
         .accessibilityIdentifier("account-entry")
         .accessibilityLabel(accounts.signedIn ? "Account" : "Sign in")
         .accessibilityValue(accounts.viewer.map { "Playing as \($0.name)" } ?? "")
+    }
+}
+
+/// The compact web room picker (`src/roomPicker.css`): a bordered control surface with one row
+/// per room, the current room checked on a sage background and the others marked with an arrow.
+struct RoomPickerMenu: View {
+    let rooms: [ChoreCatalog.Room]
+    let selection: String
+    let onSelect: (String) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(rooms) { room in
+                let selected = room.id == selection
+                Button { onSelect(room.id) } label: {
+                    HStack(spacing: 8) {
+                        Text(room.name)
+                            .font(RoomTheme.heading(14))
+                            .foregroundStyle(RoomTheme.ink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: selected ? "checkmark" : "arrow.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(RoomTheme.ink)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 44)
+                    .background(selected ? RoomTheme.leafSoft : RoomTheme.surface, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(selected ? RoomTheme.border : Color.clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(room.name)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(6)
+        .frame(width: 224)
+        // Only the panel casts the shadow, not each option drawn on it.
+        .background {
+            RoundedRectangle(cornerRadius: 11)
+                .fill(RoomTheme.surface)
+                .shadow(color: RoomTheme.ink.opacity(0.16), radius: 14, y: 8)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(RoomTheme.border))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Rooms")
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, onClose)
+        .accessibilityIdentifier("room-picker")
     }
 }

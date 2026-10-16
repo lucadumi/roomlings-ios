@@ -432,7 +432,7 @@ final class AccountHeaderTests: XCTestCase {
     }
 
     private func headerSize(model: AccountModel, width: CGFloat, dynamicType: DynamicTypeSize = .large) -> CGSize {
-        let controller = UIHostingController(rootView: RoomAccountHeader(accounts: model, roomID: .constant(RoomVisualState.defaultRoomID), openAccount: {})
+        let controller = UIHostingController(rootView: RoomAccountHeader(accounts: model, roomID: RoomVisualState.defaultRoomID, roomsOpen: .constant(false), openAccount: {})
             .environment(\.dynamicTypeSize, dynamicType)
             .frame(width: width))
         return controller.sizeThatFits(in: CGSize(width: width, height: 2000))
