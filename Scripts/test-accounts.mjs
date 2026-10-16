@@ -153,6 +153,11 @@ observeMutations('/api/expenses', ledgerRequests, () => {
   ledgerFailure = null
   return failure
 })
+observeMutations('/api/bills', ledgerRequests, () => {
+  const failure = ledgerFailure
+  ledgerFailure = null
+  return failure
+})
 const invitationRoute = /^\/api\/account\/households\/[^/]+\/invitations(?:\/[^/]+)?$/
 app.use(invitationRoute, (request, response, next) => {
   if (request.method === 'POST') {
@@ -713,6 +718,16 @@ app.post('/_fixture/ledger/state', express.json(), async (request, response) => 
     version: household.version, expenses: household.expenses, runs: household.shopping.runs,
     items: household.shopping.items, settlements: household.settlements, requests: ledgerRequests,
     balances: Object.fromEntries(balances(household)),
+  })
+})
+app.post('/_fixture/bills/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const household = await store.get(id)
+  if (!household) throw new Error('The bills fixture household is missing.')
+  response.json({
+    version: household.version, billingTimeZone: household.billingTimeZone, bills: household.bills,
+    payments: household.expenses.filter((expense) => expense.bill),
+    requests: ledgerRequests.filter((entry) => entry.path.startsWith('/api/bills') || entry.path.startsWith('/api/expenses')),
   })
 })
 app.post('/_fixture/settings/state', express.json(), async (request, response) => {

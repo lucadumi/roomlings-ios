@@ -15,6 +15,7 @@ struct MoneySheet: View {
     @State private var contentHeight: CGFloat = 480
     @State private var headerHeight: CGFloat = 64
     @State private var destinationOpened = false
+    @State private var billMonth: String?
 
     enum Destination: Equatable {
         case receipt(UUID), repayment(UUID)
@@ -43,6 +44,7 @@ struct MoneySheet: View {
         case board, expense, removeReceipt(HouseholdExpense)
         case settle(SuggestedTransfer), undo(HouseholdSettlement)
         case newBill, editBill(Bill), payBill(Bill, BillOccurrence)
+        case pauseBill(Bill, Bool), undoBillPayment(HouseholdExpense)
 
         var id: String {
             switch self {
@@ -54,6 +56,8 @@ struct MoneySheet: View {
             case .newBill: "new-bill"
             case .editBill(let bill): "edit-bill-\(bill.id.uuidString.lowercased())"
             case .payBill(let bill, let occ): "pay-bill-\(bill.id.uuidString.lowercased())-\(occ.month)"
+            case .pauseBill(let bill, let paused): "pause-bill-\(bill.id.uuidString.lowercased())-\(paused)"
+            case .undoBillPayment(let expense): "undo-bill-payment-\(expense.id)"
             }
         }
 
@@ -64,9 +68,11 @@ struct MoneySheet: View {
             case .removeReceipt: "Remove this receipt?"
             case .settle: "Record a repayment."
             case .undo: "Undo this repayment?"
-            case .newBill: "New monthly bill."
-            case .editBill: "Edit this monthly bill."
+            case .newBill: "A regular part of home."
+            case .editBill: "Edit a monthly bill."
             case .payBill: "Record a bill payment."
+            case .pauseBill(_, let paused): paused ? "Pause this monthly bill?" : "Resume this monthly bill?"
+            case .undoBillPayment: "Undo this bill payment record?"
             }
         }
     }
@@ -75,7 +81,7 @@ struct MoneySheet: View {
         case record(ExpenseDraft), removeReceipt(HouseholdExpense)
         case settle(from: UUID, to: UUID, amount: Int64), undo(HouseholdSettlement)
         case createBill(BillDraft), editBill(UUID, BillEditDraft)
-        case pauseBill(UUID, Bool), payBill(UUID, BillPaymentDraft)
+        case pauseBill(UUID, Bool), payBill(UUID, BillPaymentDraft), undoBillPayment(HouseholdExpense)
     }
 
     private struct Save {
@@ -113,6 +119,8 @@ struct MoneySheet: View {
                             case .newBill: newBillForm(currency: currency, memberID: session.memberID)
                             case .editBill(let bill): editBillForm(bill, currency: currency, memberID: session.memberID)
                             case .payBill(let bill, let occ): payBillForm(bill, occ, currency: currency, memberID: session.memberID)
+                            case .pauseBill(let bill, let paused): pauseBillForm(bill, paused: paused)
+                            case .undoBillPayment(let expense): undoBillPaymentForm(expense, ledger: ledger, currency: currency, memberID: session.memberID)
                             case .settle(let transfer): settleForm(transfer, ledger: ledger, currency: currency)
                             case .undo(let settlement): undoForm(settlement, ledger: ledger, currency: currency)
                             }
@@ -236,73 +244,130 @@ struct MoneySheet: View {
     }
     
     @ViewBuilder private func newBillForm(currency: HouseholdCurrency, memberID: UUID) -> some View {
-        let members = model.ledger?.activeMembers ?? []
-        BillEditorForm(
-            mode: .new(defaultMember: memberID),
-            members: members,
-            currency: currency,
-            disabled: changesBlocked,
-            onSave: { draft in
-                formError = nil
-                start(.createBill(draft))
-            },
-            onCancel: {
-                page = .board
-                model.clearFeedback()
-                formError = nil
-            }
-        )
+        if let bills = model.bills, let calendar = model.choreCalendar {
+            BillEditorForm(
+                bill: nil, members: bills.members, currency: currency,
+                calendar: bills.bills.isEmpty ? nil : calendar,
+                currentMonth: BillDates.month(of: calendar.day()),
+                disabled: changesBlocked,
+                onCreate: { draft in formError = nil; start(.createBill(draft)) },
+                onEdit: { _ in },
+                onCancel: closeBillPage
+            )
+        } else {
+            unavailable("Monthly bills are unavailable. Refresh money and try again.")
+        }
     }
 
     @ViewBuilder private func editBillForm(_ bill: Bill, currency: HouseholdCurrency, memberID: UUID) -> some View {
-        let members = model.ledger?.activeMembers ?? []
-        BillEditorForm(
-            mode: .edit(bill),
-            members: members,
-            currency: currency,
-            disabled: changesBlocked,
-            onSaveEdit: { draft in
-                formError = nil
-                start(.editBill(bill.id, draft))
-            },
-            onCancel: {
-                page = .board
-                model.clearFeedback()
-                formError = nil
+        if let bills = model.bills, let calendar = model.choreCalendar {
+            if let latest = bills.bills.first(where: { $0.id == bill.id }) {
+                BillEditorForm(
+                    bill: latest, members: bills.members, currency: currency, calendar: calendar,
+                    currentMonth: BillDates.month(of: calendar.day()),
+                    disabled: changesBlocked,
+                    onCreate: { _ in },
+                    onEdit: { draft in formError = nil; start(.editBill(bill.id, draft)) },
+                    onCancel: closeBillPage
+                )
+            } else {
+                unavailable("Bill unavailable. Close this form and review your bills.")
             }
-        )
+        } else {
+            unavailable("Monthly bills are unavailable. Refresh money and try again.")
+        }
     }
 
     @ViewBuilder private func payBillForm(
         _ bill: Bill, _ occurrence: BillOccurrence, currency: HouseholdCurrency, memberID: UUID
     ) -> some View {
-        let members = model.ledger?.activeMembers ?? []
-        BillPaymentForm(
-            bill: bill,
-            occurrence: occurrence,
-            members: members,
-            currency: currency,
-            defaultMember: memberID,
-            disabled: changesBlocked
-        ) { draft in
-            formError = nil
-            start(.payBill(bill.id, draft))
-        } onCancel: {
-            page = .board; model.clearFeedback(); formError = nil
+        if let bills = model.bills, let calendar = model.choreCalendar {
+            // Recheck the authoritative projection, which may have changed since the board opened.
+            let current = bills.bills.first { $0.id == bill.id }
+                .flatMap { bills.occurrence(of: $0, in: occurrence.month, today: calendar.day()) }
+            let blocked: String? = if current == nil {
+                "This bill is no longer scheduled for that month. Close this form and choose an active month."
+            } else if current?.payment != nil {
+                "A payment is already recorded for this bill and month. Close this form to see the recorded expense."
+            } else { nil }
+            BillPaymentForm(
+                occurrence: current ?? occurrence, blockedReason: blocked, members: bills.members,
+                currency: currency, calendar: calendar, memberID: memberID, disabled: changesBlocked
+            ) { draft in
+                formError = nil
+                start(.payBill(bill.id, draft))
+            } onCancel: {
+                closeBillPage()
+            }
+        } else {
+            unavailable("Monthly bills are unavailable. Refresh money and try again.")
         }
     }
-    
+
+    @ViewBuilder private func pauseBillForm(_ bill: Bill, paused: Bool) -> some View {
+        let latest = model.bills?.bills.first { $0.id == bill.id }
+        let allowed = latest.map { $0.isPaused != paused } ?? false
+        VStack(alignment: .leading, spacing: 16) {
+            Text((latest ?? bill).latestRevision.name).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+            if paused {
+                let current = model.choreCalendar.map { BillDates.month(of: $0.day()) } ?? bill.startMonth
+                Text("\((latest ?? bill).latestRevision.name) will stop recurring from \(BillDates.monthTitle((latest ?? bill).pauseMonth(current: current))). Existing dues and recorded payments stay.")
+                    .foregroundStyle(RoomTheme.muted)
+            } else {
+                Text("Resume from this month, or the first scheduled month if later. Skipped months will not be added back.")
+                    .foregroundStyle(RoomTheme.muted)
+            }
+            if !allowed {
+                RoomFeedback("This bill changed. Close this form and review your bills.")
+            }
+            Button("Cancel", action: closeBillPage).disabled(dismissalBlocked)
+            Button(paused ? "Pause monthly bill" : "Resume monthly bill") { start(.pauseBill(bill.id, paused)) }
+                .buttonStyle(RoomButtonStyle(kind: .primary))
+                .accessibilityIdentifier("confirm-pause-bill")
+                .disabled(changesBlocked || !allowed)
+        }
+    }
+
+    private func undoBillPaymentForm(
+        _ expense: HouseholdExpense, ledger: HouseholdLedger, currency: HouseholdCurrency, memberID: UUID
+    ) -> some View {
+        let allowed = ledger.canUndoBillPayment(expense, memberID: memberID)
+        return VStack(alignment: .leading, spacing: 16) {
+            Text(expense.description).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+            Text(Money.text(expense.amount, currency: currency)).font(RoomTheme.heading(20))
+            Text("This removes the expense record and recalculates balances. It does not return money or undo roommate repayments.")
+                .foregroundStyle(RoomTheme.muted)
+            if !allowed {
+                RoomFeedback("This payment record changed or is no longer in the ledger. Refresh money and review your bills.")
+            }
+            Button("Keep it", action: closeBillPage).disabled(dismissalBlocked)
+            Button("Undo bill payment record") { start(.undoBillPayment(expense)) }
+                .buttonStyle(RoomButtonStyle(kind: .primary))
+                .accessibilityIdentifier("confirm-undo-bill-payment")
+                .disabled(changesBlocked || !allowed)
+        }
+    }
+
+    private func closeBillPage() {
+        page = .board
+        model.clearFeedback()
+        formError = nil
+    }
+
     @ViewBuilder private func billsBoard(currency: HouseholdCurrency) -> some View {
-        if let bills = model.bills {
+        if let bills = model.bills, let calendar = model.choreCalendar {
+            let today = calendar.day()
             BillsBoardView(
                 bills: bills,
                 currency: currency,
-                today: Date(),
+                today: today,
+                month: Binding(get: { billMonth ?? BillDates.month(of: today) }, set: { billMonth = $0 }),
                 blocked: changesBlocked,
-                onNew: { model.clearFeedback(); page = .newBill },
-                onEdit: { model.clearFeedback(); page = .editBill($0) },
-                onPay: { model.clearFeedback(); page = .payBill($0, $1) },
-                onTogglePause: { bill in start(.pauseBill(bill.id, !bill.isPaused)) }
+                onNew: { model.clearFeedback(); formError = nil; page = .newBill },
+                onEdit: { model.clearFeedback(); formError = nil; page = .editBill($0) },
+                onPay: { model.clearFeedback(); formError = nil; page = .payBill($0, $1) },
+                onPause: { model.clearFeedback(); formError = nil; page = .pauseBill($0, $1) },
+                onUndo: { model.clearFeedback(); formError = nil; page = .undoBillPayment($0) }
             )
         } else {
             unavailable("Monthly bills are unavailable. Refresh money and try again.")
@@ -427,7 +492,7 @@ struct MoneySheet: View {
                 Text("Recorded from a shopping run. Remove it on the web so its run history stays correct.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             } else if expense.isBillPayment {
-                Text("This is a bill payment. Manage it on the web.")
+                Text("This is a bill payment. Undo it from Bills.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             } else {
                 Button("Remove receipt", role: .destructive) { page = .removeReceipt(expense); model.clearFeedback() }
@@ -609,18 +674,20 @@ struct MoneySheet: View {
         case .payBill(let id, let draft):
             saved = await model.recordBillPayment(id: id, draft: draft, householdID: save.householdID,
                                                   version: save.version, mutationID: save.mutationID)
+        case .undoBillPayment(let expense):
+            saved = await model.removeBillPayment(expense, householdID: save.householdID,
+                                                  version: save.version, mutationID: save.mutationID)
         }
         if saved {
             pending = nil
             reviewRequired = false
             page = .board
             formError = nil
-            if case .record = save.change { section = .receipts }
-            else if case .payBill = save.change { section = .receipts }
-            else if case .createBill = save.change { section = .bills }
-            else if case .editBill = save.change { section = .bills }
-            else if case .pauseBill = save.change { section = .bills }
-            else { section = .balances }
+            switch save.change {
+            case .record, .removeReceipt: section = .receipts
+            case .createBill, .editBill, .pauseBill, .payBill, .undoBillPayment: section = .bills
+            case .settle, .undo: section = .balances
+            }
         } else {
             switch model.ledgerSaveFailure {
             case .retrySameChange: pending = save
