@@ -16,6 +16,7 @@ struct RoomPreviewScreen: View {
     @State private var openingNotification = false
     @State private var sheetHouseholdID: UUID?
     @State private var moneyDestination: MoneySheet.Destination?
+    @State private var roomID = RoomVisualState.defaultRoomID
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money
@@ -56,7 +57,7 @@ struct RoomPreviewScreen: View {
             ZStack(alignment: .top) {
                 RoomTheme.paper.ignoresSafeArea(.container)
                 if let roomZoom {
-                    RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room,
+                    RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room.showing(room: roomID),
                                 viewportInsets: insets, roomZoom: roomZoom) { event in
                         switch event {
                         case .status(.unavailable):
@@ -77,7 +78,7 @@ struct RoomPreviewScreen: View {
                     .ignoresSafeArea(.container)
                 }
                 roomFailure
-                RoomAccountHeader(accounts: accounts) {
+                RoomAccountHeader(accounts: accounts, roomID: $roomID) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
@@ -95,7 +96,7 @@ struct RoomPreviewScreen: View {
         .sheet(item: $presentedSheet, onDismiss: presentPendingContent) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
-            case .chores: ChoresSheet(model: accounts, object: choreObject)
+            case .chores: ChoresSheet(model: accounts, object: choreObject, roomID: roomID)
             case .shopping: ShoppingSheet(model: accounts)
             case .money: MoneySheet(model: accounts, destination: moneyDestination)
             }
@@ -128,6 +129,7 @@ struct RoomPreviewScreen: View {
         }
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
+            if householdID == nil { roomID = RoomVisualState.defaultRoomID }
             notifications.attach(to: accounts)
             if sheetHouseholdID != accounts.state?.session?.household.id {
                 choreObject = nil
@@ -288,7 +290,7 @@ struct RoomPreviewScreen: View {
             return
         }
         let object = componentID.flatMap { id in
-            accounts.choreObjects.first { $0.id == id && $0.installed && $0.roomID == "kitchen" }
+            accounts.choreObjects.first { $0.id == id && $0.installed && $0.roomID == roomID }
         }
         guard componentID == nil || object != nil else {
             accounts.message = "That object is no longer available in this room. Refresh your account."
@@ -329,6 +331,7 @@ struct RoomPreviewScreen: View {
 
 struct RoomAccountHeader: View {
     let accounts: AccountModel
+    @Binding var roomID: String
     let openAccount: () -> Void
 
     var body: some View {
@@ -337,6 +340,7 @@ struct RoomAccountHeader: View {
                 brand
                 householdEntry(singleLine: true)
                 Spacer(minLength: 0)
+                roomEntry
                 accountEntry
             }
             VStack(spacing: 4) {
@@ -346,6 +350,7 @@ struct RoomAccountHeader: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack {
+                    roomEntry
                     Spacer(minLength: 0)
                     accountEntry
                 }
@@ -399,6 +404,40 @@ struct RoomAccountHeader: View {
         .accessibilityIdentifier("household-entry")
         .accessibilityValue(accounts.headerStatus.label)
         .accessibilityHint("Opens your account")
+    }
+
+    /// Rooms come from the shared catalog and need an open household, as on the web.
+    @ViewBuilder private var roomEntry: some View {
+        if accounts.room.householdID != nil, let rooms = accounts.choreCatalog?.rooms, rooms.count > 1 {
+            let current = rooms.first { $0.id == roomID } ?? rooms[0]
+            Menu {
+                Picker("Rooms", selection: $roomID) {
+                    ForEach(rooms) { room in Text(room.name).tag(room.id) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.grid.2x2")
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Rooms").font(RoomTheme.body(14).weight(.semibold))
+                        Text(current.name).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
+                    }
+                    .lineLimit(1)
+                }
+                .foregroundStyle(RoomTheme.ink)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(RoomTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                .contentShape(Rectangle())
+            }
+            .fixedSize()
+            .disabled(accounts.busy)
+            .accessibilityLabel("Rooms")
+            .accessibilityValue(current.name)
+            .accessibilityHint("Chooses which shared room to show")
+            .accessibilityIdentifier("room-entry")
+        }
     }
 
     private var statusColor: Color {

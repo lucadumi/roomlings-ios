@@ -129,7 +129,10 @@ final class RoomBridgeTests: XCTestCase {
         let visual = try RoomVisualState(household: household)
         let insets = RoomViewportInsets(top: 150, right: 12, bottom: 34, left: 12)
         let message = try visual.message(paused: true, viewportInsets: insets, roomZoom: 1.35)
-        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
+        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomId", "roomZoom", "roomComponents", "viewportInsets"])
+        XCTAssertEqual(message["roomId"] as? String, "kitchen")
+        let bathroom = try visual.showing(room: "bathroom").message(paused: false)
+        XCTAssertEqual(bathroom["roomId"] as? String, "bathroom")
         XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["top"], 150)
         XCTAssertEqual(message["householdId"] as? String, householdID)
         XCTAssertEqual(message["roomStyle"] as? String, "clay")
@@ -149,6 +152,8 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertEqual(preview["shoppingEnabled"] as? Bool, false)
         XCTAssertEqual(preview["moneyEnabled"] as? Bool, false)
         XCTAssertEqual(preview["roomZoom"] as? Double, 1)
+        let signedOut = try RoomVisualState.preview.showing(room: "bathroom").message(paused: false)
+        XCTAssertEqual(signedOut["roomId"] as? String, "kitchen", "The signed-out preview stays in the kitchen.")
     }
 
     func testOnlyKnownStatusMessagesAreAccepted() throws {

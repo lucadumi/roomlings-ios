@@ -204,4 +204,39 @@ extension AccountUITests {
         XCTAssertEqual(attempts.first?.method, "PATCH")
         XCTAssertEqual(attempts.last?.method, "PATCH")
     }
+
+    @MainActor
+    func testRoomsSwitchFromTheHeaderAndOpenThatRoomsChores() async throws {
+        executionTimeAllowance = 600
+        continueAfterFailure = false
+        let email = "rooms-\(UUID().uuidString.lowercased())@example.test"
+        _ = try await fixture("_fixture/seed", body: ["email": email])
+        let app = try launchApp()
+        try signIn(app, email: email)
+        try openAccount(app)
+        try tap(app.buttons["Open Cedar House"], in: app)
+        let room = app.webViews["room-renderer"]
+        XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
+        let rooms = app.buttons["room-entry"]
+        XCTAssertTrue(rooms.waitForExistence(timeout: Wait.control))
+        XCTAssertEqual(rooms.value as? String, "Kitchen")
+
+        for (name, roomID) in [("Bathroom", "bathroom"), ("Living room", "living-room")] {
+            try tap(rooms, in: app, until: app.buttons[name])
+            try tap(app.buttons[name], in: app)
+            XCTAssertTrue(room.staticTexts["\(name) ready"].waitForExistence(timeout: Wait.room))
+            XCTAssertEqual(rooms.value as? String, name)
+            let chores = room.descendants(matching: .any).matching(identifier: "Chores").firstMatch
+            let sheet = app.otherElements["chores-sheet"]
+            try tap(chores, in: app, until: sheet)
+            XCTAssertEqual(picker("Chore room", in: app).value as? String, name,
+                           "Chores opened from the \(roomID) start on that room.")
+            try tap(app.buttons["Done"], in: app)
+            XCTAssertTrue(room.staticTexts["\(name) ready"].waitForExistence(timeout: Wait.room))
+        }
+
+        try tap(rooms, in: app, until: app.buttons["Kitchen"])
+        try tap(app.buttons["Kitchen"], in: app)
+        XCTAssertTrue(room.staticTexts["Kitchen ready"].waitForExistence(timeout: Wait.room))
+    }
 }

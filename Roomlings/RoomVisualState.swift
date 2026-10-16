@@ -14,7 +14,10 @@ struct RoomVisualState: Equatable, Sendable {
     let householdID: String?
     let roomStyle: String
     let components: JSONValue?
+    /// The shared room on screen. The signed-out preview is always the kitchen.
+    private(set) var roomID = Self.defaultRoomID
 
+    static let defaultRoomID = "kitchen"
     static let preview = RoomVisualState(householdID: nil, roomStyle: "original", components: nil)
 
     init(household: HouseholdSnapshot) throws {
@@ -39,6 +42,13 @@ struct RoomVisualState: Equatable, Sendable {
         self.components = components
     }
 
+    /// The same household shown in another shared room.
+    func showing(room roomID: String) -> RoomVisualState {
+        var state = self
+        state.roomID = householdID == nil ? Self.defaultRoomID : roomID
+        return state
+    }
+
     func message(paused: Bool, viewportInsets: RoomViewportInsets = .zero, roomZoom: Double = 1) throws -> [String: Any] {
         struct Message: Encodable {
             let version = 1
@@ -49,13 +59,14 @@ struct RoomVisualState: Equatable, Sendable {
             let shoppingEnabled: Bool
             let moneyEnabled: Bool
             let roomStyle: String
+            let roomId: String
             let roomZoom: Double
             let roomComponents: JSONValue?
             let viewportInsets: RoomViewportInsets
         }
         let message = Message(paused: paused, householdId: householdID, choresEnabled: householdID != nil,
                               shoppingEnabled: householdID != nil, moneyEnabled: householdID != nil,
-                              roomStyle: roomStyle, roomZoom: roomZoom,
+                              roomStyle: roomStyle, roomId: roomID, roomZoom: roomZoom,
                               roomComponents: components, viewportInsets: viewportInsets)
         let data = try JSONEncoder().encode(message)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
