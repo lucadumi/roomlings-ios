@@ -26,3 +26,9 @@ body { overscroll-behavior: none; }
 @container native-quick-actions (max-width: 29rem) {
   .native-room .world-quick-actions .world-action-label { display: none; }
 }
+/* Room buttons keep their labels on one line and size to them instead of sharing equal widths. */
+.native-room .world-quick-actions button, .native-room .native-tools-dock .dock-tool { white-space: nowrap; }
+.native-room .chore-room-quick-actions { width: auto; max-width: calc(100% - var(--camera-rail-space) - 2rem); }
+.native-room .chore-room-quick-actions > button { flex: 0 0 auto; }
+/* The app's room sits on plain white paper; the web's grey edge falloff reads as grey on tall phones. */
+.native-room { --room-backdrop-center: var(--paper); --room-backdrop-middle: var(--paper); --room-backdrop-edge: var(--paper); }
