@@ -598,6 +598,9 @@ test('@room the bundled bathroom and living room open native chores and shopping
       await expect.poll(async () => Number(await camera.getAttribute('data-camera-span')))
         .toBeCloseTo(2 * cameraFraming(390, 750, 'room', false).halfHeight / kitchenZoom, 4)
       await expect(page.locator('.world-camera-controls > span')).toHaveText('100%')
+      // Markers move with the kitchen's sub-pixel transform rather than pixel-snapped left and top.
+      await expect.poll(() => page.locator('.world-hotspot').evaluateAll((buttons) => buttons.every((button) =>
+        button.style.left === '0px' && button.style.top === '0px' && button.style.transform.startsWith('translate(')))).toBe(true)
 
       const markerIDs = await page.locator('.world-hotspot[data-component-id]').evaluateAll((buttons) =>
         buttons.map((button) => button.dataset.componentId))

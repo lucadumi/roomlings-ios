@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { ReactElement } from 'react'
 import ChoreRoomWorld from '@roomlings-web/src/ChoreRoomWorld.tsx'
 import type { ChoreRoomConfig, ChoreRoomWorldProps } from '@roomlings-web/src/ChoreRoomWorld.tsx'
@@ -39,5 +39,34 @@ export function ScaledChoreRoom({ room, roomZoom, ...props }: { room: SharedRoom
         : 1),
     }
   }, [room])
-  return <ChoreRoomWorld config={config} {...props} />
+  const markers = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = markers.current
+    return root ? smoothMarkers(root) : undefined
+  }, [])
+  return <div ref={markers} style={{ display: 'contents' }}>
+    <ChoreRoomWorld config={config} {...props} />
+  </div>
+}
+
+// The shared chore rooms place their + markers with `left` and `top`, which WebKit snaps to whole
+// pixels, so markers jitter against the smoothly rotating room. The kitchen moves its markers with a
+// sub-pixel transform. Mutation records arrive before the frame paints, so each position the room
+// writes is moved into the kitchen's transform in the same frame.
+function smoothMarkers(root: HTMLElement): () => void {
+  const observer = new MutationObserver((records) => {
+    for (const { target } of records) {
+      if (!(target instanceof HTMLElement) || !target.classList.contains('world-hotspot')) continue
+      const { left, top } = target.style
+      if (!left.endsWith('px') || !top.endsWith('px') || (left === '0px' && top === '0px')) continue
+      const x = Number.parseFloat(left)
+      const y = Number.parseFloat(top)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+      target.style.left = '0px'
+      target.style.top = '0px'
+      target.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
+    }
+  })
+  observer.observe(root, { subtree: true, attributes: true, attributeFilter: ['style'] })
+  return () => observer.disconnect()
 }
