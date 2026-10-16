@@ -216,6 +216,36 @@ private struct StyledRoomSwitch: View {
     }
 }
 
+/// A sheet title with its dismiss action. At accessibility text sizes the action moves above
+/// the title, as in Account, so a long word in the title never breaks.
+struct RoomSheetHeader<Action: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let title: String
+    @ViewBuilder let action: Action
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Spacer(minLength: 0)
+                    action
+                }
+                heading.fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            HStack(spacing: 12) {
+                heading
+                Spacer(minLength: 4)
+                action
+            }
+        }
+    }
+
+    private var heading: some View {
+        Text(title).font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
+    }
+}
+
 struct RoomSegmentedPicker<Selection: Hashable>: View {
     @Environment(\.roomControlAppearance) private var appearance
     @Environment(\.isEnabled) private var enabled
@@ -235,27 +265,10 @@ struct RoomSegmentedPicker<Selection: Hashable>: View {
 
     var body: some View {
         if appearance == .roomlings {
-            HStack(spacing: 6) {
-                ForEach(options, id: \.self) { option in
-                    Button { selection = option } label: {
-                        Text(title(option))
-                            .font(RoomTheme.body(14).weight(.semibold))
-                            .foregroundStyle(RoomTheme.ink)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(selection == option ? RoomTheme.leafSoft : Color.clear,
-                                        in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius)
-                                .stroke(selection == option ? RoomTheme.border : Color.clear))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .focused($focused, equals: option)
-                    .onKeyPress(.leftArrow) { step(layoutDirection == .rightToLeft ? 1 : -1) }
-                    .onKeyPress(.rightArrow) { step(layoutDirection == .rightToLeft ? -1 : 1) }
-                }
+            // Long labels or accessibility text sizes stack the segments instead of breaking words.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { segments(wrapping: false) }
+                VStack(spacing: 6) { segments(wrapping: true) }
             }
             .padding(4)
             .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius + 2))
@@ -264,6 +277,32 @@ struct RoomSegmentedPicker<Selection: Hashable>: View {
             .accessibilityRepresentation { systemPicker }
         } else {
             systemPicker
+        }
+    }
+
+    private func segments(wrapping: Bool) -> some View {
+        ForEach(options, id: \.self) { option in
+            Button { selection = option } label: {
+                Text(title(option))
+                    .font(RoomTheme.body(14).weight(.semibold))
+                    .foregroundStyle(RoomTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: !wrapping, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(selection == option ? RoomTheme.leafSoft : Color.clear,
+                                in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                    .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius)
+                        .stroke(selection == option ? RoomTheme.border : Color.clear))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focused($focused, equals: option)
+            .onKeyPress(.leftArrow) { step(layoutDirection == .rightToLeft ? 1 : -1) }
+            .onKeyPress(.rightArrow) { step(layoutDirection == .rightToLeft ? -1 : 1) }
+            .onKeyPress(.upArrow) { wrapping ? step(-1) : .ignored }
+            .onKeyPress(.downArrow) { wrapping ? step(1) : .ignored }
         }
     }
 

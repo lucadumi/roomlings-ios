@@ -51,6 +51,7 @@ All methods below belong to `AccountUITests`.
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |
 | Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone` |
 | Invitations | `testInvitationsShareJoinAndRejectARevokedLink`, `testInvitationsRequireRefreshAfterALostResponseAndAConflict`, `testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership` |
+| Accessibility | `testMainScreensPassTheSystemAccessibilityAudit` |
 | Notifications | `testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration` |
 | Analytics | `testAnalyticsCountsForegroundVisitsButNotSheetRefreshes`, `testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools` |
 | Account deletion | `testAccountDeletionRequiresExactConfirmationAndKeepsTheSharedLedger`, `testAccountDeletionPendingSurvivesRelaunchAndOffersANativeRetry` |

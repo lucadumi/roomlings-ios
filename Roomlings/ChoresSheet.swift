@@ -64,9 +64,7 @@ struct ChoresSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(title).font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 4)
+            RoomSheetHeader(title: title) {
                 Button("Done") { dismiss() }.disabled(dismissalBlocked)
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
