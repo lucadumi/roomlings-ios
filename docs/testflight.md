@@ -62,7 +62,7 @@ node --test Tests/Release/release.test.mjs
 | Account deletion | The native [Account lifecycle flow](../Packages/RoomlingsCore/README.md#account-deletion) provides confirmation, re-verification and pending-deletion recovery. Owners with other active roommates can first transfer ownership in **Account > Household members**. Verify the deployed provider and recovery path before review. |
 | Privacy | The app bundles `PrivacyInfo.xcprivacy` with its current first-party data declarations. Review the [data inventory](privacy.md), generate the signed archive's privacy report, publish the privacy policy and enter matching App Store privacy answers for the deployed services. Do not declare that no data is collected. |
 | Review information | Provide a beta description, test instructions, working sign-in access and review contact details through App Store Connect. |
-| Cohort | The owner still needs to choose a private tester list or an external public link. External access requires Beta App Review. Do not enable the marketing site's TestFlight link before that access exists. |
+| Cohort | Use a private list of testers invited through App Store Connect. Do not publish a public TestFlight link on the marketing site. External testers require Beta App Review. |
 
 Universal Links have [opt-in configuration](invitations.md), but remain disabled until a public domain, hosted association file and matching provisioning are ready. An HTTPS invitation origin alone does not enable app-opening links. Until then, use share/copy and paste-to-join. Without the app, the approved flow is to join on the website and later sign into the same native account.
 
