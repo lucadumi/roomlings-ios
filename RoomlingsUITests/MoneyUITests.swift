@@ -317,4 +317,19 @@ extension AccountUITests {
         XCTAssertTrue(paused.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
         XCTAssertEqual(paused.requests.count, 4)
     }
+
+    @MainActor
+    func testLedgerExportOpensTheShareSheetWithTheReceiptBookFile() async throws {
+        executionTimeAllowance = 600
+        continueAfterFailure = false
+        let (app, _) = try await launchMoney()
+        try openSection("Bills", in: app)
+        let export = app.buttons["export-ledger"]
+        try tap(export, in: app)
+        let file = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "roomlings-ledger")).firstMatch
+        XCTAssertTrue(file.waitForExistence(timeout: Wait.control), "The share sheet offers the ledger as a named CSV file.")
+        let save = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Save to Files")).firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: Wait.control), "The ledger can be saved as a file.")
+    }
 }

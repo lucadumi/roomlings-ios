@@ -1,5 +1,6 @@
 import RoomlingsCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Month and day labels shared with the web bills panel (`src/format.ts`).
 enum BillDates {
@@ -35,6 +36,7 @@ struct BillsBoardView: View {
     let onPay: (Bill, BillOccurrence) -> Void
     let onPause: (Bill, Bool) -> Void
     let onUndo: (HouseholdExpense) -> Void
+    let export: LedgerExportFile?
 
     private var currentMonth: String { BillDates.month(of: today) }
 
@@ -67,6 +69,14 @@ struct BillsBoardView: View {
             if bills.bills.count >= HouseholdBills.billLimit {
                 Text("This kitchen has reached its limit of \(HouseholdBills.billLimit) monthly bills.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
+            }
+            if let export {
+                ShareLink(item: export, preview: SharePreview(LedgerExport.fileName)) {
+                    Label("Export ledger", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(RoomButtonStyle(kind: .secondary))
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("export-ledger")
             }
         }
     }
@@ -566,6 +576,21 @@ struct BillPaymentForm: View {
             localError = error.errorDescription
         } catch {
             localError = "Check the payment amount, date and who shares it."
+        }
+    }
+}
+
+/// The shared ledger as a CSV file, named as the web export names it.
+struct LedgerExportFile: Transferable, Sendable {
+    let text: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .commaSeparatedText) { file in
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let url = folder.appendingPathComponent(LedgerExport.fileName)
+            try Data(file.text.utf8).write(to: url, options: [.atomic, .completeFileProtection])
+            return SentTransferredFile(url)
         }
     }
 }
