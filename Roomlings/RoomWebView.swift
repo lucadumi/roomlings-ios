@@ -13,6 +13,20 @@ enum RoomRenderEvent: Equatable {
     case failure(String)
 }
 
+/// iOS ends WebKit's content process under memory pressure, often while the app is in the
+/// background. The bundled room reloads once on its own; a renderer that keeps stopping
+/// still shows the manual reload instead of looping.
+struct RoomRecovery {
+    static let interval: TimeInterval = 60
+    private var lastReload: Date?
+
+    mutating func shouldReload(at now: Date) -> Bool {
+        if let lastReload, now.timeIntervalSince(lastReload) < Self.interval { return false }
+        lastReload = now
+        return true
+    }
+}
+
 struct RoomBridgeMessage: Decodable {
     let event: RoomRenderEvent
 
@@ -143,6 +157,8 @@ struct RoomWebView: UIViewRepresentable {
         private var roomZoom: Double
         private var loaded = false
         private var active = true
+        private var recovery = RoomRecovery()
+        var now: () -> Date = Date.init
 
         init(paused: Bool, room: RoomVisualState = .preview, viewportInsets: RoomViewportInsets = .zero,
              roomZoom: Double = 1, onEvent: @escaping (RoomRenderEvent) -> Void) {
@@ -238,6 +254,12 @@ struct RoomWebView: UIViewRepresentable {
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             loaded = false
+            evaluation?.cancel()
+            guard active else { return }
+            if webView === self.webView, let index, recovery.shouldReload(at: now()) {
+                webView.loadFileURL(index, allowingReadAccessTo: index.deletingLastPathComponent())
+                return
+            }
             report(.failure("The room renderer stopped. Reload the room to continue."))
         }
     }
