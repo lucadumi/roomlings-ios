@@ -73,7 +73,7 @@ public struct ShoppingItem: Sendable, Equatable, Identifiable {
     }
 }
 
-private struct ShoppingItemSnapshot {
+struct ShoppingItemSnapshot {
     let id: UUID
     let name: String
     let quantity: String
