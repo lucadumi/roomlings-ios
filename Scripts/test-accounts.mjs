@@ -592,6 +592,7 @@ app.post('/_fixture/chores/failure', express.json(), (request, response) => {
 app.post('/_fixture/chores/change', express.json(), async (request, response) => {
   const input = z.object({
     householdId: z.string().uuid(), choreId: z.string().uuid().optional(), title: z.string().trim().min(1).max(80).optional(),
+    overdueDays: z.number().int().min(1).max(30).optional(),
   }).parse(request.body)
   await store.transaction(async () => {
     const household = await store.get(input.householdId)
@@ -600,6 +601,10 @@ app.post('/_fixture/chores/change', express.json(), async (request, response) =>
       const chore = household.chores.items.find((item) => item.id === input.choreId)
       if (!chore) throw new Error('The chore fixture item is missing.')
       if (input.title !== undefined) chore.title = input.title
+      if (input.overdueDays !== undefined) {
+        const today = Date.parse(`${billingDate(household.billingTimeZone)}T00:00:00Z`)
+        chore.dueDate = new Date(today - input.overdueDays * 86_400_000).toISOString().slice(0, 10)
+      }
       chore.version++
       chore.updatedAt = new Date().toISOString()
     }

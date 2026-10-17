@@ -47,7 +47,7 @@ All methods below belong to `AccountUITests`.
 
 | Area | Methods |
 | --- | --- |
-| Rooms | `testRoomsSwitchFromTheHeaderAndOpenThatRoomsChores` |
+| Rooms | `testRoomsSwitchFromTheHeaderAndOpenThatRoomsChores`, `testOverdueChoresDirtyTheirObjectUntilCompleted` |
 | Chore management | `testChoresEditArchiveRestoreAndKeepSharedHistory`, `testChoreEditsPreserveDraftsAndRequireConflictReview`, `testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory` |
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |
 | Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone`, `testBillsFollowTheSharedScheduleAndUndoPaymentsNatively` |
