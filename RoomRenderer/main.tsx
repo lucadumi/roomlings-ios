@@ -7,8 +7,10 @@ import { KitchenPreview } from '@roomlings-web/src/KitchenWorld.tsx'
 import { SceneLoading } from '@roomlings-web/src/Branding.tsx'
 import { PreviewBoundary } from '@roomlings-web/src/landing/PreviewStatus.tsx'
 import { roomStyleSchema } from '@roomlings-web/shared/domain.ts'
+import { roomCatalog, roomIdSchema } from '@roomlings-web/shared/rooms.ts'
 import { getRoomComponents, roomComponentLimit, roomComponentSchema } from '@roomlings-web/shared/roomComponents.ts'
 import { installRoomTouchControls } from './touchControls.ts'
+import { ScaledChoreRoom, choreRooms } from './choreRooms.tsx'
 import '@fontsource-variable/dm-sans/index.css'
 import '@fontsource-variable/baloo-2/index.css'
 import '@roomlings-web/src/style.css'
@@ -21,6 +23,7 @@ const stateSchema = z.object({
   type: z.literal('state'),
   paused: z.boolean(),
   roomStyle: roomStyleSchema,
+  roomId: roomIdSchema.default('kitchen'),
   roomZoom: z.number().min(0.3).max(1.5).default(1),
   householdId: z.string().uuid().nullable().default(null),
   choresEnabled: z.boolean().default(false),
@@ -33,6 +36,10 @@ const stateSchema = z.object({
   || value.householdId !== null, {
   message: 'Household tools require a selected household.',
   path: ['householdId'],
+}).refine((value) => value.roomId === 'kitchen' || (value.choresEnabled && value.shoppingEnabled), {
+  // Their chore and supply markers always show, so these rooms need working household tools.
+  message: 'The bathroom and living room require chores and shopping.',
+  path: ['roomId'],
 })
 
 type RoomState = z.infer<typeof stateSchema>
@@ -61,7 +68,7 @@ Object.defineProperty(window, 'RoomlingsRoom', {
   value: Object.freeze({
     receive(message: unknown) {
       const next = stateSchema.parse(message)
-      if (next.householdId !== state.householdId) {
+      if (next.householdId !== state.householdId || next.roomId !== state.roomId) {
         status = 'loading'
         document.documentElement.dataset.roomStatus = 'loading'
       }
@@ -153,16 +160,24 @@ function Room() {
     '--native-dock-width': `${hasTools ? dockWidth : 0}px`,
     '--native-dock-height': `${hasTools ? dockHeight : 0}px`,
   }
-  return <main ref={viewport} className="game-home native-room" aria-label={current.householdId ? 'Shared household kitchen' : 'Roomlings kitchen preview'}
-    data-household-id={current.householdId ?? ''} data-landscape={landscape} data-has-tools={hasTools} style={viewportStyle}>
-    <PreviewBoundary key={current.householdId ?? 'preview'} onFailure={() => reportStatus('unavailable')}>
-      <KitchenPreview roomStyle={current.roomStyle} roomZoom={current.roomZoom} paused={current.paused} onStatus={reportStatus}
-        wholeRoomView={false} cameraToolsInQuickActions={landscape}
-        onComponentSelect={hasChores ? openChores : undefined}
-        components={getRoomComponents({ roomComponents: current.roomComponents })} />
+  const room = roomCatalog[current.roomId]
+  const components = getRoomComponents({ roomComponents: current.roomComponents })
+  const choreRoom = current.roomId === 'kitchen' ? null : choreRooms[current.roomId]
+  return <main ref={viewport} className="game-home native-room"
+    aria-label={current.householdId ? `Shared household ${room.name.toLowerCase()}` : 'Roomlings kitchen preview'}
+    data-household-id={current.householdId ?? ''} data-room-id={current.roomId} data-landscape={landscape} data-has-tools={hasTools} style={viewportStyle}>
+    <PreviewBoundary key={`${current.householdId ?? 'preview'}-${current.roomId}`} onFailure={() => reportStatus('unavailable')}>
+      {choreRoom
+        ? <ScaledChoreRoom room={choreRoom} roomZoom={current.roomZoom} roomStyle={current.roomStyle} paused={current.paused} panelOpen={false} onStatus={reportStatus}
+          focusRequest={{ target: 'room', id: 0 }} dueChores={{}} components={components}
+          onOpenChores={() => openChores()} onRestock={openShopping}
+          onComponentSelect={hasChores ? openChores : undefined} />
+        : <KitchenPreview roomStyle={current.roomStyle} roomZoom={current.roomZoom} paused={current.paused} onStatus={reportStatus}
+          wholeRoomView={false} cameraToolsInQuickActions={landscape}
+          onComponentSelect={hasChores ? openChores : undefined} components={components} />}
     </PreviewBoundary>
-    {currentStatus === 'loading' && <SceneLoading label="Opening the kitchen..." />}
-    {currentStatus === 'ready' && <span className="sr-only" role="status">Kitchen ready</span>}
+    {currentStatus === 'loading' && <SceneLoading label={`Opening the ${room.name.toLowerCase()}...`} />}
+    {currentStatus === 'ready' && <span className="sr-only" role="status">{`${room.name} ready`}</span>}
     {hasTools && <nav className="game-dock native-tools-dock" aria-label="Household tools" ref={dock}>
       {hasChores && <button type="button" className="dock-tool" data-tool="chores" aria-label="Chores" title="Chores"
         aria-haspopup="dialog" disabled={current.paused || currentStatus !== 'ready'} onClick={() => openChores()}>

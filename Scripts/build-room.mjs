@@ -142,4 +142,4 @@ await writeFile(join(output, 'source.json'), JSON.stringify({
   webDependencyLockSHA256: createHash('sha256').update(lockfile).digest('hex'),
 }, null, 2) + '\n')
 await writeInvitationAssociation(association, join(project, 'Build', 'InvitationLinks'))
-console.log(`Bundled the shared kitchen from ${revision.slice(0, 7)}${dirty ? ' with local source changes' : ''}.`)
+console.log(`Bundled the shared rooms from ${revision.slice(0, 7)}${dirty ? ' with local source changes' : ''}.`)
