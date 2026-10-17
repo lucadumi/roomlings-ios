@@ -83,29 +83,54 @@ public struct Bill: Sendable, Equatable, Identifiable {
 
     public var isPaused: Bool { pauses.contains(where: \.isOpen) }
 
+    /// The pause that is still open, if any. Pausing stops future months, not existing dues.
+    public var openPause: BillPause? { pauses.first(where: \.isOpen) }
+
+    /// The schedule that future edits start from.
+    public var latestRevision: BillRevision { revisions[revisions.count - 1] }
+
     /// The revision in force for a given month. Earlier revisions are preserved.
     public func revision(for month: String) -> BillRevision? {
         revisions.last(where: { $0.fromMonth <= month })
     }
 
-    /// Whether the bill falls inside a paused window for the given month.
+    /// Whether the bill falls inside a paused window for the given month. A resumed
+    /// pause ends at its `untilMonth`, which is scheduled again, matching the shared rules.
     public func isPaused(in month: String) -> Bool {
         pauses.contains { pause in
             guard pause.fromMonth <= month else { return false }
-            return pause.untilMonth.map { $0 >= month } ?? true
+            return pause.untilMonth.map { month < $0 } ?? true
         }
+    }
+
+    /// The first month a pause requested in `current` would skip: next month, or the
+    /// start month when the bill has not started yet.
+    public func pauseMonth(current: String) -> String {
+        let next = HouseholdBills.addMonths(current, 1) ?? current
+        return startMonth > next ? startMonth : next
+    }
+
+    /// Whether the bill is due at all in the given month.
+    public func isScheduled(in month: String) -> Bool {
+        month >= startMonth && !isPaused(in: month)
     }
 }
 
 public struct BillOccurrence: Sendable, Equatable {
+    public enum Status: Sendable, Equatable {
+        case paid, overdue, due, upcoming
+    }
+
     public let billID: UUID
     public let month: String
     public let dueDate: String
     public let name: String
     public let amount: Int64
     public let participants: [UUID]
-    /// The expense already recorded for this month, if any. Paused and unpaid months have `nil`.
+    /// The expense already recorded for this month, if any. A paid month shows the
+    /// recorded expense, even if the schedule later changed or paused.
     public let payment: HouseholdExpense?
+    public let status: Status
 }
 
 /// A validated native projection of the shared monthly bills. The server stays
@@ -155,21 +180,105 @@ public struct HouseholdBills: Sendable, Equatable {
         }
     }
 
-    /// The occurrence of a bill in a given month, or `nil` when the bill is paused,
-    /// before its start month, or otherwise unscheduled for that month.
-    public func occurrence(of bill: Bill, in month: String) -> BillOccurrence? {
-        guard AccountValidation.matches(month, #"^[0-9]{4}-[0-9]{2}$"#),
-              month >= bill.startMonth,
-              !bill.isPaused(in: month),
-              let revision = bill.revision(for: month) else { return nil }
-        let day = min(revision.dueDay, Self.daysInMonth(month))
-        let dueDate = "\(month)-\(String(format: "%02d", day))"
+    /// The occurrence of a bill in a given month, or `nil` when the bill is unpaid and
+    /// paused, before its start month, or otherwise unscheduled for that month.
+    /// `today` is the household's billing date, `yyyy-MM-dd`.
+    public func occurrence(of bill: Bill, in month: String, today: String) -> BillOccurrence? {
+        guard Self.isMonth(month) else { return nil }
         let payment = expenses.first { $0.bill?.billId == bill.id && $0.bill?.month == month }
+        return Self.occurrence(of: bill, in: month, today: today, payment: payment)
+    }
+
+    /// Every bill due in a month, ordered by due date, then name, like the web panel.
+    public func monthlyBills(in month: String, today: String) -> [BillOccurrence] {
+        guard Self.isMonth(month) else { return [] }
+        let payments = recordedPayments
+        return bills.compactMap { bill in
+            Self.occurrence(of: bill, in: month, today: today, payment: payments[PaymentKey(bill: bill.id, month: month)])
+        }.sorted { left, right in
+            if left.dueDate != right.dueDate { return left.dueDate < right.dueDate }
+            if left.name != right.name { return left.name < right.name }
+            return left.billID.uuidString.lowercased() < right.billID.uuidString.lowercased()
+        }
+    }
+
+    /// Unpaid, past-due bills in months before `month`, so an overdue bill never
+    /// disappears from view when the board shows a later month.
+    public func earlierOverdue(before month: String, today: String) -> (count: Int, firstMonth: String?) {
+        guard Self.isMonth(month), today.count >= 7 else { return (0, nil) }
+        let payments = recordedPayments
+        let currentMonth = String(today.prefix(7))
+        var count = 0
+        var firstMonth: String?
+        for bill in bills {
+            var candidate = bill.startMonth
+            while candidate < month && candidate <= currentMonth {
+                if payments[PaymentKey(bill: bill.id, month: candidate)] == nil, bill.isScheduled(in: candidate),
+                   let revision = bill.revision(for: candidate),
+                   Self.dueDate(candidate, day: revision.dueDay) < today {
+                    count += 1
+                    if firstMonth.map({ candidate < $0 }) ?? true { firstMonth = candidate }
+                }
+                guard candidate != currentMonth, let next = Self.addMonths(candidate, 1) else { break }
+                candidate = next
+            }
+        }
+        return (count, firstMonth)
+    }
+
+    /// The earliest month the board can show: the first bill's start, or the current month.
+    public func firstMonth(current: String) -> String {
+        bills.map(\.startMonth).reduce(current) { min($0, $1) }
+    }
+
+    public static func addMonths(_ month: String, _ offset: Int) -> String? {
+        guard isMonth(month) else { return nil }
+        let parts = month.split(separator: "-")
+        guard let year = Int(parts[0]), let number = Int(parts[1]) else { return nil }
+        let index = year * 12 + number - 1 + offset
+        let (nextYear, nextMonth) = index.quotientAndRemainder(dividingBy: 12)
+        guard (0...9999).contains(nextYear), index >= 0 else { return nil }
+        return String(format: "%04d-%02d", nextYear, nextMonth + 1)
+    }
+
+    private struct PaymentKey: Hashable {
+        let bill: UUID
+        let month: String
+    }
+
+    private var recordedPayments: [PaymentKey: HouseholdExpense] {
+        var payments: [PaymentKey: HouseholdExpense] = [:]
+        for expense in expenses {
+            if let bill = expense.bill { payments[PaymentKey(bill: bill.billId, month: bill.month)] = expense }
+        }
+        return payments
+    }
+
+    private static func occurrence(of bill: Bill, in month: String, today: String,
+                                   payment: HouseholdExpense?) -> BillOccurrence? {
+        if let payment, let reference = payment.bill {
+            return BillOccurrence(
+                billID: bill.id, month: month, dueDate: reference.dueDate,
+                name: payment.description, amount: payment.amount, participants: payment.participants,
+                payment: payment, status: .paid
+            )
+        }
+        guard month >= bill.startMonth, bill.isScheduled(in: month),
+              let revision = bill.revision(for: month) else { return nil }
+        let dueDate = Self.dueDate(month, day: revision.dueDay)
         return BillOccurrence(
             billID: bill.id, month: month, dueDate: dueDate,
             name: revision.name, amount: revision.amount, participants: revision.participants,
-            payment: payment
+            payment: nil, status: dueDate < today ? .overdue : dueDate == today ? .due : .upcoming
         )
+    }
+
+    private static func isMonth(_ month: String) -> Bool {
+        AccountValidation.matches(month, #"^[0-9]{4}-[0-9]{2}$"#) && (1...12).contains(Int(month.suffix(2)) ?? 0)
+    }
+
+    static func dueDate(_ month: String, day: Int) -> String {
+        "\(month)-\(String(format: "%02d", min(day, daysInMonth(month))))"
     }
 
     /// Whether a bill can be paused or resumed from the current state. Server enforces

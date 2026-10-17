@@ -239,7 +239,14 @@ The [targeted native flows](../../docs/development.md#targeted-native-flows) use
 - Money is `Int64` cents everywhere. `shares` mirrors the web `splitAmount`: participants sort by member ID, everyone takes `amount / count`, and the remaining cents go one each to the first sorted IDs, so the shares always total the amount. It only previews what the server records.
 - `checkoutShopping` sends each selected item's current `version`; the server records one expense, files a shopping run and removes exactly those items. Reuse the same `checkoutID` and `mutationID` for an explicit retry so a replay cannot record a second run.
 - Responses must confirm the mutation receipt and the expected ledger. A fresh save must show the new expense first, unchanged remaining expenses, and for a checkout exactly the selected items removed plus the new run. Replays may contain later changes.
-- `canRemove(_:memberID:)` covers only plain expenses. Shopping receipts and bill payments belong to the flow that created them and are removed on the web, so run history stays consistent. Removal is not an edit; the server has no expense edit route.
+- `canRemove(_:memberID:)` covers only plain expenses. Shopping receipts are removed on the web, so run history stays consistent. Bill payments are undone from the bills board with `removeBillPayment`, which only accepts a confirmed bill payment. Removal is not an edit; the server has no expense edit route.
+
+## Monthly bills
+
+- `try HouseholdBills(household:)` projects `bills`, bill payments and `billingTimeZone`. Pass `today` as the household's billing date, `YYYY-MM-DD`.
+- `occurrence(of:in:today:)`, `monthlyBills(in:today:)` and `earlierOverdue(before:today:)` mirror the web project's `shared/bills.ts`. A paid month shows its recorded expense. Unpaid months are `overdue`, `due` on the due date, or `upcoming`.
+- A pause covers months from `fromMonth` up to, but not including, `untilMonth`. Pausing starts next month, so the current month stays due.
+- The first `BillDraft` sends this device's time zone, which the server keeps as the household's billing time zone. Later bills reuse it.
 
 ## Balances and repayments
 

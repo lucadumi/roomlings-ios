@@ -49,7 +49,7 @@ All methods below belong to `AccountUITests`.
 | --- | --- |
 | Chore management | `testChoresEditArchiveRestoreAndKeepSharedHistory`, `testChoreEditsPreserveDraftsAndRequireConflictReview`, `testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory` |
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |
-| Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone` |
+| Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone`, `testBillsFollowTheSharedScheduleAndUndoPaymentsNatively` |
 | Invitations | `testInvitationsShareJoinAndRejectARevokedLink`, `testInvitationsRequireRefreshAfterALostResponseAndAConflict`, `testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership` |
 | Notifications | `testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration` |
 | Analytics | `testAnalyticsCountsForegroundVisitsButNotSheetRefreshes`, `testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools` |

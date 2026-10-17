@@ -571,6 +571,14 @@ public actor AccountSession {
         try await mutateLedger(.remove(id), householdID: householdID, version: version, mutationID: mutationID)
     }
 
+    /// Removes a bill payment's expense record. The bill schedule stays, and the month is unpaid again.
+    @discardableResult
+    public func removeBillPayment(
+        id: UUID, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateLedger(.removeBillPayment(id), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
     @discardableResult
     public func recordSettlement(
         from: UUID, to: UUID, amount: Int64, householdID: UUID, version: Int64, mutationID: UUID

@@ -213,4 +213,108 @@ extension AccountUITests {
         XCTAssertEqual(undone.balances, owed.balances)
         XCTAssertTrue(app.otherElements["transfer-\(debtor)-\(creditor)"].waitForExistence(timeout: Wait.control))
     }
+
+    struct BillsState: Decodable {
+        struct Bill: Decodable {
+            struct Revision: Decodable {
+                let fromMonth: String
+                let name: String
+                let amount: Int
+                let dueDay: Int
+                let participants: [String]
+            }
+            struct Pause: Decodable {
+                let fromMonth: String
+                let untilMonth: String?
+            }
+            let id: String
+            let startMonth: String
+            let revisions: [Revision]
+            let pauses: [Pause]
+        }
+        struct Payment: Decodable {
+            struct Reference: Decodable {
+                let billId: String
+                let month: String
+            }
+            let id: String
+            let amount: Int
+            let bill: Reference
+        }
+        struct Request: Decodable {
+            let path: String
+            let native: Bool
+            let browserHeaders: Bool
+            let mutationId: String?
+        }
+        let billingTimeZone: String
+        let bills: [Bill]
+        let payments: [Payment]
+        let requests: [Request]
+    }
+
+    @MainActor
+    func billsState(_ home: Seed.Home) async throws -> BillsState {
+        try JSONDecoder().decode(BillsState.self, from: await fixture("_fixture/bills/state", body: ["householdId": home.id]))
+    }
+
+    @MainActor
+    func testBillsFollowTheSharedScheduleAndUndoPaymentsNatively() async throws {
+        executionTimeAllowance = 600
+        continueAfterFailure = false
+        let (app, home) = try await launchMoney()
+        try openSection("Bills", in: app)
+        XCTAssertTrue(app.staticTexts["Make room for the regulars."].waitForExistence(timeout: Wait.control))
+
+        // The first bill sets the household's billing time zone from this device, as on the web.
+        try tap(app.buttons["new-bill"], in: app)
+        XCTAssertTrue(app.staticTexts["A regular part of home."].waitForExistence(timeout: Wait.control))
+        try fill(app.textFields["Bill name"], "Internet")
+        try fill(app.textFields.matching(NSPredicate(format: "label BEGINSWITH %@", "Default amount")).firstMatch, "42.01")
+        try tap(app.buttons["confirm-bill"], in: app, until: app.staticTexts["Monthly bill created."])
+        let created = try await billsState(home)
+        let bill = try XCTUnwrap(created.bills.first)
+        XCTAssertEqual(created.billingTimeZone, TimeZone.current.identifier)
+        XCTAssertEqual(bill.revisions.last?.amount, 4201)
+        XCTAssertEqual(bill.revisions.last?.participants.count, 2, "A new bill is shared by every active roommate.")
+
+        // The first due date defaults to today, so this month's bill is due today, not merely due.
+        let card = app.otherElements["bill-\(bill.id)"]
+        XCTAssertTrue(card.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(card.staticTexts["Due today"].exists)
+        try tap(card.buttons["Record payment for Internet"], in: app)
+        XCTAssertTrue(app.staticTexts["Record a bill payment."].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["confirm-bill-payment"], in: app,
+                until: app.staticTexts["Bill payment recorded. Roomlings tracks it; no money moved."])
+        let paid = try await billsState(home)
+        let payment = try XCTUnwrap(paid.payments.first)
+        XCTAssertEqual(paid.payments.count, 1)
+        XCTAssertEqual(payment.bill.billId, bill.id)
+        XCTAssertEqual(payment.amount, 4201)
+        XCTAssertTrue(card.staticTexts["Paid"].waitForExistence(timeout: Wait.control))
+
+        try tap(card.buttons["Undo payment for Internet"], in: app)
+        XCTAssertTrue(app.staticTexts["Undo this bill payment record?"].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["confirm-undo-bill-payment"], in: app,
+                until: app.staticTexts["Bill payment record removed."])
+        let undone = try await billsState(home)
+        XCTAssertTrue(undone.payments.isEmpty)
+        XCTAssertEqual(undone.bills.count, 1)
+        XCTAssertTrue(card.staticTexts["Due today"].waitForExistence(timeout: Wait.control))
+
+        // Pausing stops future months but keeps this month's due bill payable.
+        let schedule = app.otherElements["bill-schedule-\(bill.id)"]
+        try tap(schedule.buttons["Pause Internet"], in: app)
+        XCTAssertTrue(app.staticTexts["Pause this monthly bill?"].waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["confirm-pause-bill"], in: app, until: app.staticTexts["Monthly bill paused."])
+        let paused = try await billsState(home)
+        XCTAssertNotNil(paused.bills.first?.pauses.first { $0.untilMonth == nil })
+        XCTAssertTrue(card.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(card.buttons["Record payment for Internet"].exists)
+        try tap(app.buttons["Next bill month"], in: app, until: app.staticTexts["No bills scheduled here."])
+        try tap(app.buttons["bills-this-month"], in: app, until: card)
+
+        XCTAssertTrue(paused.requests.allSatisfy { $0.native && !$0.browserHeaders && $0.mutationId != nil })
+        XCTAssertEqual(paused.requests.count, 4)
+    }
 }
