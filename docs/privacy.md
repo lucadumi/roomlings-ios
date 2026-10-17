@@ -50,7 +50,7 @@ The manifest is a disclosure, not a new collection mechanism. This change adds n
 
 Native account credentials and account-bound notification consent stay in device-only Keychain entries. Event delivery has no disk queue, and invitation links remain in memory. Notification tokens are uploaded for opted-in registration rather than persisted by the app.
 
-The server is authoritative for storage. Account deletion removes sign-in identity and access and pseudonymizes roster names, while shared financial history and references remain. In the currently pinned server, analytics aggregates expire 30 days after first receipt and are cleaned hourly; deleting an account is not a promise that every shared or retained row immediately disappears. See the [native deletion guide](../Packages/RoomlingsCore/README.md#account-deletion) and the server's [storage guide](https://github.com/lucadumi/roomlings/blob/b06cd70/docs/storage.md).
+The server is authoritative for storage. Account deletion removes sign-in identity and access and pseudonymizes roster names, while shared financial history and references remain. In the currently pinned server, analytics aggregates expire 30 days after first receipt and are cleaned hourly; deleting an account is not a promise that every shared or retained row immediately disappears. See the [native deletion guide](../Packages/RoomlingsCore/README.md#account-deletion) and the server's [storage guide](https://github.com/lucadumi/roomlings/blob/84c322e/docs/storage.md).
 
 ## Before distribution
 

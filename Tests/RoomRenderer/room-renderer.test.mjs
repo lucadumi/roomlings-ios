@@ -16,7 +16,7 @@ const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 }
 const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
 const { cameraFraming, roomCameraZoom } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
-const { roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { billingDate, roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { roomPresets } = await import(pathToFileURL(join(web, 'src/roomStyles.ts')).href)
 
 test('native error colours are generated from the shared feedback rule', async () => {
@@ -630,6 +630,91 @@ test('@room the bundled bathroom and living room open native chores and shopping
     await expect(page.locator('main')).toHaveAttribute('data-room-id', 'kitchen')
     await expect(page.getByRole('status').filter({ hasText: 'Kitchen ready' })).toHaveCount(1)
     assert.ok(!requests.some((path) => path.startsWith('/api/')))
+  } finally {
+    await browser?.close()
+    const closed = once(server, 'close')
+    server.close()
+    await closed
+  }
+})
+
+test('@room overdue chores dirty their objects and due chores label their areas in every room', async () => {
+  const types = { '/': 'text/html', '/room.js': 'text/javascript', '/room.css': 'text/css' }
+  const resources = new Map()
+  for (const path of Object.keys(types)) {
+    resources.set(path, await readFile(join(project, 'Build/RoomRenderer', path === '/' ? 'index.html' : path.slice(1))))
+  }
+  const server = createServer((request, response) => {
+    const body = resources.get(request.url)
+    response.writeHead(body ? 200 : 404, { 'Content-Type': types[request.url] ?? 'text/plain' })
+    response.end(body ?? 'Not found')
+  }).listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  let browser
+  try {
+    browser = await chromium.launch()
+    const page = await browser.newPage({ viewport: { width: 390, height: 750 }, hasTouch: true, reducedMotion: 'reduce' })
+    page.setDefaultTimeout(process.env.CI ? 90_000 : 30_000)
+    page.on('pageerror', (error) => console.error('Bundled room error:', error.message))
+    await page.addInitScript(() => {
+      window.webkit = { messageHandlers: { roomlings: { postMessage: () => {} } } }
+    })
+    await page.goto(`http://127.0.0.1:${server.address().port}/`)
+    await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+
+    const timeZone = 'Pacific/Kiritimati'
+    const today = billingDate(timeZone)
+    const daysAgo = (days) => new Date(Date.parse(`${today}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10)
+    const chore = (fields) => ({ componentId: null, area: null, archived: false, ...fields })
+    const roomComponents = defaultRoomComponents()
+    const chores = []
+    const expected = {}
+    for (const roomId of roomIds) {
+      const [filthy, crumbs, archived, clean] = roomComponents.filter((component) => component.installed && component.roomId === roomId)
+      const care = (component, days, extra = {}) => chore({
+        roomId, componentId: component.id, area: componentChoreArea(component) ?? null, dueDate: daysAgo(days), ...extra,
+      })
+      // The dirtiest chore wins, so the filthy object also has a lighter overdue chore.
+      chores.push(care(filthy, 7), care(filthy, 1), care(crumbs, 1), care(archived, 9, { archived: true }), care(clean, 0))
+      // Room-wide chores due today count on their area's marker without dirtying an object.
+      for (const area of roomCatalog[roomId].areas) chores.push(chore({ roomId, area: area.id, dueDate: today }))
+      expected[roomId] = { filthy, crumbs, archived, clean }
+    }
+    const householdState = {
+      version: 1, type: 'state', paused: false, roomStyle: 'original', householdId: randomUUID(), roomComponents,
+      choresEnabled: true, shoppingEnabled: true, moneyEnabled: true, billingTimeZone: timeZone, chores,
+    }
+    for (const roomId of roomIds) {
+      await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), { ...householdState, roomId })
+      await expect(page.locator('main')).toHaveAttribute('data-room-id', roomId)
+      await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+      const marker = (component) => page.locator(`.world-hotspot[data-component-id="${component.id}"]`)
+      const { filthy, crumbs, archived, clean } = expected[roomId]
+      await expect(marker(filthy)).toHaveAttribute('data-grime', '3')
+      await expect(marker(filthy)).toHaveAttribute('aria-label', /, dirty: 7 days overdue$/)
+      await expect(marker(crumbs)).toHaveAttribute('data-grime', '1')
+      await expect(marker(crumbs)).toHaveAttribute('aria-label', /, dirty: 1 day overdue$/)
+      for (const component of [archived, clean]) await expect(marker(component)).not.toHaveAttribute('data-grime', /./)
+      if (roomId !== 'kitchen') {
+        const areaMarkers = page.locator('.world-hotspot:not([data-component-id])')
+        assert.ok(await areaMarkers.count() > 0)
+        for (const label of await areaMarkers.evaluateAll((buttons) => buttons.map((button) => button.ariaLabel))) {
+          assert.match(label, /\(\d+ due\)$/)
+        }
+      }
+    }
+    // Completing every chore cleans the room at once.
+    await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, roomId: 'kitchen', chores: chores.map((item) => ({ ...item, dueDate: daysAgo(-3) })),
+    })
+    await expect(page.locator('.world-hotspot[data-grime]')).toHaveCount(0)
+    await assert.rejects(page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, billingTimeZone: 'Mars/Olympus',
+    }))
+    // Chore titles and roommates stay in the native app.
+    await assert.rejects(page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, chores: [{ ...chores[0], title: 'Wipe the fridge shelves' }],
+    }))
   } finally {
     await browser?.close()
     const closed = once(server, 'close')
