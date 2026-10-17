@@ -1,3 +1,4 @@
+import WebKit
 import XCTest
 import RoomlingsCore
 import SwiftUI
@@ -334,6 +335,42 @@ final class RoomBridgeTests: XCTestCase {
         ]
         fields.merge(extra) { _, new in new }
         return try JSONDecoder().decode(HouseholdSnapshot.self, from: JSONSerialization.data(withJSONObject: fields))
+    }
+
+    @MainActor
+    func testTheRoomReloadsOnceAfterTheRendererStopsButNotInALoop() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var recovery = RoomRecovery()
+        XCTAssertTrue(recovery.shouldReload(at: start))
+        XCTAssertFalse(recovery.shouldReload(at: start.addingTimeInterval(5)),
+                       "A renderer that stops again straight away must show the manual reload.")
+        XCTAssertFalse(recovery.shouldReload(at: start.addingTimeInterval(RoomRecovery.interval - 1)))
+        XCTAssertTrue(recovery.shouldReload(at: start.addingTimeInterval(RoomRecovery.interval)))
+    }
+
+    @MainActor
+    func testATerminatedRendererReloadsTheBundledRoomBeforeReportingAFailure() throws {
+        var events: [RoomRenderEvent] = []
+        let coordinator = RoomWebView.Coordinator(paused: true) { events.append($0) }
+        let webView = WKWebView()
+        let index = try XCTUnwrap(Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "RoomRenderer"))
+        coordinator.webView = webView
+        coordinator.index = index
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        coordinator.now = { clock }
+
+        coordinator.webViewWebContentProcessDidTerminate(webView)
+        XCTAssertTrue(events.isEmpty, "The first termination recovers without an error.")
+        XCTAssertEqual(webView.url?.standardizedFileURL, index.standardizedFileURL)
+
+        clock.addTimeInterval(1)
+        coordinator.webViewWebContentProcessDidTerminate(webView)
+        XCTAssertEqual(events, [.failure("The room renderer stopped. Reload the room to continue.")])
+
+        coordinator.invalidate()
+        clock.addTimeInterval(RoomRecovery.interval)
+        coordinator.webViewWebContentProcessDidTerminate(webView)
+        XCTAssertEqual(events.count, 1, "A dismantled room neither reloads nor reports.")
     }
 
     @MainActor
