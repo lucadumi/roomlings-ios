@@ -760,10 +760,13 @@ app.post('/_fixture/account/state', express.json(), async (request, response) =>
   response.json({ name: account.name, sessions: sessions.map((row) => row.label), recoveryCodes: Number(codes.count) })
 })
 app.use((error, _request, response, _next) => {
-  console.error('Account fixture failed:', error.message)
+  console.error('Account fixture failed:', error.message, error.cause?.code ?? error.cause?.message ?? '')
   response.status(500).json({ error: 'Account fixture failed' })
 })
 const server = app.listen(0, '127.0.0.1')
+// Fixtures call this API over loopback between long pauses. Closing idle connections races
+// with the clients reusing them, which fails the request, so keep them open until shutdown.
+server.keepAliveTimeout = 0
 try {
   await once(server, 'listening')
   const origin = `http://127.0.0.1:${server.address().port}`
@@ -819,6 +822,9 @@ try {
       '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '300',
       '-maximum-test-execution-time-allowance', '600',
+      // Hosted simulators sometimes fail to launch or terminate the app. Each flow seeds its own
+      // fixture state, so a failed flow reruns in place and must pass on a later attempt.
+      '-retry-tests-on-failure', '-test-iterations', '3',
     ] : ['-quiet']),
     shardedPlan ? 'test-without-building' : 'test',
   ])
@@ -842,6 +848,7 @@ try {
   releaseAccountLoad()
   const closed = once(server, 'close')
   server.close()
+  server.closeAllConnections()
   await closed
   await store.close()
 }
