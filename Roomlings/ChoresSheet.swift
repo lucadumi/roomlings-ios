@@ -23,9 +23,9 @@ struct ChoresSheet: View {
     @State private var contentHeight: CGFloat = 480
     @State private var headerHeight: CGFloat = 64
 
-    init(model: AccountModel, object: ChoreObject? = nil) {
+    init(model: AccountModel, object: ChoreObject? = nil, roomID: String = RoomVisualState.defaultRoomID) {
         self.model = model
-        _roomFilter = State(initialValue: object?.roomID ?? "kitchen")
+        _roomFilter = State(initialValue: object?.roomID ?? roomID)
         _areaFilter = State(initialValue: object?.area ?? "")
         _objectFilter = State(initialValue: object?.id ?? "")
     }

@@ -47,14 +47,19 @@ struct RoomButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, text }
     var kind = Kind.secondary
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func makeBody(configuration: Configuration) -> some View {
         let primary = kind == .primary
         let text = kind == .text
         let foreground = configuration.role == .destructive ? RoomTheme.error
             : primary ? RoomTheme.primaryInk : RoomTheme.ink
+        // Labels stay on one line at standard sizes; accessibility sizes may wrap rather than truncate.
+        let singleLine = !dynamicTypeSize.isAccessibilitySize
         configuration.label
             .font(RoomTheme.body().weight(.semibold))
+            .lineLimit(singleLine ? 1 : nil)
+            .minimumScaleFactor(singleLine ? 0.8 : 1)
             .foregroundStyle(foreground)
             .padding(.horizontal, text ? 0 : 14)
             .padding(.vertical, 8)
