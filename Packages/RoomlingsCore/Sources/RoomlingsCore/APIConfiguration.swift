@@ -58,6 +58,7 @@ enum APIEndpoint: Equatable {
     case leaveHousehold(UUID), removeHouseholdMember(UUID, UUID)
     case notificationSettings(UUID), saveNotificationSettings(UUID), registerPushDevice, unregisterPushDevice(UUID)
     case recordAnalytics(UUID)
+    case inbox, readInbox
     case addChore, editChore(UUID), setChoreArchived(UUID), completeChore(UUID), undoChoreCompletion(UUID)
     case addBill, editBill(UUID), pauseBill(UUID), payBill(UUID)
     case addShoppingItem, editShoppingItem(UUID), removeShoppingItem(UUID), claimShoppingItem(UUID), pickShoppingItem(UUID)
@@ -69,8 +70,8 @@ enum APIEndpoint: Equatable {
 
     var method: String {
         switch self {
-        case .account, .householdInvitations, .notificationSettings, .recoveryStatus: "GET"
-        case .saveNotificationSettings, .registerPushDevice: "PUT"
+        case .account, .householdInvitations, .notificationSettings, .recoveryStatus, .inbox: "GET"
+        case .saveNotificationSettings, .registerPushDevice, .readInbox: "PUT"
         case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings, .updateRoomStyle,
              .updateProfile, .renameDevice, .setRoomRole: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
@@ -106,6 +107,7 @@ enum APIEndpoint: Equatable {
         case .registerPushDevice: "api/account/push-devices"
         case .unregisterPushDevice(let id): "api/account/push-devices/\(id.uuidString.lowercased())"
         case .recordAnalytics(let id): "api/account/households/\(id.uuidString.lowercased())/analytics"
+        case .inbox, .readInbox: "api/inbox"
         case .addChore: "api/chores"
         case .editChore(let id): "api/chores/\(id.uuidString.lowercased())"
         case .setChoreArchived(let id): "api/chores/\(id.uuidString.lowercased())/archive"

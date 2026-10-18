@@ -16,6 +16,7 @@ public actor AccountSession {
     private let ledgerAPI: LedgerAPI
     private let householdAccessAPI: HouseholdAccessAPI
     private let notificationAPI: NotificationAPI
+    private let inboxAPI: InboxAPI
     private let analyticsAPI: AnalyticsAPI
     private let tokenStore: any SessionTokenStore
     private var stateToken: SessionToken?
@@ -34,6 +35,7 @@ public actor AccountSession {
         ledgerAPI = LedgerAPI(client: client)
         householdAccessAPI = HouseholdAccessAPI(client: client)
         notificationAPI = NotificationAPI(client: client)
+        inboxAPI = InboxAPI(client: client)
         analyticsAPI = AnalyticsAPI(client: client)
         self.tokenStore = tokenStore
     }
@@ -365,6 +367,37 @@ public actor AccountSession {
             guard let memberID else { throw AccountError.accountStateRequired }
             return try await notificationAPI.save(preferences, householdID: householdID, memberID: memberID, token: token)
         }
+    }
+
+    /// Your private read state for the selected household's notifications. Like analytics, inbox
+    /// requests run beside account operations instead of blocking them, and fail if the account or
+    /// household changes while they are in flight.
+    public func loadInbox(householdID: UUID) async throws -> InboxReadState {
+        try await withSelectedHousehold(householdID) { [inboxAPI] token in try await inboxAPI.load(token: token) }
+    }
+
+    public func markInboxRead(_ read: InboxRead, householdID: UUID) async throws -> InboxReadState {
+        try await withSelectedHousehold(householdID) { [inboxAPI] token in try await inboxAPI.read(read, token: token) }
+    }
+
+    private func withSelectedHousehold<Response: Sendable>(
+        _ householdID: UUID, _ operation: @Sendable (SessionToken) async throws -> Response
+    ) async throws -> Response {
+        try Task.checkCancellation()
+        try requireSelectedHousehold(householdID)
+        let stored = try await readCredential()
+        try requireSelectedHousehold(householdID)
+        guard let token = stored, token == stateToken else { throw AccountError.accountStateRequired }
+        let result = try await operation(token)
+        try requireSelectedHousehold(householdID)
+        guard stateToken == token else { throw AccountError.accountStateRequired }
+        return result
+    }
+
+    private func requireSelectedHousehold(_ householdID: UUID) throws {
+        guard !deletionStatus.blocksAccountUse, pendingHouseholdDeparture == nil, let state, state.isSignedIn,
+              !state.deletionPending else { throw AccountError.accountStateRequired }
+        guard state.session?.household.id == householdID else { throw AccountError.householdSelectionChanged }
     }
 
     public func registerPushDevice(installationID: UUID, token: APNsDeviceToken, environment: APNsEnvironment) async throws {

@@ -265,4 +265,70 @@ extension AccountUITests {
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: clean, object: dirty)], timeout: Wait.room),
                        .completed, "Completing the chore cleans the fridge at once.")
     }
+
+    @MainActor
+    func testNotificationsListYourTurnsAndKeepReadStateOnTheServer() async throws {
+        executionTimeAllowance = 600
+        continueAfterFailure = false
+        let email = "inbox-\(UUID().uuidString.lowercased())@example.test"
+        let seed = try JSONDecoder().decode(Seed.self, from: await fixture("_fixture/seed", body: ["email": email]))
+        let home = try XCTUnwrap(seed.homes.first { $0.name == "Cedar House" })
+        let app = try launchApp()
+        try signIn(app, email: email)
+        try openAccount(app)
+        try tap(app.buttons["Open Cedar House"], in: app)
+        let bell = app.buttons["notifications-entry"]
+        // The stored kettle's chore is paused, so only the fridge turn is waiting.
+        XCTAssertTrue(bell.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(waitForLabel(bell, "Notifications, 1 unread"))
+        attachScreenshot("Notifications bell")
+
+        try tap(bell, in: app, until: app.otherElements["notifications-sheet"])
+        let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Wipe the fridge shelves is due today")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: Wait.control))
+        XCTAssertEqual(item.value as? String, "Unread")
+        attachScreenshot("Notifications sheet")
+        try tap(item, in: app, until: app.otherElements["chores-sheet"])
+        XCTAssertEqual(picker("Chore room", in: app).value as? String, "Kitchen")
+        XCTAssertTrue(try switchIsOn(app.switches["My turn only"]), "Your turns open with My turn only, as on the web.")
+        try tap(app.buttons["Done"], in: app)
+        XCTAssertTrue(waitForLabel(bell, "Notifications"))
+
+        // Read state belongs to the account on the server, so it survives a relaunch.
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(bell.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(waitForLabel(bell, "Notifications"))
+
+        // An overdue turn is a new notification; Mark all read clears it.
+        let state = try await choreState(home.id)
+        let chore = try XCTUnwrap(state.items.first { $0.title == "Wipe the fridge shelves" })
+        _ = try await fixture("_fixture/chores/change", body: ["householdId": home.id, "choreId": chore.id, "overdueDays": 2])
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(bell.waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(waitForLabel(bell, "Notifications, 1 unread"))
+        try tap(bell, in: app, until: app.otherElements["notifications-sheet"])
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Wipe the fridge shelves is 2 days overdue"))
+            .firstMatch.waitForExistence(timeout: Wait.control))
+        try tap(app.buttons["inbox-read-all"], in: app)
+        XCTAssertFalse(app.buttons["inbox-read-all"].isEnabled)
+        try tap(app.buttons["Done"], in: app)
+        XCTAssertTrue(waitForLabel(bell, "Notifications"))
+    }
+
+    @MainActor
+    private func attachScreenshot(_ name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    private func waitForLabel(_ element: XCUIElement, _ label: String) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", label), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: Wait.control) == .completed
+    }
 }

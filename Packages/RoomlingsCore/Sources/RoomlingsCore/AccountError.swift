@@ -8,7 +8,7 @@ public enum AccountInputField: String, Sendable {
     case billName, dueDay, month
     case expenseDescription = "description"
     case amount, paidBy, participants, date, checkoutID
-    case pushToken, currency, roomStyle, deviceID
+    case pushToken, currency, roomStyle, deviceID, notifications
 }
 
 public enum AccountServerCode: String, Sendable, Codable {
