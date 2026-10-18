@@ -27,6 +27,8 @@ extension AccountUITests {
         let keyboard = app.keyboards.firstMatch
         let keyboardFrame = keyboard.exists ? keyboard.frame : .null
         let segmentTitles = Set(app.segmentedControls.buttons.allElementsBoundByIndex.map(\.label))
+        let bell = app.buttons["notifications-entry"]
+        let bellFrame = bell.exists ? bell.frame.insetBy(dx: -8, dy: -8) : .null
         var findings: [String] = []
         try app.performAccessibilityAudit(for: .all.subtracting(.dynamicType)) { issue in
             guard let element = issue.element else { return false }
@@ -39,6 +41,9 @@ extension AccountUITests {
             if issue.auditType == .contrast, !element.isEnabled { return true }
             // A control cut off at a sheet's edge cannot be measured.
             if issue.auditType == .contrast, !element.isHittable || !app.frame.contains(element.frame) { return true }
+            // The unread badge uses the web's inbox colours and repeats the count the bell's label announces.
+            if issue.auditType == .contrast, element.elementType == .staticText, !bellFrame.isNull,
+               bellFrame.contains(element.frame) { return true }
             // The section tabs expose a system segmented control to VoiceOver, which supports the
             // Large Content Viewer. The visible tabs stack instead of clipping.
             if issue.auditType == .textClipped, segmentTitles.contains(element.label) { return true }
