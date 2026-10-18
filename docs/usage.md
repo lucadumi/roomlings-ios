@@ -16,6 +16,7 @@ The room adapts to either orientation. Zoom includes object focus; **Reset room 
 Use the pencil or archive action beside **Mark done** to manage a chore.
 **Archived** restores saved schedules; **History > Schedule again** reschedules a completed one-off without changing its completion history.
 Stored-object chores must wait for their object to return before editing or restoring. Archiving keeps history and does not free a chore slot.
+An object gets dirty when one of its chores is overdue: light crumbs after 1 day, more mess after 3 and filthy after 7. Completing the chore cleans it at once. Area markers show how many chores are due.
 
 ## Account
 
