@@ -27,6 +27,9 @@ enum RoomTheme {
     static let leafSoft = color(WebThemeValues.leafSoft)
     static let sky = color(WebThemeValues.sky)
     static let skySoft = color(WebThemeValues.skySoft)
+    static let tomato = color(WebThemeValues.tomato)
+    static let sunflower = color(WebThemeValues.sunflower)
+    static let sunflowerSoft = color(WebThemeValues.sunflowerSoft)
     static let surfaceMuted = color(WebThemeValues.surfaceMuted)
     static let line = color(WebThemeValues.line)
     static let radius = WebThemeValues.radius

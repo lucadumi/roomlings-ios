@@ -18,12 +18,13 @@ struct MoneySheet: View {
     @State private var billMonth: String?
 
     enum Destination: Equatable {
-        case receipt(UUID), repayment(UUID)
+        case receipt(UUID), repayment(UUID), bills(month: String)
 
         var rowID: String {
             switch self {
             case .receipt(let id): "receipt-\(id.uuidString.lowercased())"
             case .repayment(let id): "settlement-\(id.uuidString.lowercased())"
+            case .bills: "money-feedback"
             }
         }
     }
@@ -31,8 +32,12 @@ struct MoneySheet: View {
     init(model: AccountModel, destination: Destination? = nil) {
         self.model = model
         self.destination = destination
-        if case .receipt = destination {
-            _section = State(initialValue: .receipts)
+        switch destination {
+        case .receipt: _section = State(initialValue: .receipts)
+        case .bills(let month):
+            _section = State(initialValue: .bills)
+            _billMonth = State(initialValue: month)
+        case .repayment, nil: break
         }
     }
 
@@ -172,6 +177,7 @@ struct MoneySheet: View {
         switch destination {
         case .receipt(let id): available = ledger.expenses.contains { $0.id == id }
         case .repayment(let id): available = ledger.settlements.contains { $0.id == id }
+        case .bills: return
         }
         if available {
             proxy.scrollTo(destination.rowID, anchor: .center)
