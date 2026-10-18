@@ -124,13 +124,29 @@ final class RoomBridgeTests: XCTestCase {
             "id": householdID, "name": "Our home", "version": 4, "currency": "EUR",
             "budget": 25_000, "inviteCode": "private-invitation", "roomStyle": "clay",
             "members": [["id": memberID, "name": "Ada", "color": "#81b29a"]],
-            "expenses": [], "settlements": [], "roomComponents": [],
+            "expenses": [], "settlements": [], "roomComponents": [], "billingTimeZone": "Europe/Berlin",
+            "chores": ["history": [], "items": [[
+                "id": UUID().uuidString.lowercased(), "title": "Private chore title", "notes": "Private chore notes",
+                "roomId": "kitchen", "area": "sink", "componentId": "default-kitchen-sink", "componentName": "Private sink",
+                "dueDate": "2026-10-01", "repeatDays": 7, "rotation": [memberID], "turn": 0, "createdBy": memberID,
+                "createdAt": "2026-09-01T08:00:00.000Z", "updatedAt": "2026-09-01T08:00:00.000Z",
+                "version": 1, "occurrence": 0, "archived": false,
+            ]]],
         ])
         let household = try JSONDecoder().decode(HouseholdSnapshot.self, from: data)
         let visual = try RoomVisualState(household: household)
         let insets = RoomViewportInsets(top: 150, right: 12, bottom: 34, left: 12)
         let message = try visual.message(paused: true, viewportInsets: insets, roomZoom: 1.35)
-        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomZoom", "roomComponents", "viewportInsets"])
+        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomId", "roomZoom", "roomComponents", "billingTimeZone", "chores", "viewportInsets"])
+        XCTAssertEqual(message["roomId"] as? String, "kitchen")
+        XCTAssertEqual(message["billingTimeZone"] as? String, "Europe/Berlin")
+        let care = try XCTUnwrap(message["chores"] as? [[String: Any]])
+        XCTAssertEqual(care.count, 1)
+        XCTAssertEqual(Set(care[0].keys), ["roomId", "area", "componentId", "dueDate", "archived"])
+        XCTAssertEqual(care[0]["dueDate"] as? String, "2026-10-01")
+        XCTAssertEqual(care[0]["componentId"] as? String, "default-kitchen-sink")
+        let bathroom = try visual.showing(room: "bathroom").message(paused: false)
+        XCTAssertEqual(bathroom["roomId"] as? String, "bathroom")
         XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["top"], 150)
         XCTAssertEqual(message["householdId"] as? String, householdID)
         XCTAssertEqual(message["roomStyle"] as? String, "clay")
@@ -140,16 +156,21 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertEqual(message["moneyEnabled"] as? Bool, true)
         XCTAssertEqual(message["roomZoom"] as? Double, 1.35)
         let encoded = String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
-        for privateValue in ["private-invitation", "Ada", memberID, "budget", "expenses", "accessToken", "csrfToken"] {
+        for privateValue in ["private-invitation", "Ada", memberID, "budget", "expenses", "accessToken", "csrfToken",
+                             "Private chore title", "Private chore notes", "Private sink", "rotation"] {
             XCTAssertFalse(encoded.contains(privateValue))
         }
         let preview = try RoomVisualState.preview.message(paused: false)
         XCTAssertNil(preview["householdId"])
         XCTAssertNil(preview["roomComponents"])
+        XCTAssertNil(preview["chores"])
+        XCTAssertNil(preview["billingTimeZone"])
         XCTAssertEqual(preview["choresEnabled"] as? Bool, false)
         XCTAssertEqual(preview["shoppingEnabled"] as? Bool, false)
         XCTAssertEqual(preview["moneyEnabled"] as? Bool, false)
         XCTAssertEqual(preview["roomZoom"] as? Double, 1)
+        let signedOut = try RoomVisualState.preview.showing(room: "bathroom").message(paused: false)
+        XCTAssertEqual(signedOut["roomId"] as? String, "kitchen", "The signed-out preview stays in the kitchen.")
     }
 
     func testOnlyKnownStatusMessagesAreAccepted() throws {

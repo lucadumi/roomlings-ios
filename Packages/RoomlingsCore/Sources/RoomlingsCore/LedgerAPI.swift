@@ -41,6 +41,7 @@ enum LedgerChange: Sendable {
     case record(ExpenseDraft)
     case checkout(ExpenseDraft, UUID, [ShoppingSelection])
     case remove(UUID)
+    case removeBillPayment(UUID)
     case settle(from: UUID, to: UUID, amount: Int64)
     case removeSettlement(UUID)
 
@@ -48,7 +49,7 @@ enum LedgerChange: Sendable {
         switch self {
         case .record: .recordExpense
         case .checkout: .checkoutShopping
-        case .remove(let id): .removeExpense(id)
+        case .remove(let id), .removeBillPayment(let id): .removeExpense(id)
         case .settle: .recordSettlement
         case .removeSettlement(let id): .removeSettlement(id)
         }
@@ -74,7 +75,7 @@ enum LedgerChange: Sendable {
                 .object(["id": .string($0.id.uuidString.lowercased()), "version": .integer($0.version)])
             })
             return fields
-        case .remove:
+        case .remove, .removeBillPayment:
             return [:]
         case .settle(let from, let to, let amount):
             guard from != to, HouseholdValidation.uuid(from), HouseholdValidation.uuid(to) else {
@@ -111,6 +112,12 @@ enum LedgerChange: Sendable {
         case .remove(let id):
             guard let previous = original.expenses.first(where: { $0.id == id }),
                   original.canRemove(previous, memberID: memberID),
+                  unchangedList(result, from: original),
+                  result.settlements == original.settlements else { return false }
+            return result.expenses == original.expenses.filter { $0.id != id }
+        case .removeBillPayment(let id):
+            guard let previous = original.expenses.first(where: { $0.id == id }),
+                  original.canUndoBillPayment(previous, memberID: memberID),
                   unchangedList(result, from: original),
                   result.settlements == original.settlements else { return false }
             return result.expenses == original.expenses.filter { $0.id != id }

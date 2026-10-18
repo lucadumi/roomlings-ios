@@ -3,18 +3,20 @@
 ## Household and room
 
 Sign in or recover access, then create or join a household to open its saved kitchen.
+**Rooms** in the header switches between the shared kitchen, bathroom and living room.
 The room adapts to either orientation. Zoom includes object focus; **Reset room view** returns to 100%.
 
 | Control | What it does |
 | --- | --- |
-| **Chores** or an object's **+** marker | View, add, edit, complete and undo tasks with shared schedules and rotations. |
+| **Chores** or an object's **+** marker | View, add, edit, complete and undo tasks with shared schedules and rotations. Chores open on the room you are viewing. |
 | **Shopping** | Add, edit, claim and pick up items. Record a paid receipt to split its cost in the shared ledger. Picking up an item alone creates no debt. |
-| **Money** | View receipts, balances and repayments. Roomlings tracks money; it never moves it. |
+| **Money** | View receipts, balances and repayments. **Bills** schedules monthly bills and records or undoes their payments. Roomlings tracks money; it never moves it. |
 | Household name or avatar | Open **Account**. |
 
 Use the pencil or archive action beside **Mark done** to manage a chore.
 **Archived** restores saved schedules; **History > Schedule again** reschedules a completed one-off without changing its completion history.
 Stored-object chores must wait for their object to return before editing or restoring. Archiving keeps history and does not free a chore slot.
+An object gets dirty when one of its chores is overdue: light crumbs after 1 day, more mess after 3 and filthy after 7. Completing the chore cleans it at once. Area markers show how many chores are due.
 
 ## Account
 

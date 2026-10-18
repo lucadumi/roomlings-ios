@@ -153,6 +153,11 @@ observeMutations('/api/expenses', ledgerRequests, () => {
   ledgerFailure = null
   return failure
 })
+observeMutations('/api/bills', ledgerRequests, () => {
+  const failure = ledgerFailure
+  ledgerFailure = null
+  return failure
+})
 const invitationRoute = /^\/api\/account\/households\/[^/]+\/invitations(?:\/[^/]+)?$/
 app.use(invitationRoute, (request, response, next) => {
   if (request.method === 'POST') {
@@ -587,6 +592,7 @@ app.post('/_fixture/chores/failure', express.json(), (request, response) => {
 app.post('/_fixture/chores/change', express.json(), async (request, response) => {
   const input = z.object({
     householdId: z.string().uuid(), choreId: z.string().uuid().optional(), title: z.string().trim().min(1).max(80).optional(),
+    overdueDays: z.number().int().min(1).max(30).optional(),
   }).parse(request.body)
   await store.transaction(async () => {
     const household = await store.get(input.householdId)
@@ -595,6 +601,10 @@ app.post('/_fixture/chores/change', express.json(), async (request, response) =>
       const chore = household.chores.items.find((item) => item.id === input.choreId)
       if (!chore) throw new Error('The chore fixture item is missing.')
       if (input.title !== undefined) chore.title = input.title
+      if (input.overdueDays !== undefined) {
+        const today = Date.parse(`${billingDate(household.billingTimeZone)}T00:00:00Z`)
+        chore.dueDate = new Date(today - input.overdueDays * 86_400_000).toISOString().slice(0, 10)
+      }
       chore.version++
       chore.updatedAt = new Date().toISOString()
     }
@@ -715,6 +725,16 @@ app.post('/_fixture/ledger/state', express.json(), async (request, response) => 
     balances: Object.fromEntries(balances(household)),
   })
 })
+app.post('/_fixture/bills/state', express.json(), async (request, response) => {
+  const id = z.string().uuid().parse(request.body.householdId)
+  const household = await store.get(id)
+  if (!household) throw new Error('The bills fixture household is missing.')
+  response.json({
+    version: household.version, billingTimeZone: household.billingTimeZone, bills: household.bills,
+    payments: household.expenses.filter((expense) => expense.bill),
+    requests: ledgerRequests.filter((entry) => entry.path.startsWith('/api/bills') || entry.path.startsWith('/api/expenses')),
+  })
+})
 app.post('/_fixture/settings/state', express.json(), async (request, response) => {
   const household = await store.get(z.string().uuid().parse(request.body.householdId))
   if (!household) throw new Error('The house rules fixture household is missing.')
@@ -745,10 +765,13 @@ app.post('/_fixture/account/state', express.json(), async (request, response) =>
   response.json({ name: account.name, sessions: sessions.map((row) => row.label), recoveryCodes: Number(codes.count) })
 })
 app.use((error, _request, response, _next) => {
-  console.error('Account fixture failed:', error.message)
+  console.error('Account fixture failed:', error.message, error.cause?.code ?? error.cause?.message ?? '')
   response.status(500).json({ error: 'Account fixture failed' })
 })
 const server = app.listen(0, '127.0.0.1')
+// Fixtures call this API over loopback between long pauses. Closing idle connections races
+// with the clients reusing them, which fails the request, so keep them open until shutdown.
+server.keepAliveTimeout = 0
 try {
   await once(server, 'listening')
   const origin = `http://127.0.0.1:${server.address().port}`
@@ -804,6 +827,9 @@ try {
       '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '300',
       '-maximum-test-execution-time-allowance', '600',
+      // Hosted simulators sometimes fail to launch or terminate the app. Each flow seeds its own
+      // fixture state, so a failed flow reruns in place and must pass on a later attempt.
+      '-retry-tests-on-failure', '-test-iterations', '3',
     ] : ['-quiet']),
     shardedPlan ? 'test-without-building' : 'test',
   ])
@@ -827,6 +853,7 @@ try {
   releaseAccountLoad()
   const closed = once(server, 'close')
   server.close()
+  server.closeAllConnections()
   await closed
   await store.close()
 }

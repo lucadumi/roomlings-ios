@@ -65,7 +65,10 @@ public struct ExpenseDraft: Sendable, Equatable {
 
     /// Mirrors `splitAmount` in the web project's `shared/domain.ts`. The server stays
     /// authoritative; this only previews the same whole-cent division before saving.
-    public var shares: [UUID: Int64] {
+    public var shares: [UUID: Int64] { Self.shares(of: amount, among: participants) }
+
+    public static func shares(of amount: Int64, among participants: [UUID]) -> [UUID: Int64] {
+        guard !participants.isEmpty else { return [:] }
         let ordered = participants.sorted { $0.uuidString.lowercased() < $1.uuidString.lowercased() }
         let count = Int64(ordered.count)
         let base = amount / count
@@ -127,15 +130,7 @@ public struct HouseholdExpense: Sendable, Equatable, Identifiable {
     }
 
     /// The same whole-cent division the server applies when it computes balances.
-    public var shares: [UUID: Int64] {
-        let ordered = participants.sorted { $0.uuidString.lowercased() < $1.uuidString.lowercased() }
-        let count = Int64(ordered.count)
-        let base = amount / count
-        let remainder = amount % count
-        return Dictionary(uniqueKeysWithValues: ordered.enumerated().map { index, member in
-            (member, base + (Int64(index) < remainder ? 1 : 0))
-        })
-    }
+    public var shares: [UUID: Int64] { ExpenseDraft.shares(of: amount, among: participants) }
 }
 
 public struct HouseholdSettlement: Sendable, Equatable, Identifiable {
@@ -296,6 +291,12 @@ public struct HouseholdLedger: Sendable, Equatable {
     /// plain expense can be removed from here.
     public func canRemove(_ expense: HouseholdExpense, memberID: UUID) -> Bool {
         expenses.contains(expense) && !expense.isBillPayment && expense.shoppingRunID == nil
+            && members.contains { $0.id == memberID && !$0.inactive }
+    }
+
+    /// Bill payments are undone from the bills board, which removes only the expense record.
+    public func canUndoBillPayment(_ expense: HouseholdExpense, memberID: UUID) -> Bool {
+        expenses.contains(expense) && expense.isBillPayment
             && members.contains { $0.id == memberID && !$0.inactive }
     }
 }

@@ -372,7 +372,9 @@ final class AccountHeaderTests: XCTestCase {
         XCTAssertEqual(narrow.width, 320, accuracy: 0.5)
         XCTAssertEqual(wide.width, 1024, accuracy: 0.5)
         XCTAssertGreaterThanOrEqual(narrow.height, 126)
-        XCTAssertLessThanOrEqual(wide.height, 80)
+        // One plate row, plus the room selector below it once a household is open.
+        XCTAssertLessThanOrEqual(wide.height, 140)
+        XCTAssertGreaterThan(narrow.height, wide.height)
         for width in [CGFloat(320), 402, 550, 834, 874] {
             let accessible = headerSize(model: model, width: width, dynamicType: .accessibility5)
             XCTAssertEqual(accessible.width, width, accuracy: 0.5)
@@ -430,7 +432,7 @@ final class AccountHeaderTests: XCTestCase {
     }
 
     private func headerSize(model: AccountModel, width: CGFloat, dynamicType: DynamicTypeSize = .large) -> CGSize {
-        let controller = UIHostingController(rootView: RoomAccountHeader(accounts: model, openAccount: {})
+        let controller = UIHostingController(rootView: RoomAccountHeader(accounts: model, roomID: RoomVisualState.defaultRoomID, roomsOpen: .constant(false), openAccount: {})
             .environment(\.dynamicTypeSize, dynamicType)
             .frame(width: width))
         return controller.sizeThatFits(in: CGSize(width: width, height: 2000))

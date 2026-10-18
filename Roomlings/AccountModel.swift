@@ -813,6 +813,12 @@ final class AccountModel {
         }
     }
 
+    func removeBillPayment(_ expense: HouseholdExpense, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        await saveLedger("Bill payment record removed.") {
+            try await $0.removeBillPayment(id: expense.id, householdID: householdID, version: version, mutationID: mutationID)
+        }
+    }
+
     private func saveLedger(_ notice: String, operation: @Sendable (AccountSession) async throws -> AccountState) async -> Bool {
         let saved = await perform(.ledger, operation: operation)
         if saved { self.notice = notice }
