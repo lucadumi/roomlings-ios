@@ -5,13 +5,14 @@ public enum ExpenseCategory: String, Sendable, Equatable, CaseIterable, Identifi
 
     public var id: String { rawValue }
 
+    /// The web's `categoryLabels` in `shared/domain.ts`; the renderer tests compare them.
     public var label: String {
         switch self {
-        case .produce: "Produce"
-        case .dairy: "Dairy"
+        case .produce: "Fruit & veg"
+        case .dairy: "Dairy & eggs"
         case .pantry: "Pantry"
         case .drinks: "Drinks"
-        case .other: "Other"
+        case .other: "Other groceries"
         }
     }
 }
