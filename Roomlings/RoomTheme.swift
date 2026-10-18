@@ -49,6 +49,8 @@ enum RoomTheme {
 struct RoomButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, text }
     var kind = Kind.secondary
+    /// A smaller label for compact text actions, like the web's roster text buttons.
+    var size: CGFloat?
     @Environment(\.isEnabled) private var enabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -60,7 +62,7 @@ struct RoomButtonStyle: ButtonStyle {
         // Labels stay on one line at standard sizes; accessibility sizes may wrap rather than truncate.
         let singleLine = !dynamicTypeSize.isAccessibilitySize
         configuration.label
-            .font(RoomTheme.body().weight(.semibold))
+            .font((size.map { RoomTheme.body($0) } ?? RoomTheme.body()).weight(.semibold))
             .lineLimit(singleLine ? 1 : nil)
             .minimumScaleFactor(singleLine ? 0.8 : 1)
             .foregroundStyle(foreground)

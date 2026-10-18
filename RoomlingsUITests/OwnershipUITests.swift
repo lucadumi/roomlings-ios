@@ -75,8 +75,8 @@ extension AccountUITests {
         if app.buttons["Cancel"].exists {
             try tap(app.buttons["Cancel"], in: app)
         } else {
-            // Native popovers omit the cancel action and dismiss on an outside tap.
-            app.otherElements["household-members"].staticTexts[home.name]
+            // Native popovers omit the cancel action and dismiss on an outside tap, below the anchored row.
+            app.otherElements["household-members"].staticTexts["Leave this household"]
                 .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
         let dismissed = XCTNSPredicateExpectation(
