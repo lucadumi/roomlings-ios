@@ -19,9 +19,11 @@ struct RoomPreviewScreen: View {
     @State private var roomID = RoomVisualState.defaultRoomID
     @State private var roomsOpen = false
     @State private var roomEntryFrame = CGRect.zero
+    /// Chores opened from a notification start on that chore's room with My turn only.
+    @State private var choreFocus: (roomID: String, mine: Bool)?
 
     private enum Sheet: String, Identifiable {
-        case account, chores, shopping, money
+        case account, chores, shopping, money, notifications
         var id: String { rawValue }
     }
 
@@ -81,7 +83,7 @@ struct RoomPreviewScreen: View {
                 }
                 roomFailure
                 RoomAccountHeader(accounts: accounts, roomID: roomID, roomsOpen: $roomsOpen,
-                                  onRoomEntryFrame: { roomEntryFrame = $0 }) {
+                                  onRoomEntryFrame: { roomEntryFrame = $0 }, openNotifications: openNotifications) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
@@ -116,9 +118,12 @@ struct RoomPreviewScreen: View {
         .sheet(item: $presentedSheet, onDismiss: presentPendingContent) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
-            case .chores: ChoresSheet(model: accounts, object: choreObject, roomID: roomID)
+            case .chores:
+                ChoresSheet(model: accounts, object: choreObject, roomID: choreFocus?.roomID ?? roomID,
+                            mine: choreFocus?.mine ?? false)
             case .shopping: ShoppingSheet(model: accounts)
             case .money: MoneySheet(model: accounts, destination: moneyDestination)
+            case .notifications: NotificationsSheet(model: accounts, onOpen: openInboxItem)
             }
         }
         .task {
@@ -137,6 +142,7 @@ struct RoomPreviewScreen: View {
                 presentedSheet = .account
             }
             presentPendingContent()
+            await accounts.loadInbox()
             await notifications.synchronize()
         }
         .onOpenURL(perform: receiveInvitation)
@@ -144,7 +150,11 @@ struct RoomPreviewScreen: View {
             if !busy {
                 notifications.attach(to: accounts)
                 presentPendingContent()
-                Task { await notifications.synchronize() }
+                Task {
+                    // The bell's count needs this household's read state once the account settles.
+                    if accounts.inboxRead == nil { await accounts.loadInbox() }
+                    await notifications.synchronize()
+                }
             }
         }
         .onChange(of: accounts.room.householdID) { _, householdID in
@@ -186,6 +196,8 @@ struct RoomPreviewScreen: View {
                 Task {
                     await accounts.refresh()
                     notifications.attach(to: accounts)
+                    // Another device may have read notifications while this one was away.
+                    await accounts.loadInbox()
                     await notifications.synchronize()
                 }
             }
@@ -250,6 +262,7 @@ struct RoomPreviewScreen: View {
                     return
                 }
                 choreObject = object
+                choreFocus = nil
                 presentedSheet = .chores
             case .expense(let id):
                 guard accounts.ledger?.expenses.contains(where: { $0.id == id }) == true else {
@@ -322,7 +335,45 @@ struct RoomPreviewScreen: View {
             if !accounts.busy { accounts.clearFeedback() }
             sheetHouseholdID = householdID
             choreObject = object
+            choreFocus = nil
             presentedSheet = .chores
+        }
+    }
+
+    private func openNotifications() {
+        guard accounts.canUseAccount, let householdID = accounts.state?.session?.household.id else {
+            accounts.message = "Open your current household before reading its notifications."
+            presentedSheet = .account
+            return
+        }
+        if presentedSheet == nil {
+            if !accounts.busy { accounts.clearFeedback() }
+            sheetHouseholdID = householdID
+            presentedSheet = .notifications
+        }
+    }
+
+    /// Opens what a notification is about, as the web inbox does, and marks it read.
+    private func openInboxItem(_ item: InboxItem) {
+        if accounts.inboxRead?.isUnread(item) == true {
+            Task { await accounts.markInboxRead(InboxRead(through: nil, ids: [item.id])) }
+        }
+        accounts.clearFeedback()
+        switch item.target {
+        case .chore(let id):
+            let chore = accounts.chores?.items.first { $0.id == id }
+            choreObject = nil
+            choreFocus = (roomID: chore?.roomID ?? "home", mine: true)
+            presentedSheet = .chores
+        case .receipt(let id):
+            moneyDestination = .receipt(id)
+            presentedSheet = .money
+        case .bills(let month):
+            moneyDestination = .bills(month: month)
+            presentedSheet = .money
+        case .repayment(let id):
+            moneyDestination = .repayment(id)
+            presentedSheet = .money
         }
     }
 
@@ -356,13 +407,20 @@ struct RoomAccountHeader: View {
     let roomID: String
     @Binding var roomsOpen: Bool
     var onRoomEntryFrame: (CGRect) -> Void = { _ in }
+    let openNotifications: () -> Void
     let openAccount: () -> Void
 
     var body: some View {
         // The room selector sits below the header, inside the measured area the room keeps clear.
         VStack(alignment: .leading, spacing: 8) {
             plate
-            roomEntry
+            if accounts.room.householdID != nil {
+                HStack(alignment: .top, spacing: 8) {
+                    roomEntry
+                    Spacer(minLength: 0)
+                    notificationsEntry
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -464,6 +522,39 @@ struct RoomAccountHeader: View {
             .accessibilityAddTraits(roomsOpen ? .isSelected : [])
             .accessibilityIdentifier("room-entry")
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.coordinateSpace)) } action: { onRoomEntryFrame($0) }
+        }
+    }
+
+    /// The household inbox, beside Rooms as the web keeps it with the room tools.
+    @ViewBuilder private var notificationsEntry: some View {
+        if accounts.canUseAccount {
+            let unread = accounts.inboxUnreadCount
+            Button(action: openNotifications) {
+                Image(systemName: "bell")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(RoomTheme.ink)
+                    .frame(width: 44, height: 44)
+                    .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                    .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                    .overlay(alignment: .topTrailing) {
+                        if unread > 0 {
+                            Text(unread > 9 ? "9+" : "\(unread)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(RoomTheme.paper)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 18, minHeight: 18)
+                                .background(RoomTheme.tomato, in: Capsule())
+                                .overlay(Capsule().stroke(RoomTheme.paper))
+                                .offset(x: 5, y: -5)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(accounts.busy)
+            .accessibilityLabel(unread > 0 ? "Notifications, \(unread) unread" : "Notifications")
+            .accessibilityIdentifier("notifications-entry")
         }
     }
 

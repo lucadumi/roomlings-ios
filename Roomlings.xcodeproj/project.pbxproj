@@ -59,6 +59,7 @@
 		A00000000000000000000032 /* MembershipUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* MembershipUITests.swift */; };
 		A00000000000000000000033 /* ChoreManagementUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* ChoreManagementUITests.swift */; };
 		A00000000000000000000034 /* BillsBoard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003D /* BillsBoard.swift */; };
+		A0000000000000000000003D /* NotificationsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000046 /* NotificationsSheet.swift */; };
 		A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003E /* AccountHouseRulesSection.swift */; };
 		A0000000000000000000003A /* AccountManagementSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000043 /* AccountManagementSections.swift */; };
 		A00000000000000000000038 /* RoomStyleCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000041 /* RoomStyleCatalog.swift */; };
@@ -141,6 +142,7 @@
 		B0000000000000000000003B /* RoomlingsLinks.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RoomlingsLinks.entitlements; sourceTree = "<group>"; };
 		B0000000000000000000003C /* ChoreManagementUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoreManagementUITests.swift; sourceTree = "<group>"; };
 		B0000000000000000000003D /* BillsBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillsBoard.swift; sourceTree = "<group>"; };
+		B00000000000000000000046 /* NotificationsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsSheet.swift; sourceTree = "<group>"; };
 		B0000000000000000000003E /* AccountHouseRulesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHouseRulesSection.swift; sourceTree = "<group>"; };
 		B00000000000000000000043 /* AccountManagementSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountManagementSections.swift; sourceTree = "<group>"; };
 		B00000000000000000000041 /* RoomStyleCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStyleCatalog.swift; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 				B0000000000000000000001F /* Money.swift */,
 				B00000000000000000000020 /* MoneySheet.swift */,
 				B0000000000000000000003D /* BillsBoard.swift */,
+				B00000000000000000000046 /* NotificationsSheet.swift */,
 				B00000000000000000000022 /* AccountInvitationsSection.swift */,
 				B00000000000000000000031 /* AccountHouseholdMembersSection.swift */,
 				B0000000000000000000003E /* AccountHouseRulesSection.swift */,
@@ -447,6 +450,7 @@
 				A00000000000000000000018 /* Money.swift in Sources */,
 				A00000000000000000000019 /* MoneySheet.swift in Sources */,
 				A00000000000000000000034 /* BillsBoard.swift in Sources */,
+				A0000000000000000000003D /* NotificationsSheet.swift in Sources */,
 				A0000000000000000000001B /* AccountInvitationsSection.swift in Sources */,
 				A00000000000000000000029 /* AccountHouseholdMembersSection.swift in Sources */,
 				A00000000000000000000035 /* AccountHouseRulesSection.swift in Sources */,

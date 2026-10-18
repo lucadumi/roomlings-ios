@@ -27,6 +27,11 @@ final class AccountModel {
     private(set) var ledgerSaveFailure = HouseholdSaveFailure.none
     private(set) var bills: HouseholdBills?
     private(set) var billsFailure: String?
+    /// Your private read state for this household's notifications, kept by the server.
+    private(set) var inboxRead: InboxReadState?
+    private(set) var inboxFailure: String?
+    /// The complete ledger as the web receipt book exports it, or nil when it cannot be built.
+    private(set) var ledgerExport: LedgerExportFile?
     private(set) var houseRules: HouseholdSettings?
     private(set) var houseRulesFailure: String?
     private(set) var houseRulesSaveFailure = HouseholdSaveFailure.none
@@ -396,6 +401,55 @@ final class AccountModel {
             message = "The invitation could not be shared. Try sharing the link again."
         } else if completed, let context {
             analytics?.record(.inviteShared, context: context)
+        }
+    }
+
+    /// Derived from the saved household exactly as the web inbox is, so it never disagrees with
+    /// the ledger or chores.
+    var inboxItems: [InboxItem] {
+        guard canUseAccount, let chores, let ledger, let calendar = choreCalendar,
+              let memberID = state?.session?.memberID, let rooms = choreCatalog?.rooms else { return [] }
+        return HouseholdInbox.items(
+            chores: chores, ledger: ledger, bills: bills, memberID: memberID, today: calendar.day(),
+            roomNames: Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.name) })
+        )
+    }
+
+    var inboxUnreadCount: Int {
+        guard let inboxRead else { return 0 }
+        return inboxItems.filter(inboxRead.isUnread).count
+    }
+
+    func loadInbox() async {
+        guard let client, canUseAccount, let householdID = state?.session?.household.id else { return }
+        do {
+            let read = try await client.loadInbox(householdID: householdID)
+            guard state?.session?.household.id == householdID else { return }
+            inboxRead = read
+            inboxFailure = nil
+        } catch AccountError.householdSelectionChanged, AccountError.accountStateRequired {
+            // The account changed while loading; its new state loads the right read state.
+        } catch {
+            guard state?.session?.household.id == householdID else { return }
+            inboxFailure = "Could not load notifications. Try again."
+        }
+    }
+
+    /// Shows the read state at once and restores it if the server does not confirm the change.
+    @discardableResult
+    func markInboxRead(_ read: InboxRead) async -> Bool {
+        guard let client, canUseAccount, !busy, let householdID = state?.session?.household.id,
+              let previous = inboxRead else { return false }
+        inboxRead = previous.merging(read)
+        do {
+            let saved = try await client.markInboxRead(read, householdID: householdID)
+            if state?.session?.household.id == householdID { inboxRead = saved }
+            return true
+        } catch {
+            guard state?.session?.household.id == householdID else { return false }
+            inboxRead = previous
+            message = "Could not mark notifications as read. Try again."
+            return false
         }
     }
 
@@ -934,6 +988,11 @@ final class AccountModel {
             recoveryNeedsRefresh = false
         }
         if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
+            || next?.session?.memberID != state?.session?.memberID || next?.isSignedIn != true {
+            inboxRead = nil
+            inboxFailure = nil
+        }
+        if next?.account?.id != state?.account?.id || next?.session?.household.id != state?.session?.household.id
             || next?.isSignedIn != true || deletionBlocked || next?.deletionPending == true || membershipNeedsRefresh {
             invitations = nil
             invitationNeedsRefresh = false
@@ -956,6 +1015,7 @@ final class AccountModel {
         ledgerFailure = nil
         bills = nil
         billsFailure = nil
+        ledgerExport = nil
         houseRules = nil
         houseRulesFailure = nil
         roomStyle = nil
@@ -1013,6 +1073,11 @@ final class AccountModel {
             choreCalendar = calendar
         } catch {
             choresFailure = "Your chores could not be displayed. Refresh chores. If this continues, rebuild the app with the shared web source."
+        }
+        if let rooms = choreCatalog?.rooms {
+            // The receipt book names restocked items' rooms as the web export does.
+            let names = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.name) })
+            ledgerExport = try? LedgerExportFile(text: LedgerExport.csv(household: household, roomNames: names))
         }
         do {
             room = try RoomVisualState(household: household)
