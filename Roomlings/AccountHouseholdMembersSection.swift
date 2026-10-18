@@ -57,75 +57,57 @@ struct AccountHouseholdMembersSection: View {
     }
 
     var body: some View {
-        AccountSection {
+        // Mirrors the web household access view: a plain roster with text actions (`src/Accounts.tsx`).
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Text(model.invitations?.household.name ?? "Household members")
+                    .font(RoomTheme.heading(21))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button { Task { await model.refresh(includeInvitations: true) } } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(RoomTheme.ink)
+                        .frame(width: 44, height: 44)
+                        .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                        .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Refresh household members")
+                .accessibilityIdentifier("refresh-household-members")
+            }
             if let access = model.invitations {
-                Text(access.household.name).font(RoomTheme.heading(20))
-                Text("The owner manages household membership and invitations. All active roommates can edit the shared ledger.")
-                    .foregroundStyle(RoomTheme.muted)
+                hint("You are \(roleDescription(access.role)). Owners and admins can configure rooms and manage admin rights. Only the owner manages invitations, removes roommates or transfers ownership. All active roommates can edit the shared ledger. Former roommates remain in financial history.")
                 if model.invitationNeedsRefresh {
                     RoomFeedback("Refresh household members before changing ownership or access.")
                 }
-                ForEach(access.members) { member in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(member.name).font(RoomTheme.body().weight(.semibold))
-                        Text(status(member)).font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                        if access.ownershipCandidates.contains(where: { $0.id == member.id }) {
-                            Button("Make owner") {
-                                present(.transfer(member), access: access)
-                            }
-                            .accessibilityLabel("Make \(member.name) owner")
-                            .accessibilityIdentifier("transfer-ownership-\(member.id.uuidString.lowercased())")
-                            .disabled(model.invitationNeedsRefresh || !model.canUseAccount)
-                        }
-                        if access.role != .member, member.active, member.role != .owner {
-                            let grant = member.role == .member
-                            Button(grant ? "Make admin" : "Remove admin rights") {
-                                present(.admin(member, grant), access: access)
-                            }
-                            .accessibilityLabel(grant ? "Make \(member.name) an admin" : "Remove admin rights from \(member.name)")
-                            .accessibilityIdentifier("room-admin-\(member.id.uuidString.lowercased())")
-                            .disabled(model.invitationNeedsRefresh || !model.canUseAccount)
-                        }
-                        if access.removalCandidates.contains(where: { $0.id == member.id }) {
-                            Button("Remove access", role: .destructive) {
-                                present(.remove(member), access: access)
-                            }
-                            .accessibilityLabel("Remove access for \(member.name)")
-                            .accessibilityIdentifier("remove-member-\(member.id.uuidString.lowercased())")
-                            .disabled(model.invitationNeedsRefresh || !model.canUseAccount)
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("household-member-\(member.id.uuidString.lowercased())")
+                VStack(spacing: 0) {
+                    ForEach(access.members) { member in row(member, access: access) }
                 }
-                Text(access.role == .member
-                     ? "Owners and admins can change the room and its objects. Ask the owner or an admin if you need room editing access."
-                     : "Owners and admins can change the room and its objects, and grant or remove admin rights. Everyone can use shopping, chores and the ledger.")
-                    .foregroundStyle(RoomTheme.muted)
                 if access.role != .owner {
-                    Text("Only the current owner can transfer ownership.").foregroundStyle(RoomTheme.muted)
+                    hint("Only the current owner can transfer ownership.")
                 } else if access.ownershipCandidates.isEmpty {
-                    Text("Another active roommate must join with a Roomlings account before they can become owner.")
-                        .foregroundStyle(RoomTheme.muted)
+                    hint("Another active roommate must join with a Roomlings account before they can become owner.")
                 }
-                AccountSection("Leave household") {
-                    Text("Leaving removes access, not debts. Review future bill participants with your roommates before leaving.")
-                        .foregroundStyle(RoomTheme.muted)
+                VStack(alignment: .leading, spacing: 8) {
+                    Rectangle().fill(RoomTheme.border).frame(height: 1).padding(.bottom, 12)
+                    Text("Leave this household").font(RoomTheme.heading(21))
+                    hint("Leaving removes access, not debts. Existing expenses, monthly bill schedules and repayments stay in the shared ledger. Review future bill participants with your roommates before leaving.")
                     if !access.canLeave {
-                        Text("Transfer ownership to another active account-linked roommate before leaving this household.")
-                            .foregroundStyle(RoomTheme.muted)
+                        hint("Transfer ownership to another active account-linked roommate before leaving this household.")
                     }
                     Button("Leave household", role: .destructive) { present(.leave(access.household.name), access: access) }
+                        .buttonStyle(RoomButtonStyle(kind: .text))
                         .accessibilityLabel("Leave \(access.household.name)")
                         .accessibilityIdentifier("leave-household")
                         .disabled(!access.canLeave || model.invitationNeedsRefresh || !model.canUseAccount)
                 }
+                .padding(.top, 12)
             } else {
-                Text("Load the current household members before managing ownership.").foregroundStyle(RoomTheme.muted)
+                hint("Load the current household members before managing ownership.")
             }
-            Button("Refresh household members") { Task { await model.refresh(includeInvitations: true) } }
-                .accessibilityIdentifier("refresh-household-members")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(model.busy)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("household-members")
@@ -180,6 +162,70 @@ struct AccountHouseholdMembersSection: View {
         confirming = true
     }
 
+    private func hint(_ text: String) -> some View {
+        Text(text).font(RoomTheme.body(13)).foregroundStyle(RoomTheme.muted)
+    }
+
+    private func roleDescription(_ role: AccountRole) -> String {
+        switch role {
+        case .owner: "the owner"
+        case .admin: "an admin"
+        case .member: "a member"
+        }
+    }
+
+    /// One roster row: the name and status, with any owner or admin actions as text buttons beside them.
+    private func row(_ member: HouseholdAccessMember, access: HouseholdInvitationAccess) -> some View {
+        let actions = WrappingRow(spacing: 16) { actionButtons(member, access: access) }
+            .buttonStyle(RoomButtonStyle(kind: .text, size: 14))
+        let details = VStack(alignment: .leading, spacing: 4) {
+            Text(member.name).font(RoomTheme.body(14).weight(.bold)).foregroundStyle(RoomTheme.leaf)
+            Text(status(member)).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
+        }
+        return VStack(spacing: 0) {
+            Rectangle().fill(RoomTheme.border).frame(height: 1)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    details.frame(maxWidth: .infinity, alignment: .leading)
+                    actions.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    details
+                    actions
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 12)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("household-member-\(member.id.uuidString.lowercased())")
+    }
+
+    @ViewBuilder private func actionButtons(_ member: HouseholdAccessMember, access: HouseholdInvitationAccess) -> some View {
+        let blocked = model.invitationNeedsRefresh || !model.canUseAccount
+        Group {
+            if access.ownershipCandidates.contains(where: { $0.id == member.id }) {
+                Button("Make owner") { present(.transfer(member), access: access) }
+                    .accessibilityLabel("Make \(member.name) owner")
+                    .accessibilityIdentifier("transfer-ownership-\(member.id.uuidString.lowercased())")
+                    .disabled(blocked)
+            }
+            if access.role != .member, member.active, member.role != .owner {
+                let grant = member.role == .member
+                Button(grant ? "Make admin" : "Remove admin rights") { present(.admin(member, grant), access: access) }
+                    .accessibilityLabel(grant ? "Make \(member.name) an admin" : "Remove admin rights from \(member.name)")
+                    .accessibilityIdentifier("room-admin-\(member.id.uuidString.lowercased())")
+                    .disabled(blocked)
+            }
+            if access.removalCandidates.contains(where: { $0.id == member.id }) {
+                Button("Remove access", role: .destructive) { present(.remove(member), access: access) }
+                    .accessibilityLabel("Remove access for \(member.name)")
+                    .accessibilityIdentifier("remove-member-\(member.id.uuidString.lowercased())")
+                    .disabled(blocked)
+            }
+        }
+    }
+
     private func status(_ member: HouseholdAccessMember) -> String {
         guard member.active else { return "Former roommate" }
         let role: String
@@ -189,5 +235,53 @@ struct AccountHouseholdMembersSection: View {
         case .member: role = "Member"
         }
         return "\(role); \(member.linked ? "account linked" : "browser access only")"
+    }
+}
+
+/// Lays its views out in a row and wraps them onto new lines when the row is full, like the web's
+/// wrapping text actions.
+struct WrappingRow: Layout {
+    var spacing: CGFloat = 16
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = lines(for: subviews, width: proposal.width)
+        let width = lines.map { line in line.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(0, line.count - 1)) }.max() ?? 0
+        return CGSize(width: proposal.width.map { min($0, width) } ?? width,
+                      height: lines.reduce(0) { $0 + ($1.map(\.height).max() ?? 0) })
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var index = 0
+        var y = bounds.minY
+        for line in lines(for: subviews, width: bounds.width) {
+            var x = bounds.minX
+            let height = line.map(\.height).max() ?? 0
+            for size in line {
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+                index += 1
+            }
+            y += height
+        }
+    }
+
+    private func lines(for subviews: Subviews, width: CGFloat?) -> [[CGSize]] {
+        var lines: [[CGSize]] = []
+        var current: [CGSize] = []
+        var used: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let needed = current.isEmpty ? size.width : used + spacing + size.width
+            if let width, !current.isEmpty, needed > width {
+                lines.append(current)
+                current = [size]
+                used = size.width
+            } else {
+                current.append(size)
+                used = needed
+            }
+        }
+        if !current.isEmpty { lines.append(current) }
+        return lines
     }
 }
