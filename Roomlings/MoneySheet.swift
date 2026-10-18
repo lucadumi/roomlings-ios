@@ -373,7 +373,8 @@ struct MoneySheet: View {
                 onEdit: { model.clearFeedback(); formError = nil; page = .editBill($0) },
                 onPay: { model.clearFeedback(); formError = nil; page = .payBill($0, $1) },
                 onPause: { model.clearFeedback(); formError = nil; page = .pauseBill($0, $1) },
-                onUndo: { model.clearFeedback(); formError = nil; page = .undoBillPayment($0) }
+                onUndo: { model.clearFeedback(); formError = nil; page = .undoBillPayment($0) },
+                export: model.ledgerExport
             )
         } else {
             unavailable("Monthly bills are unavailable. Refresh money and try again.")

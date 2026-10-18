@@ -10,7 +10,7 @@ The room adapts to either orientation. Zoom includes object focus; **Reset room 
 | --- | --- |
 | **Chores** or an object's **+** marker | View, add, edit, complete and undo tasks with shared schedules and rotations. Chores open on the room you are viewing. |
 | **Shopping** | Add, edit, claim and pick up items. Record a paid receipt to split its cost in the shared ledger. Picking up an item alone creates no debt. |
-| **Money** | View receipts, balances and repayments. **Bills** schedules monthly bills and records or undoes their payments. Roomlings tracks money; it never moves it. |
+| **Money** | View receipts, balances and repayments. **Bills** schedules monthly bills and records or undoes their payments. **Export ledger** shares the complete ledger as the same CSV file the web exports. Roomlings tracks money; it never moves it. |
 | Bell beside **Rooms** | Your chore turns that are due or overdue, plus expenses, bills and repayments from the last 30 days that involve you. Select one to open it; **Mark all read** clears the count. Read state is yours alone and follows you across devices. |
 | Household name or avatar | Open **Account**. |
 

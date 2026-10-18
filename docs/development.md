@@ -51,7 +51,7 @@ All methods below belong to `AccountUITests`.
 | Notification inbox | `testNotificationsListYourTurnsAndKeepReadStateOnTheServer` |
 | Chore management | `testChoresEditArchiveRestoreAndKeepSharedHistory`, `testChoreEditsPreserveDraftsAndRequireConflictReview`, `testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory` |
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |
-| Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone`, `testBillsFollowTheSharedScheduleAndUndoPaymentsNatively` |
+| Money | `testBalancesMatchTheServerAndRepaymentsCanBeUndone`, `testBillsFollowTheSharedScheduleAndUndoPaymentsNatively`, `testLedgerExportOpensTheShareSheetWithTheReceiptBookFile` |
 | Invitations | `testInvitationsShareJoinAndRejectARevokedLink`, `testInvitationsRequireRefreshAfterALostResponseAndAConflict`, `testWebFirstJoiningRestoresNativelyAndReopeningTheLinkDoesNotDuplicateMembership` |
 | Notifications | `testNotificationMutesPersistAfterRelaunchWithoutPermissionOrDeliveryConfiguration` |
 | Analytics | `testAnalyticsCountsForegroundVisitsButNotSheetRefreshes`, `testAnalyticsLostResponseDoesNotRetryOrHideHouseholdTools` |

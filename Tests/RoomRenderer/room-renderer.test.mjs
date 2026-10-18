@@ -16,7 +16,7 @@ const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 }
 const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
 const { cameraFraming, roomCameraZoom } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
-const { billingDate, roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
+const { billingDate, categoryLabels, roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
 const { roomPresets } = await import(pathToFileURL(join(web, 'src/roomStyles.ts')).href)
 
 test('native error colours are generated from the shared feedback rule', async () => {
@@ -36,6 +36,12 @@ test('native error colours are generated from the shared feedback rule', async (
     assert.match(generated, new RegExp(`static let ${native}: UInt32 = 0x${color.slice(1)}`, 'i'))
   }
   assert.equal(resolveColor(error.get('--feedback-border')), resolveColor(error.get('--feedback-surface')))
+})
+
+test('native receipt categories use the shared labels, as the exported ledger does', async () => {
+  const source = await readFile(join(project, 'Packages/RoomlingsCore/Sources/RoomlingsCore/LedgerModels.swift'), 'utf8')
+  const native = Object.fromEntries([...source.matchAll(/case \.(\w+): "([^"]+)"/g)].map(([, id, label]) => [id, label]))
+  assert.deepEqual(native, categoryLabels)
 })
 
 test('the native room style picker uses every shared style and its own preset colours', async () => {

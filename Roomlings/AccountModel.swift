@@ -30,6 +30,8 @@ final class AccountModel {
     /// Your private read state for this household's notifications, kept by the server.
     private(set) var inboxRead: InboxReadState?
     private(set) var inboxFailure: String?
+    /// The complete ledger as the web receipt book exports it, or nil when it cannot be built.
+    private(set) var ledgerExport: LedgerExportFile?
     private(set) var houseRules: HouseholdSettings?
     private(set) var houseRulesFailure: String?
     private(set) var houseRulesSaveFailure = HouseholdSaveFailure.none
@@ -1013,6 +1015,7 @@ final class AccountModel {
         ledgerFailure = nil
         bills = nil
         billsFailure = nil
+        ledgerExport = nil
         houseRules = nil
         houseRulesFailure = nil
         roomStyle = nil
@@ -1070,6 +1073,11 @@ final class AccountModel {
             choreCalendar = calendar
         } catch {
             choresFailure = "Your chores could not be displayed. Refresh chores. If this continues, rebuild the app with the shared web source."
+        }
+        if let rooms = choreCatalog?.rooms {
+            // The receipt book names restocked items' rooms as the web export does.
+            let names = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.name) })
+            ledgerExport = try? LedgerExportFile(text: LedgerExport.csv(household: household, roomNames: names))
         }
         do {
             room = try RoomVisualState(household: household)
