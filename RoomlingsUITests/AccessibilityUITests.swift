@@ -29,9 +29,17 @@ extension AccountUITests {
         let segmentTitles = Set(app.segmentedControls.buttons.allElementsBoundByIndex.map(\.label))
         let bell = app.buttons["notifications-entry"]
         let bellFrame = bell.exists ? bell.frame.insetBy(dx: -8, dy: -8) : .null
+        let sheet = app.otherElements.matching(NSPredicate(format: "identifier ENDSWITH '-sheet'")).firstMatch
+        let visibleFrame = sheet.exists ? sheet.frame.intersection(app.frame) : app.frame
         var findings: [String] = []
         try app.performAccessibilityAudit(for: .all.subtracting(.dynamicType)) { issue in
-            guard let element = issue.element else { return false }
+            guard let element = issue.element else {
+                // On iPad the room shows beside the centred sheet, dimmed and outside the
+                // accessibility tree while the sheet is modal; its text is audited on the web.
+                if issue.auditType == .elementDetection, sheet.exists { return true }
+                findings.append("\(issue.compactDescription) (type \(issue.auditType.rawValue)) without an element. \(issue.detailedDescription)")
+                return true
+            }
             // The bundled room is the web project's renderer and is audited there.
             if issue.detailedDescription.contains("WebAccessibilityObjectWrapper") { return true }
             // System keyboard and prediction cells, and anything sampled underneath them.
@@ -40,7 +48,7 @@ extension AccountUITests {
             // WCAG 1.4.3 exempts inactive controls from contrast.
             if issue.auditType == .contrast, !element.isEnabled { return true }
             // A control cut off at a sheet's edge cannot be measured.
-            if issue.auditType == .contrast, !element.isHittable || !app.frame.contains(element.frame) { return true }
+            if issue.auditType == .contrast, !element.isHittable || !visibleFrame.contains(element.frame) { return true }
             // The unread badge uses the web's inbox colours and repeats the count the bell's label announces.
             if issue.auditType == .contrast, element.elementType == .staticText, !bellFrame.isNull,
                bellFrame.contains(element.frame) { return true }
