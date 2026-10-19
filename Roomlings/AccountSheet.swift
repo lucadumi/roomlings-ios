@@ -167,8 +167,6 @@ struct AccountSheet: View {
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
         case .householdAdmins:
-            Text("Admins customize the rooms and can give another roommate admin access. Ownership and the shared ledger stay unchanged.")
-                .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             AccountHouseholdMembersSection(model: model, admins: true)
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
@@ -448,7 +446,7 @@ struct AccountSheet: View {
                     }
                 } else {
                     Text("No households yet.")
-                    Text("If your home uses browser-only access, link it to this account on the web first.")
+                    Text("Link a browser-only home on the web first.")
                         .foregroundStyle(RoomTheme.muted)
                 }
                 Button("Create a household") {
@@ -488,7 +486,7 @@ struct AccountSheet: View {
             }
             accountActions
             AccountSection("Account lifecycle") {
-                Text("Before deleting your account, transfer ownership of any household that still has other active roommates. Shared debts and ledger history stay.")
+                Text("Hand over shared households first. Ledger history stays.")
                     .foregroundStyle(RoomTheme.muted)
                 Button("Delete my account", role: .destructive) {
                     model.clearFeedback()
@@ -704,7 +702,7 @@ struct AccountSheet: View {
             .buttonStyle(RoomButtonStyle(kind: .primary))
             .disabled(householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || memberName.isEmpty || budget.isEmpty)
         } footer: {
-            Text("This creates a shared home in the same ledger as the web app. It does not move money.")
+            Text("A shared home for chores, shopping and money.")
         }
     }
 

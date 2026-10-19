@@ -35,7 +35,7 @@ struct AccountInvitationsSection: View {
                         Text("This link will stop accepting new roommates. People who already joined keep their membership.")
                     }
                 } else {
-                    Text("Only the household owner can create or revoke invitations. Ask them to share a link.")
+                    Text("Only the owner can invite people.")
                         .foregroundStyle(RoomTheme.muted)
                 }
             } else {
@@ -59,7 +59,7 @@ struct AccountInvitationsSection: View {
 
     private func ownerInvitations(_ access: HouseholdInvitationAccess, at date: Date) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Invite a flatmate with a seven-day link. They will need to sign in to a Roomlings account.")
+            Text("Invite someone with a seven-day link.")
                 .foregroundStyle(RoomTheme.muted)
             if let error = model.invitationSetupError {
                 RoomFeedback(error)
@@ -82,7 +82,7 @@ struct AccountInvitationsSection: View {
                 }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
                 .accessibilityIdentifier("share-invitation")
-                Text("Share this link now. For privacy, it is not saved on this device or shown again after you close Account.")
+                Text("Share this link now. It won't be shown again.")
                     .font(RoomTheme.body(14))
                     .foregroundStyle(RoomTheme.muted)
             }

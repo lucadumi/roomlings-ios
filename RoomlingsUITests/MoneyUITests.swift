@@ -110,7 +110,7 @@ extension AccountUITests {
         try tap(app.buttons["Open Cedar House"], in: app)
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
         try openMoney(app)
-        XCTAssertTrue(app.staticTexts["Roomlings only tracks what everyone owes. It never moves money between you."]
+        XCTAssertTrue(app.staticTexts["Roomlings tracks who owes what. It never moves money."]
             .waitForExistence(timeout: Wait.control))
         return (app, home)
     }

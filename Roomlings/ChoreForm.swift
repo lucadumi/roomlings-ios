@@ -81,7 +81,7 @@ struct ChoreForm: View {
                     .keyboardType(.numberPad)
             }
             rotationFields
-            Text("One person keeps the assignment. Multiple people rotate in the order above after each completion. Dates use \(calendar.identifier).")
+            Text("Roommates take turns in this order.")
                 .font(RoomTheme.body(14))
                 .foregroundStyle(RoomTheme.muted)
             if let error {

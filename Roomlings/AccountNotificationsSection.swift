@@ -18,7 +18,7 @@ struct AccountNotificationsSection: View {
                     }
                 ))
                 .accessibilityIdentifier("notification-chores")
-                Text("One summary of your assigned due chores at 09:00 in the household's time zone.")
+                Text("A daily summary of your chores at 09:00.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 RoomSwitch("Expense and repayment updates", isOn: Binding(
                     get: { settings.preferences.money },
@@ -29,9 +29,7 @@ struct AccountNotificationsSection: View {
                     }
                 ))
                 .accessibilityIdentifier("notification-money")
-                Text("Sent when another roommate records an expense or repayment. Notification text never includes names or amounts.")
-                    .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-                Text("These household preferences are saved to your membership, including after reinstalling the app.")
+                Text("When a roommate adds an expense or repayment.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 if !settings.pushAvailable {
                     Text("Push delivery is not configured on this server yet.")

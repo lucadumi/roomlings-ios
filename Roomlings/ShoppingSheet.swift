@@ -176,7 +176,7 @@ struct ShoppingSheet: View {
         return VStack(alignment: .leading, spacing: 16) {
             RoomSegmentedPicker("Shopping sections", selection: $section, options: Section.allCases) { $0.rawValue }
                 .accessibilityIdentifier("shopping-sections")
-            Text("Claim what you will buy, then tick it into your basket. Ticking items never creates a debt.")
+            Text("Claim what you'll buy, then tick it off. Ticking never creates a debt.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
             HStack {
                 Text("\(items.count) \(items.count == 1 ? "item" : "items")")
@@ -200,7 +200,7 @@ struct ShoppingSheet: View {
             }
             ForEach(items) { item in itemCard(item, shopping: shopping, memberID: memberID) }
             if section == .basket, !basket.isEmpty {
-                Text("Recording a receipt splits it in the shared ledger and takes these items off the list.")
+                Text("A receipt splits the cost and clears these items.")
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 Button("Record receipt") { openReceipt(basket: basket, memberID: memberID) }
                     .buttonStyle(RoomButtonStyle(kind: .primary))

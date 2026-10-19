@@ -231,7 +231,7 @@ struct MoneySheet: View {
         VStack(alignment: .leading, spacing: 16) {
             RoomSegmentedPicker("Money sections", selection: $section, options: Section.allCases) { $0.rawValue }
                 .accessibilityIdentifier("money-sections")
-            Text("Roomlings only tracks what everyone owes. It never moves money between you.")
+            Text("Roomlings tracks who owes what. It never moves money.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 .accessibilityIdentifier("money-disclaimer")
             switch section {
