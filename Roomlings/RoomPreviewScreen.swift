@@ -23,6 +23,7 @@ struct RoomPreviewScreen: View {
     @State private var choreFocus: (roomID: String, mine: Bool)?
     /// Chores opened from a room object's Add chore start on the add form, with an optional routine.
     @State private var choreAdding: RoomObjectCatalog.Routine??
+    @State private var thumbnails = RoomThumbnails()
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money, notifications, objects
@@ -64,7 +65,7 @@ struct RoomPreviewScreen: View {
                 RoomTheme.paper.ignoresSafeArea(.container)
                 if let roomZoom {
                     RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room.showing(room: roomID),
-                                viewportInsets: insets, roomZoom: roomZoom) { event in
+                                viewportInsets: insets, roomZoom: roomZoom, thumbnails: thumbnails) { event in
                         switch event {
                         case .status(.unavailable):
                             failure = "The shared room renderer could not start. Reload the room to try again."
@@ -127,7 +128,7 @@ struct RoomPreviewScreen: View {
             case .shopping: ShoppingSheet(model: accounts)
             case .money: MoneySheet(model: accounts, destination: moneyDestination)
             case .notifications: NotificationsSheet(model: accounts, onOpen: openInboxItem)
-            case .objects: RoomObjectsSheet(model: accounts, roomID: roomID, onOpen: openObjectRoute)
+            case .objects: RoomObjectsSheet(model: accounts, roomID: roomID, thumbnails: thumbnails, onOpen: openObjectRoute)
             }
         }
         .task {

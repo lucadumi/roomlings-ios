@@ -13,7 +13,11 @@ import type { ChoreGrime } from '@roomlings-web/shared/chores.ts'
 import type { Chore } from '@roomlings-web/shared/domain.ts'
 import type { ChoreArea } from '@roomlings-web/shared/rooms.ts'
 import { choreAreaSchema, roomCatalog, roomIdSchema } from '@roomlings-web/shared/rooms.ts'
-import { componentChoreIsPaused, getRoomComponents, roomComponentIdSchema, roomComponentLimit, roomComponentSchema } from '@roomlings-web/shared/roomComponents.ts'
+import {
+  componentCatalog, componentChoreIsPaused, componentFinishSchema, componentKindSchema, getRoomComponents, roomComponentIdSchema,
+  roomComponentLimit, roomComponentSchema, roomSlotIdSchema,
+} from '@roomlings-web/shared/roomComponents.ts'
+import { renderComponentThumbnail } from '@roomlings-web/src/componentThumbnail.ts'
 import { installRoomTouchControls } from './touchControls.ts'
 import { ScaledChoreRoom, choreRooms } from './choreRooms.tsx'
 import '@fontsource-variable/dm-sans/index.css'
@@ -82,10 +86,19 @@ type NativeMessage = { version: 1; type: 'status'; status: Status }
 
 declare global {
   interface Window {
-    RoomlingsRoom: { receive: (message: unknown) => { accepted: true } }
+    RoomlingsRoom: {
+      receive: (message: unknown) => { accepted: true }
+      thumbnail: (request: unknown) => Promise<string>
+    }
     webkit?: { messageHandlers?: { roomlings?: { postMessage: (message: NativeMessage) => void } } }
   }
 }
+
+const thumbnailSchema = z.object({
+  version: z.literal(1), roomId: roomIdSchema, kind: componentKindSchema, slotId: roomSlotIdSchema,
+  variant: z.string().min(1).max(40), finish: componentFinishSchema, state: z.string().min(1).max(40).nullable(),
+  roomStyle: roomStyleSchema,
+}).strict()
 
 let state: RoomState = stateSchema.parse({ version: 1, type: 'state', paused: false, roomStyle: 'original' })
 let status: Status = 'loading'
@@ -106,6 +119,15 @@ Object.defineProperty(window, 'RoomlingsRoom', {
       state = next
       for (const listener of listeners) listener()
       return { accepted: true as const }
+    },
+    // The web's object card picture for the native objects sheet. It needs only how the object looks.
+    thumbnail(request: unknown) {
+      const { roomId, kind, slotId, variant, finish, state, roomStyle } = thumbnailSchema.parse(request)
+      const component = roomComponentSchema.parse({
+        id: 'thumbnail', kind, roomId, slotId, name: componentCatalog[kind].name, variant, finish, supplies: [],
+        installed: true, version: 0, state, stateChangedAt: null, stateChangedBy: null,
+      })
+      return renderComponentThumbnail(component, roomStyle)
     },
   }),
   writable: false,
