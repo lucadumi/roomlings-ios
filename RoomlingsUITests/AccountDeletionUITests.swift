@@ -217,7 +217,7 @@ extension AccountUITests {
         let error = app.staticTexts["account-error"]
         XCTAssertTrue(error.waitForExistence(timeout: Wait.control))
         XCTAssertEqual(error.label,
-                       "Transfer ownership of any household with other active roommates before deleting your account. Open Household members in Account.")
+                       "Transfer ownership of any household with other active roommates before deleting your account. Open Membership under Your households in Account.")
         let rejected = try await deletionState(email, seed)
         XCTAssertTrue(rejected.accountExists)
         XCTAssertFalse(rejected.pending)
