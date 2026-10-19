@@ -22,7 +22,7 @@ struct AccountSheet: View {
     @State private var headerHeight: CGFloat = 64
     @State private var deletionConfirmation = ""
 
-    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers, houseRules, roomStyle, profile, devices, recoveryCodes }
+    private enum Page { case email, verify, recover, account, create, join, deleteAccount, reauthenticate, householdMembers, householdAdmins, houseRules, roomStyle, profile, devices, recoveryCodes }
     @State private var invitation = ""
     @State private var houseRules = AccountHouseRulesSection.Form()
     @State private var roomStyle = AccountRoomStyleSection.Form()
@@ -102,12 +102,12 @@ struct AccountSheet: View {
                 householdName = ""
                 invitation = ""
             }
-            if [.deleteAccount, .reauthenticate, .householdMembers, .houseRules, .roomStyle, .profile, .devices, .recoveryCodes].contains(page) {
+            if [.deleteAccount, .reauthenticate, .householdMembers, .householdAdmins, .houseRules, .roomStyle, .profile, .devices, .recoveryCodes].contains(page) {
                 page = .account
             }
         }
         .onChange(of: model.state?.session?.household.id) { _, _ in
-            if page == .householdMembers || page == .houseRules || page == .roomStyle { page = .account }
+            if [.householdMembers, .householdAdmins, .houseRules, .roomStyle].contains(page) { page = .account }
         }
         .onChange(of: model.pendingInvitation) { _, pending in
             invitation = pending?.value ?? ""
@@ -153,6 +153,12 @@ struct AccountSheet: View {
         case .join: joinForm
         case .householdMembers:
             AccountHouseholdMembersSection(model: model)
+            Button("Back to account") { page = .account }
+                .buttonStyle(RoomButtonStyle(kind: .text))
+        case .householdAdmins:
+            Text("Admins customize the rooms and can give another roommate admin access. Ownership and the shared ledger stay unchanged.")
+                .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
+            AccountHouseholdMembersSection(model: model, admins: true)
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
         case .profile:
@@ -242,7 +248,8 @@ struct AccountSheet: View {
             case .join: return "Join a household"
             case .deleteAccount: return "Delete your account"
             case .reauthenticate: return "Verify your email"
-            case .householdMembers: return "Household members"
+            case .householdMembers: return "Who shares this household?"
+            case .householdAdmins: return "Household admins"
             default: return "Your Roomlings account"
             }
         }
@@ -425,21 +432,8 @@ struct AccountSheet: View {
             }
             AccountSection("Your households") {
                 if let memberships = model.state?.memberships, !memberships.isEmpty {
-                    ForEach(memberships, id: \.householdID) { membership in
-                        Button {
-                            Task {
-                                if await model.select(id: membership.householdID) { dismiss() }
-                            }
-                        } label: {
-                            HStack {
-                                Text(membership.householdName)
-                                Spacer()
-                                if membership.householdID == model.state?.session?.household.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                }
-                            }
-                        }
-                        .accessibilityLabel("Open \(membership.householdName)")
+                    VStack(spacing: 0) {
+                        ForEach(memberships, id: \.householdID) { membership in householdRow(membership) }
                     }
                 } else {
                     Text("No households yet.")
@@ -469,12 +463,12 @@ struct AccountSheet: View {
                         page = .roomStyle
                     }
                     .accessibilityIdentifier("open-room-style")
-                    Button("Household members") {
+                    Button("Household admins") {
                         Task {
-                            if await model.loadHouseholdAccess() { page = .householdMembers }
+                            if await model.loadHouseholdAccess() { page = .householdAdmins }
                         }
                     }
-                    .accessibilityIdentifier("manage-household-members")
+                    .accessibilityIdentifier("manage-household-admins")
                 }
                 AccountInvitationsSection(model: model)
                     .id(householdID)
@@ -492,6 +486,57 @@ struct AccountSheet: View {
                 }
                 .accessibilityIdentifier("open-account-deletion")
             }
+        }
+    }
+
+    /// One of your households as the web lists it: name and role, Open, and Membership for the open
+    /// household, whose members this session can load.
+    private func householdRow(_ membership: AccountMembership) -> some View {
+        let current = membership.householdID == model.state?.session?.household.id
+        let role = switch membership.role {
+        case .owner: "Owner"
+        case .admin: "Admin"
+        case .member: "Member"
+        }
+        let details = VStack(alignment: .leading, spacing: 4) {
+            Text(membership.householdName).font(RoomTheme.body(14).weight(.bold)).foregroundStyle(RoomTheme.leaf)
+            Text(role).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        let actions = HStack(spacing: 16) {
+            Button("Open") {
+                Task {
+                    if await model.select(id: membership.householdID) { dismiss() }
+                }
+            }
+            .buttonStyle(RoomButtonStyle(size: 13))
+            .fixedSize()
+            .accessibilityLabel("Open \(membership.householdName)")
+            if current {
+                Button("Membership") {
+                    Task {
+                        if await model.loadHouseholdAccess() { page = .householdMembers }
+                    }
+                }
+                .buttonStyle(RoomButtonStyle(kind: .text, size: 13))
+                .accessibilityLabel("Manage \(membership.householdName)")
+                .accessibilityIdentifier("manage-household-members")
+            }
+        }
+        return VStack(spacing: 0) {
+            Rectangle().fill(RoomTheme.border).frame(height: 1)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    details.frame(maxWidth: .infinity, alignment: .leading)
+                    actions.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    details
+                    actions
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.vertical, 12)
         }
     }
 
