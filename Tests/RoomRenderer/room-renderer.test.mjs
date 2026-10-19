@@ -635,6 +635,16 @@ test('@room the bundled bathroom and living room open native chores and shopping
       await expect(world).toHaveAttribute('data-selected-component', componentId)
       await expect(world).toHaveAttribute('data-component-focus', 'true')
     }
+    // The native objects sheet draws each card with the web's own object picture.
+    const thumbnail = {
+      version: 1, roomId: 'bathroom', kind: 'sink', slotId: 'bathroom-sink', variant: 'original', finish: 'room',
+      state: null, roomStyle: 'original',
+    }
+    const image = await page.evaluate((request) => window.RoomlingsRoom.thumbnail(request), thumbnail)
+    assert.match(image, /^data:image\/png;base64,/)
+    for (const invalid of [{ ...thumbnail, name: 'Private name' }, { ...thumbnail, slotId: 'kitchen-sink' }, { ...thumbnail, state: 'broken' }]) {
+      await assert.rejects(page.evaluate((request) => window.RoomlingsRoom.thumbnail(request), invalid))
+    }
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
     await expect(page.locator('main')).toHaveAttribute('data-room-id', 'kitchen')

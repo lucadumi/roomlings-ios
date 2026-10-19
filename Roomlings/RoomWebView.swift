@@ -1,3 +1,4 @@
+import RoomlingsCore
 import SwiftUI
 import WebKit
 
@@ -92,11 +93,72 @@ struct RoomBridgeMessage: Decodable {
     }
 }
 
+/// Object pictures drawn by the bundled room with the web's own thumbnail renderer
+/// (`src/componentThumbnail.ts`). Requests carry only how an object looks, never household data.
+@MainActor @Observable
+final class RoomThumbnails {
+    enum Picture: Equatable {
+        case loading, image(UIImage), unavailable
+    }
+
+    @ObservationIgnored weak var webView: WKWebView?
+    private(set) var pictures: [String: Picture] = [:]
+
+    static func request(_ object: RoomObject, roomStyle: String) -> [String: Any] {
+        [
+            "version": 1, "roomId": object.roomID, "kind": object.kind, "slotId": object.slotID,
+            "variant": object.variant, "finish": object.finish, "state": object.state ?? NSNull(), "roomStyle": roomStyle,
+        ]
+    }
+
+    static func key(_ object: RoomObject, roomStyle: String) -> String {
+        [object.kind, object.slotID, object.variant, object.finish, object.state ?? "", roomStyle].joined(separator: ":")
+    }
+
+    func picture(_ object: RoomObject, roomStyle: String) -> Picture {
+        pictures[Self.key(object, roomStyle: roomStyle)] ?? .loading
+    }
+
+    /// Draws a picture once per look. A failed picture is drawn again the next time the sheet asks.
+    func load(_ object: RoomObject, roomStyle: String) {
+        let key = Self.key(object, roomStyle: roomStyle)
+        if let current = pictures[key], current != .unavailable { return }
+        guard let webView else {
+            pictures[key] = .unavailable
+            return
+        }
+        pictures[key] = .loading
+        let request = Self.request(object, roomStyle: roomStyle)
+        Task { [weak self, weak webView] in
+            guard let webView else { return }
+            let picture: Picture
+            do {
+                let result = try await webView.callAsyncJavaScript(
+                    "return await window.RoomlingsRoom.thumbnail(request);",
+                    arguments: ["request": request], in: nil, contentWorld: .page
+                )
+                picture = Self.decode(result).map(Picture.image) ?? .unavailable
+            } catch {
+                picture = .unavailable
+            }
+            self?.pictures[key] = picture
+        }
+    }
+
+    static func decode(_ result: Any?) -> UIImage? {
+        let prefix = "data:image/png;base64,"
+        guard let url = result as? String, url.hasPrefix(prefix), url.utf8.count <= 4_000_000,
+              let data = Data(base64Encoded: String(url.dropFirst(prefix.count))) else { return nil }
+        return UIImage(data: data)
+    }
+}
+
 struct RoomWebView: UIViewRepresentable {
     let paused: Bool
     var room = RoomVisualState.preview
     var viewportInsets = RoomViewportInsets.zero
     var roomZoom: Double = 1
+    var thumbnails: RoomThumbnails?
     let onEvent: (RoomRenderEvent) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -120,6 +182,8 @@ struct RoomWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .white
         context.coordinator.webView = webView
+        context.coordinator.thumbnails = thumbnails
+        thumbnails?.webView = webView
 
         if let index = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "RoomRenderer") {
             context.coordinator.index = index
@@ -142,12 +206,14 @@ struct RoomWebView: UIViewRepresentable {
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "roomlings")
+        coordinator.thumbnails?.webView = nil
         coordinator.webView = nil
     }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        var thumbnails: RoomThumbnails?
         var index: URL?
         var onEvent: (RoomRenderEvent) -> Void
         var evaluation: Task<Void, Never>?

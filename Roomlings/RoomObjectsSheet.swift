@@ -31,8 +31,10 @@ struct RoomObjectsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: AccountModel
     let roomID: String
+    let thumbnails: RoomThumbnails
     let onOpen: (Route) -> Void
     @State private var selectedID: String?
+    @State private var info: String?
     @State private var restock: Restock?
     @State private var pending: Save?
     @State private var reviewRequired = false
@@ -149,45 +151,118 @@ struct RoomObjectsSheet: View {
                 groups.append((object.kind, [object]))
             }
         }
-        return VStack(spacing: 10) {
+        let style = model.roomStyle?.style ?? HouseholdRoomStyle.fallback
+        // The web grid's `repeat(auto-fill, minmax(8rem, 1fr))` on narrow screens.
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12, alignment: .top)], spacing: 12) {
+            ForEach(groups, id: \.kind) { group in
+                card(group.items, kind: group.kind, catalog: catalog, style: style)
+            }
+        }
+        .overlay {
             if groups.isEmpty {
                 Text("No objects are placed in this room.").foregroundStyle(RoomTheme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            ForEach(groups, id: \.kind) { group in
-                let first = group.items[0]
-                let label = group.items.count > 1 ? catalog.kinds[group.kind]?.name ?? first.name : first.name
-                let status = group.items.count == 1 ? statusLabel(first, catalog: catalog) : ""
-                Button {
-                    model.clearFeedback()
-                    selectedID = first.id
-                } label: {
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(label).font(RoomTheme.body(16).weight(.bold)).foregroundStyle(RoomTheme.leaf)
-                            if group.items.count > 1 { detail("\(group.items.count) objects") }
-                            if !status.isEmpty { detail(status) }
-                            detail(catalog.kinds[group.kind]?.description ?? "")
-                        }
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(RoomTheme.muted)
-                            .accessibilityHidden(true)
+        }
+    }
+
+    /// One object card, as the web's `room-object-card`: the object's picture, its name and status, and an
+    /// info button that shows its description and supplies over the picture.
+    private func card(_ items: [RoomObject], kind: String, catalog: RoomObjectCatalog, style: String) -> some View {
+        let first = items[0]
+        let label = items.count > 1 ? catalog.kinds[kind]?.name ?? first.name : first.name
+        let status = items.count == 1 ? statusLabel(first, catalog: catalog) : ""
+        let showingInfo = info == first.id
+        return Button {
+            model.clearFeedback()
+            info = nil
+            selectedID = first.id
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                picture(first, style: style)
+                    .overlay {
+                        if showingInfo { infoPanel(first, label: label, catalog: catalog) }
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                    .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
-                    .contentShape(Rectangle())
+                Rectangle().fill(RoomTheme.border).frame(height: 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 6) {
+                        Text(label).font(RoomTheme.body(14).weight(.semibold)).foregroundStyle(RoomTheme.leaf)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(RoomTheme.primaryInk)
+                            .frame(width: 20, height: 20)
+                            .background(RoomTheme.sage, in: RoundedRectangle(cornerRadius: 6))
+                            .accessibilityLabel("Placed")
+                    }
+                    if items.count > 1 { detail("\(items.count) objects") }
+                    if !status.isEmpty { detail(status) }
                 }
-                .buttonStyle(.plain)
-                .disabled(model.busy)
-                .accessibilityLabel("Open \(label) details")
-                .accessibilityIdentifier("room-object-\(first.id)")
+                .multilineTextAlignment(.leading)
+                .padding(10)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(RoomTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(RoomTheme.border))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .disabled(model.busy)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Open \(label) details")
+        .accessibilityIdentifier("room-object-\(first.id)")
+        .overlay(alignment: .topTrailing) {
+            Button { info = showingInfo ? nil : first.id } label: {
+                Image(systemName: showingInfo ? "photo" : "info.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(RoomTheme.leaf)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showingInfo ? "Show rendering of \(label)" : "Info about \(label)")
+        }
+        .onAppear { thumbnails.load(first, roomStyle: style) }
+    }
+
+    private func picture(_ object: RoomObject, style: String) -> some View {
+        ZStack {
+            // The web's room backdrop behind each object.
+            RadialGradient(colors: [.white, Color(white: 0.992), Color(red: 0.965, green: 0.969, blue: 0.969)],
+                           center: UnitPoint(x: 0.45, y: 0.3), startRadius: 0, endRadius: 140)
+            switch thumbnails.picture(object, roomStyle: style) {
+            case .image(let image):
+                Image(uiImage: image).resizable().scaledToFit()
+            case .loading:
+                ProgressView().tint(RoomTheme.muted)
+            case .unavailable:
+                Text("3D is unavailable.").font(RoomTheme.body(12)).foregroundStyle(RoomTheme.error)
+                    .multilineTextAlignment(.center).padding(10)
             }
         }
+        .aspectRatio(4 / 3, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    private func infoPanel(_ object: RoomObject, label: String, catalog: RoomObjectCatalog) -> some View {
+        let supplies = object.supplies.isEmpty ? "No supply shortcuts."
+            : object.supplies.map { "\($0.quantity) \($0.name)" }.joined(separator: ", ")
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(label).font(RoomTheme.body(13).weight(.semibold)).padding(.trailing, 28)
+                Text(catalog.kinds[object.kind]?.description ?? "").font(RoomTheme.body(12))
+                HStack(alignment: .top, spacing: 8) {
+                    Text("Supplies").font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
+                    Text(supplies).font(RoomTheme.body(12))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+        }
+        .background(RoomTheme.surface)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - One object
