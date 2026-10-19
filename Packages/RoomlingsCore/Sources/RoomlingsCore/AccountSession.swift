@@ -498,6 +498,14 @@ public actor AccountSession {
         try await mutateShopping(.add(draft), householdID: householdID, version: version, mutationID: mutationID)
     }
 
+    /// Adds a room object's supply to the shared list, or links it to an entry with the same name.
+    @discardableResult
+    public func restock(
+        _ restock: ShoppingRestock, householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateShopping(.restock(restock), householdID: householdID, version: version, mutationID: mutationID)
+    }
+
     @discardableResult
     public func editShoppingItem(
         id: UUID, draft: ShoppingDraft, itemVersion: Int64, householdID: UUID, version: Int64, mutationID: UUID
@@ -646,6 +654,20 @@ public actor AccountSession {
         try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, current in
             try await api.updateRoomStyle(
                 style, version: version, mutationID: mutationID, memberID: memberID, current: current, token: token
+            )
+        }
+    }
+
+    /// Sets an object's manual state. `defaults` is the shared default layout, used to read layouts saved
+    /// before every room existed exactly as the server does.
+    @discardableResult
+    public func setRoomObjectState(
+        _ change: RoomObjectStateChange, defaults: [RoomObject], householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, current in
+            try await api.setRoomObjectState(
+                change, defaults: defaults, version: version, mutationID: mutationID, memberID: memberID,
+                current: current, token: token
             )
         }
     }

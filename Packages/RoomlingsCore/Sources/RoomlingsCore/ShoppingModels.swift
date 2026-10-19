@@ -25,11 +25,37 @@ public struct ShoppingDraft: Sendable, Equatable {
     }
 }
 
+/// A supply shortcut added from a room object, which the server links to that object's supply.
+public struct ShoppingRestock: Sendable, Equatable {
+    public let draft: ShoppingDraft
+    public let source: ShoppingComponentSource
+
+    /// `draft` starts from the supply's name and quantity and may be reviewed before saving, as on the web.
+    public init(object: RoomObject, supply: RoomObject.Supply, draft: ShoppingDraft) throws {
+        guard object.installed, object.supplies.contains(supply) else { throw AccountError.invalidInput(.componentID) }
+        self.draft = draft
+        source = ShoppingComponentSource(componentID: object.id, supplyID: supply.id, roomID: object.roomID,
+                                         componentName: object.name)
+    }
+
+    /// The web's `normalizeShoppingName`, which decides whether the supply joins an existing entry.
+    public static func normalized(_ name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCompatibilityMapping.lowercased()
+    }
+}
+
 public struct ShoppingComponentSource: Sendable, Equatable, Hashable {
     public let componentID: String
     public let supplyID: String
     public let roomID: String
     public let componentName: String
+
+    init(componentID: String, supplyID: String, roomID: String, componentName: String) {
+        self.componentID = componentID
+        self.supplyID = supplyID
+        self.roomID = roomID
+        self.componentName = componentName
+    }
 
     init(_ value: JSONValue) throws {
         let fields = try HouseholdFields(value)

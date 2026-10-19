@@ -21,9 +21,11 @@ struct RoomPreviewScreen: View {
     @State private var roomEntryFrame = CGRect.zero
     /// Chores opened from a notification start on that chore's room with My turn only.
     @State private var choreFocus: (roomID: String, mine: Bool)?
+    /// Chores opened from a room object's Add chore start on the add form, with an optional routine.
+    @State private var choreAdding: RoomObjectCatalog.Routine??
 
     private enum Sheet: String, Identifiable {
-        case account, chores, shopping, money, notifications
+        case account, chores, shopping, money, notifications, objects
         var id: String { rawValue }
     }
 
@@ -83,7 +85,8 @@ struct RoomPreviewScreen: View {
                 }
                 roomFailure
                 RoomAccountHeader(accounts: accounts, roomID: roomID, roomsOpen: $roomsOpen,
-                                  onRoomEntryFrame: { roomEntryFrame = $0 }, openNotifications: openNotifications) {
+                                  onRoomEntryFrame: { roomEntryFrame = $0 }, openNotifications: openNotifications,
+                                  openObjects: openObjects) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
@@ -120,10 +123,11 @@ struct RoomPreviewScreen: View {
             case .account: AccountSheet(model: accounts)
             case .chores:
                 ChoresSheet(model: accounts, object: choreObject, roomID: choreFocus?.roomID ?? roomID,
-                            mine: choreFocus?.mine ?? false)
+                            mine: choreFocus?.mine ?? false, adding: choreAdding)
             case .shopping: ShoppingSheet(model: accounts)
             case .money: MoneySheet(model: accounts, destination: moneyDestination)
             case .notifications: NotificationsSheet(model: accounts, onOpen: openInboxItem)
+            case .objects: RoomObjectsSheet(model: accounts, roomID: roomID, onOpen: openObjectRoute)
             }
         }
         .task {
@@ -263,6 +267,7 @@ struct RoomPreviewScreen: View {
                 }
                 choreObject = object
                 choreFocus = nil
+                choreAdding = nil
                 presentedSheet = .chores
             case .expense(let id):
                 guard accounts.ledger?.expenses.contains(where: { $0.id == id }) == true else {
@@ -336,6 +341,7 @@ struct RoomPreviewScreen: View {
             sheetHouseholdID = householdID
             choreObject = object
             choreFocus = nil
+            choreAdding = nil
             presentedSheet = .chores
         }
     }
@@ -353,6 +359,46 @@ struct RoomPreviewScreen: View {
         }
     }
 
+    private func openObjects() {
+        guard accounts.canUseAccount, let householdID = accounts.state?.session?.household.id else {
+            accounts.message = "Open your current household before viewing its room objects."
+            presentedSheet = .account
+            return
+        }
+        if presentedSheet == nil {
+            if !accounts.busy { accounts.clearFeedback() }
+            sheetHouseholdID = householdID
+            presentedSheet = .objects
+        }
+    }
+
+    /// Follows a room object's chores, supplies or shortcut to the native sheet that holds it.
+    private func openObjectRoute(_ route: RoomObjectsSheet.Route) {
+        choreObject = nil
+        choreFocus = nil
+        choreAdding = nil
+        switch route {
+        case .chores(let id):
+            choreObject = accounts.choreObjects.first { $0.id == id }
+            presentedSheet = .chores
+        case .addChore(let id, let routine):
+            choreObject = accounts.choreObjects.first { $0.id == id }
+            choreAdding = .some(routine)
+            presentedSheet = .chores
+        case .roomChores:
+            choreFocus = (roomID: roomID, mine: false)
+            presentedSheet = .chores
+        case .shopping:
+            presentedSheet = .shopping
+        case .receipts:
+            moneyDestination = .receipts
+            presentedSheet = .money
+        case .balances:
+            moneyDestination = nil
+            presentedSheet = .money
+        }
+    }
+
     /// Opens what a notification is about, as the web inbox does, and marks it read.
     private func openInboxItem(_ item: InboxItem) {
         if accounts.inboxRead?.isUnread(item) == true {
@@ -364,6 +410,7 @@ struct RoomPreviewScreen: View {
             let chore = accounts.chores?.items.first { $0.id == id }
             choreObject = nil
             choreFocus = (roomID: chore?.roomID ?? "home", mine: true)
+            choreAdding = nil
             presentedSheet = .chores
         case .receipt(let id):
             moneyDestination = .receipt(id)
@@ -408,6 +455,7 @@ struct RoomAccountHeader: View {
     @Binding var roomsOpen: Bool
     var onRoomEntryFrame: (CGRect) -> Void = { _ in }
     let openNotifications: () -> Void
+    var openObjects: () -> Void = {}
     let openAccount: () -> Void
 
     var body: some View {
@@ -418,6 +466,7 @@ struct RoomAccountHeader: View {
                 HStack(alignment: .top, spacing: 8) {
                     roomEntry
                     Spacer(minLength: 0)
+                    objectsEntry
                     notificationsEntry
                 }
             }
@@ -522,6 +571,25 @@ struct RoomAccountHeader: View {
             .accessibilityAddTraits(roomsOpen ? .isSelected : [])
             .accessibilityIdentifier("room-entry")
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.coordinateSpace)) } action: { onRoomEntryFrame($0) }
+        }
+    }
+
+    /// The current room's objects, beside the bell as the web keeps it with the room tools.
+    @ViewBuilder private var objectsEntry: some View {
+        if accounts.canUseAccount {
+            Button(action: openObjects) {
+                Image(systemName: "shippingbox")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(RoomTheme.ink)
+                    .frame(width: 44, height: 44)
+                    .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                    .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(accounts.busy)
+            .accessibilityLabel("Room objects")
+            .accessibilityIdentifier("room-objects-entry")
         }
     }
 
