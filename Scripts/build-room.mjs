@@ -119,6 +119,18 @@ await writeFile(join(output, 'chores.json'), JSON.stringify({
     id, name, kind, roomId, slotId, installed,
   })),
 }, null, 2) + '\n')
+const { componentFinishes, roomSlots } = await import(pathToFileURL(join(source, 'shared/roomComponents.ts')).href)
+// Room object details for the native objects sheet: names, manual states, routines and the default layout.
+await writeFile(join(output, 'objects.json'), JSON.stringify({
+  version: 1,
+  kinds: Object.fromEntries(Object.entries(componentCatalog).map(([kind, definition]) => [kind, {
+    name: definition.name, description: definition.description, variants: definition.variants,
+    states: definition.states, chores: definition.chores,
+  }])),
+  finishes: Object.fromEntries(Object.entries(componentFinishes).map(([id, { name }]) => [id, name])),
+  slots: Object.fromEntries(roomSlots.map(({ id, roomId, name }) => [id, { roomId, name }])),
+  defaultComponents: defaultRoomComponents(),
+}, null, 2) + '\n')
 const { roomStyleSchema } = await import(pathToFileURL(join(source, 'shared/domain.ts')).href)
 const { roomPresets } = await import(pathToFileURL(join(source, 'src/roomStyles.ts')).href)
 const swatchSurfaces = ['wall', 'floor', 'floorAlternate', 'fridgeDoor', 'cabinetPanel', 'counter', 'lightWood']

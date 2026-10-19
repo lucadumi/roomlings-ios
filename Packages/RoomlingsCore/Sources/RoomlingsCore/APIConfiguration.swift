@@ -65,7 +65,7 @@ enum APIEndpoint: Equatable {
     case recordExpense, removeExpense(UUID), checkoutShopping
     case recordSettlement, removeSettlement(UUID)
     case updateHouseholdSettings, updateRoomStyle
-    case setRoomRole(UUID)
+    case setRoomRole(UUID), setRoomObjectState(String)
     case recoveryStatus, generateRecoveryCodes, revokeRecoveryCodes, updateProfile, renameDevice, revokeDevice(UUID)
 
     var method: String {
@@ -73,7 +73,7 @@ enum APIEndpoint: Equatable {
         case .account, .householdInvitations, .notificationSettings, .recoveryStatus, .inbox: "GET"
         case .saveNotificationSettings, .registerPushDevice, .readInbox: "PUT"
         case .editShoppingItem, .editChore, .setChoreArchived, .editBill, .updateHouseholdSettings, .updateRoomStyle,
-             .updateProfile, .renameDevice, .setRoomRole: "PATCH"
+             .updateProfile, .renameDevice, .setRoomRole, .setRoomObjectState: "PATCH"
         case .removeShoppingItem, .removeExpense, .removeSettlement, .revokeInvitation, .unregisterPushDevice,
              .deleteAccount, .leaveHousehold, .removeHouseholdMember, .revokeRecoveryCodes, .revokeDevice: "DELETE"
         default: "POST"
@@ -128,6 +128,7 @@ enum APIEndpoint: Equatable {
         case .removeSettlement(let id): "api/settlements/\(id.uuidString.lowercased())"
         case .updateHouseholdSettings: "api/household"
         case .updateRoomStyle: "api/household/room-style"
+        case .setRoomObjectState(let id): "api/room-components/\(id)/state"
         }
     }
 }

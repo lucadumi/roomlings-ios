@@ -399,4 +399,28 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertFalse(RoomWebView.Coordinator.allows(URL(string: "file:///app/RoomRenderer/index.html?command=logout"), index: index))
         XCTAssertFalse(RoomWebView.Coordinator.allows(nil, index: index))
     }
+
+    @MainActor
+    func testObjectPicturesAskOnlyForHowAnObjectLooks() throws {
+        let object = try RoomObject(.object([
+            "id": .string("private-object-id"), "kind": .string("sink"), "roomId": .string("kitchen"),
+            "slotId": .string("kitchen-sink"), "name": .string("Ada's private sink"), "variant": .string("original"),
+            "finish": .string("sage"), "supplies": .array([.object([
+                "id": .string("dish-soap"), "name": .string("Secret soap"), "quantity": .string("1 bottle"),
+            ])]), "installed": .bool(true), "version": .integer(3), "state": .string("needs-cleaning"),
+            "stateChangedAt": .string("2026-10-01T12:00:00Z"),
+            "stateChangedBy": .string("22222222-2222-4222-8222-222222222222"),
+        ]))
+        let request = RoomThumbnails.request(object, roomStyle: "clay")
+        XCTAssertEqual(Set(request.keys), ["version", "roomId", "kind", "slotId", "variant", "finish", "state", "roomStyle"])
+        let body = String(describing: request)
+        for secret in ["private-object-id", "Ada's private sink", "Secret soap", "22222222"] {
+            XCTAssertFalse(body.contains(secret), secret)
+        }
+        XCTAssertNil(RoomThumbnails.decode("data:image/jpeg;base64,AAAA"))
+        XCTAssertNil(RoomThumbnails.decode("https://example.test/sink.png"))
+        XCTAssertNil(RoomThumbnails.decode(42))
+        let png = try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in }.pngData())
+        XCTAssertNotNil(RoomThumbnails.decode("data:image/png;base64," + png.base64EncodedString()))
+    }
 }

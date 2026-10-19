@@ -39,6 +39,11 @@ final class AccountModel {
     private(set) var roomStyleCatalog: RoomStyleCatalog?
     private(set) var roomStyleFailure: String?
     private(set) var roomStyleSaveFailure = HouseholdSaveFailure.none
+    private(set) var roomObjectCatalog: RoomObjectCatalog?
+    /// Every saved object, read as the web's `getRoomComponents` reads the household.
+    private(set) var roomObjects: [RoomObject] = []
+    private(set) var roomObjectsFailure: String?
+    private(set) var roomObjectSaveFailure = HouseholdSaveFailure.none
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -745,7 +750,7 @@ final class AccountModel {
         if saved { notice = "Chore saved." }
         return saved
     }
-
+  
     func setChoreArchived(_ chore: Chore, archived: Bool, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
         let saved = await perform(.archiveChore) {
             try await $0.setChoreArchived(id: chore.id, archived: archived, choreVersion: chore.version,
@@ -901,6 +906,45 @@ final class AccountModel {
         return saved
     }
 
+    /// Sets an object's manual state. It is a shared note, not appliance control or chore completion.
+    func setRoomObjectState(_ object: RoomObject, state: String?, householdID: UUID, version: Int64,
+                            mutationID: UUID) async -> Bool {
+        guard let defaults = roomObjectCatalog?.defaults else {
+            message = roomObjectsFailure ?? "Refresh your account before changing this object."
+            return false
+        }
+        let change: RoomObjectStateChange
+        do {
+            change = try RoomObjectStateChange(objectID: object.id, objectVersion: object.version, state: state)
+        } catch {
+            message = "Choose a state this object supports."
+            return false
+        }
+        let saved = await perform(.roomObjectState) {
+            try await $0.setRoomObjectState(change, defaults: defaults, householdID: householdID,
+                                            version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Object state saved." }
+        return saved
+    }
+
+    /// Adds an object's supply to the shared shopping list, as the web's supply shortcuts do.
+    func restock(_ object: RoomObject, supply: RoomObject.Supply, draft: ShoppingDraft, householdID: UUID,
+                 version: Int64, mutationID: UUID) async -> Bool {
+        let restock: ShoppingRestock
+        do {
+            restock = try ShoppingRestock(object: object, supply: supply, draft: draft)
+        } catch {
+            message = "This supply is no longer configured for the object. Refresh your account before restocking."
+            return false
+        }
+        let saved = await perform(.shopping) {
+            try await $0.restock(restock, householdID: householdID, version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Supply added to shopping list." }
+        return saved
+    }
+
     func clearFeedback() {
         message = nil
         notice = nil
@@ -925,6 +969,7 @@ final class AccountModel {
         if action == .ledger { ledgerSaveFailure = .none }
         if action == .houseRules { houseRulesSaveFailure = .none }
         if action == .roomStyle { roomStyleSaveFailure = .none }
+        if action == .roomObjectState { roomObjectSaveFailure = .none }
         let previousDeletion = deletionStatus
         let previousDeparture = pendingHouseholdDeparture
         do {
@@ -965,6 +1010,11 @@ final class AccountModel {
             if action == .roomStyle, let roomStyleFailure {
                 message = roomStyleFailure
                 roomStyleSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .roomObjectState, let roomObjectsFailure {
+                message = roomObjectsFailure
+                roomObjectSaveFailure = .retrySameChange
                 return false
             }
             if action == .houseRules, let houseRulesFailure {
@@ -1020,6 +1070,8 @@ final class AccountModel {
         houseRulesFailure = nil
         roomStyle = nil
         roomStyleFailure = nil
+        roomObjects = []
+        roomObjectsFailure = nil
         guard canUseAccount, let session = next?.session else {
             room = .preview
             return true
@@ -1074,6 +1126,13 @@ final class AccountModel {
         } catch {
             choresFailure = "Your chores could not be displayed. Refresh chores. If this continues, rebuild the app with the shared web source."
         }
+        do {
+            let catalog = try roomObjectCatalog ?? RoomObjectCatalog.load()
+            roomObjectCatalog = catalog
+            roomObjects = try RoomObject.list(household: household.value, defaults: catalog.defaults)
+        } catch {
+            roomObjectsFailure = "Your room objects could not be displayed. Refresh your account. If this continues, rebuild the app with the shared web source."
+        }
         if let rooms = choreCatalog?.rooms {
             // The receipt book names restocked items' rooms as the web export does.
             let names = Dictionary(uniqueKeysWithValues: rooms.map { ($0.id, $0.name) })
@@ -1122,6 +1181,7 @@ final class AccountModel {
             else if action == .shopping { shoppingSaveFailure = failure }
             else if action == .houseRules { houseRulesSaveFailure = failure }
             else if action == .roomStyle { roomStyleSaveFailure = failure }
+            else if action == .roomObjectState { roomObjectSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
         message = deletionCleanupRequired
@@ -1132,6 +1192,7 @@ final class AccountModel {
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
+        case roomObjectState
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold, roomRole
         case profile, deviceRevoke, recoveryLoad, recoveryChange
@@ -1147,13 +1208,14 @@ final class AccountModel {
             if self == .shopping { return .shopping }
             if self == .houseRules { return .houseRules }
             if self == .roomStyle { return .roomStyle }
+            if self == .roomObjectState { return .roomObjects }
             return self == .ledger ? .ledger : nil
         }
     }
 
     /// Wording for the household collection a failed mutation touched.
     private enum Resource {
-        case chores, shopping, ledger, houseRules, roomStyle
+        case chores, shopping, ledger, houseRules, roomStyle, roomObjects
 
         var name: String {
             switch self {
@@ -1162,6 +1224,7 @@ final class AccountModel {
             case .ledger: "receipts"
             case .houseRules: "house rules"
             case .roomStyle: "the room style"
+            case .roomObjects: "room objects"
             }
         }
 
@@ -1172,6 +1235,7 @@ final class AccountModel {
             case .ledger: "Receipts"
             case .houseRules: "House rules"
             case .roomStyle: "The room style"
+            case .roomObjects: "Room objects"
             }
         }
 
@@ -1182,6 +1246,7 @@ final class AccountModel {
             case .ledger: "receipt"
             case .houseRules: "household"
             case .roomStyle: "household"
+            case .roomObjects: "object"
             }
         }
 
@@ -1192,6 +1257,7 @@ final class AccountModel {
             case .ledger: "receipt"
             case .houseRules: "house rules"
             case .roomStyle: "room style"
+            case .roomObjects: "object state"
             }
         }
 
@@ -1202,6 +1268,7 @@ final class AccountModel {
             case .ledger: "Check the description, amount, who paid, the split and the date."
             case .houseRules: "Check the household name and a budget from 0.01 to 1,000,000.00. Currency stays fixed after money is recorded."
             case .roomStyle: "Choose one of the shared room styles."
+            case .roomObjects: "Choose a state this object supports."
             }
         }
     }

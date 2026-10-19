@@ -23,8 +23,14 @@ struct ChoresSheet: View {
     @State private var contentHeight: CGFloat = 480
     @State private var headerHeight: CGFloat = 64
 
-    init(model: AccountModel, object: ChoreObject? = nil, roomID: String = RoomVisualState.defaultRoomID, mine: Bool = false) {
+    /// Opens the add form for this object, optionally prefilled with one of its suggested routines.
+    private let startAdding: RoomObjectCatalog.Routine??
+    @State private var started = false
+
+    init(model: AccountModel, object: ChoreObject? = nil, roomID: String = RoomVisualState.defaultRoomID, mine: Bool = false,
+         adding routine: RoomObjectCatalog.Routine?? = nil) {
         self.model = model
+        startAdding = routine
         _mine = State(initialValue: mine)
         _roomFilter = State(initialValue: object?.roomID ?? roomID)
         _areaFilter = State(initialValue: object?.area ?? "")
@@ -120,6 +126,20 @@ struct ChoresSheet: View {
         .tint(RoomTheme.sage)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chores-sheet")
+        .onAppear {
+            guard !started, let routine = startAdding else { return }
+            started = true
+            openForm()
+            guard adding, let routine else { return }
+            draft.title = routine.title
+            switch routine.repeatDays {
+            case nil: draft.repeatChoice = ""
+            case let days? where [1, 7, 14].contains(days): draft.repeatChoice = String(days)
+            case let days?:
+                draft.repeatChoice = "custom"
+                draft.customDays = String(days)
+            }
+        }
         .presentationBackground(RoomTheme.paper)
         .presentationCornerRadius(16)
         .interactiveDismissDisabled(dismissalBlocked)

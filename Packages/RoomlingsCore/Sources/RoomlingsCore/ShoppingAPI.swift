@@ -24,6 +24,7 @@ struct ShoppingAPI: Sendable {
 
 enum ShoppingChange: Sendable {
     case add(ShoppingDraft)
+    case restock(ShoppingRestock)
     case edit(UUID, ShoppingDraft, Int64)
     case remove(UUID, Int64)
     case claim(UUID, Bool, Int64)
@@ -31,7 +32,7 @@ enum ShoppingChange: Sendable {
 
     var endpoint: APIEndpoint {
         switch self {
-        case .add: .addShoppingItem
+        case .add, .restock: .addShoppingItem
         case .edit(let id, _, _): .editShoppingItem(id)
         case .remove(let id, _): .removeShoppingItem(id)
         case .claim(let id, _, _): .claimShoppingItem(id)
@@ -41,7 +42,7 @@ enum ShoppingChange: Sendable {
 
     private var target: (id: UUID, version: Int64)? {
         switch self {
-        case .add: nil
+        case .add, .restock: nil
         case .edit(let id, _, let version), .remove(let id, let version),
              .claim(let id, _, let version), .pick(let id, _, let version): (id, version)
         }
@@ -51,6 +52,11 @@ enum ShoppingChange: Sendable {
         var fields: [String: JSONValue]
         switch self {
         case .add(let draft), .edit(_, let draft, _): fields = draft.requestFields
+        case .restock(let restock):
+            fields = restock.draft.requestFields
+            fields["componentSource"] = .object([
+                "componentId": .string(restock.source.componentID), "supplyId": .string(restock.source.supplyID),
+            ])
         case .remove: fields = [:]
         case .claim(_, let claim, _): fields = ["claimed": .bool(claim)]
         case .pick(_, let pickedUp, _): fields = ["pickedUp": .bool(pickedUp)]
@@ -68,6 +74,29 @@ enum ShoppingChange: Sendable {
     }
 
     func matches(_ result: HouseholdShopping, from original: HouseholdShopping, memberID: UUID) -> Bool {
+        if case .restock(let restock) = self {
+            let key = ShoppingRestock.normalized(restock.draft.name)
+            // An entry with the same name gains this source; otherwise the supply becomes a new entry.
+            if let existing = original.items.first(where: { ShoppingRestock.normalized($0.name) == key }) {
+                guard !(existing.componentSources ?? []).contains(where: {
+                          $0.componentID == restock.source.componentID && $0.supplyID == restock.source.supplyID
+                      }),
+                      result.items.map(\.id) == original.items.map(\.id),
+                      result.items.filter({ $0.id != existing.id }) == original.items.filter({ $0.id != existing.id }),
+                      let updated = result.items.first(where: { $0.id == existing.id }) else { return false }
+                return updated.version == existing.version + 1 && updated.name == existing.name
+                    && updated.quantity == existing.quantity && updated.notes == existing.notes
+                    && updated.createdBy == existing.createdBy && updated.createdAt == existing.createdAt
+                    && updated.claimedBy == existing.claimedBy && updated.pickedUp == existing.pickedUp
+                    && updated.componentSources == (existing.componentSources ?? []) + [restock.source]
+            }
+            guard result.items.count == original.items.count + 1,
+                  Array(result.items.dropLast()) == original.items, let added = result.items.last else { return false }
+            return added.name == restock.draft.name && added.quantity == restock.draft.quantity
+                && added.notes == restock.draft.notes && added.version == 0 && added.createdBy == memberID
+                && added.claimedBy == nil && !added.pickedUp && added.createdAt == added.updatedAt
+                && added.componentSources == [restock.source]
+        }
         if case .add(let draft) = self {
             guard result.items.count == original.items.count + 1,
                   Array(result.items.dropLast()) == original.items, let added = result.items.last else { return false }
