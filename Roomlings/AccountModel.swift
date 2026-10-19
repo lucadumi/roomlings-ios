@@ -1280,7 +1280,7 @@ final class AccountModel {
             case AccountError.invalidInput(.confirmation), AccountError.server(400, _):
                 return "Enter your exact account email to confirm deletion."
             case AccountError.server(_, .some(.ownershipTransferRequired)):
-                return "Transfer ownership of any household with other active roommates before deleting your account. Open Household members in Account."
+                return "Transfer ownership of any household with other active roommates before deleting your account. Open Membership under Your households in Account."
             case AccountError.server(_, .some(.reauthenticationRequired)):
                 return "Verify your email again before deleting your account."
             case AccountError.server(_, .some(.accountDeletionPending)):

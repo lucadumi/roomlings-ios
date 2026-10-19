@@ -29,7 +29,8 @@ An object gets dirty when one of its chores is overdue: light crumbs after 1 day
 | **House rules** | Any roommate can change the household name, monthly grocery budget and currency. Currency stays fixed after expenses, repayments or monthly bills. |
 | **Room style** | Owners and room admins apply one shared look to the room for everyone. Other roommates can browse the styles. |
 | Invitations | Owners share seven-day invitations and revoke pending links. See [invitation setup](invitations.md). |
-| **Household members** | View roommates, grant or remove room admin rights as owner or admin, transfer ownership, remove access as owner, or leave. These actions preserve shared debts and history. |
+| **Membership** | From the open household in **Your households**, view roommates, transfer ownership, remove access as owner, or leave. These actions preserve shared debts and history. |
+| **Household admins** | Owners and admins grant or remove room admin rights. |
 | **Notifications** | Save chore and money preferences. Push requires explicit opt-in on each account/device and a configured delivery service. |
 | **Account lifecycle** | Delete the account with exact email confirmation, re-verification and recovery if deletion is pending. |
 
