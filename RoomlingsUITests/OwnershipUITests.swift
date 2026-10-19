@@ -200,4 +200,27 @@ extension AccountUITests {
         let state = try await ownershipState(home)
         XCTAssertTrue(state.requests.isEmpty)
     }
+
+    @MainActor
+    func testMembersShowTheWebRoommateCardsAndInviteFromThem() async throws {
+        executionTimeAllowance = 600
+        continueAfterFailure = false
+        let (app, _, _, members) = try await launchOwnership()
+        try openMembers(app)
+        XCTAssertTrue(app.staticTexts["A seat at the table."].waitForExistence(timeout: Wait.control))
+        let you = app.descendants(matching: .any)["roommate-\(members.ownerId)"]
+        XCTAssertTrue(you.exists)
+        XCTAssertTrue(you.label.contains("That is you"), you.label)
+        XCTAssertTrue(app.descendants(matching: .any)["roommate-\(members.formerId)"].label.contains("Former roommate"))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Roommate cards"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        // The invite card brings the owner's invitations into view, as the web household view lists them.
+        try tap(app.buttons["invite-roommate"], in: app)
+        let create = app.buttons["create-invitation"]
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isHittable == true"), object: create)
+        let shown = await XCTWaiter.fulfillment(of: [visible], timeout: Wait.control)
+        XCTAssertEqual(shown, .completed)
+    }
 }

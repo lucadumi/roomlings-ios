@@ -5,6 +5,8 @@ struct AccountHouseholdMembersSection: View {
     @Bindable var model: AccountModel
     /// Shows the room admin roster, which the web keeps apart from household membership.
     var admins = false
+    /// Shows the owner's invitations, as the web's household view does.
+    var onInvite: (() -> Void)?
     @State private var confirmation: Confirmation?
     @State private var confirming = false
 
@@ -65,6 +67,7 @@ struct AccountHouseholdMembersSection: View {
             if admins {
                 heading("Room admins")
             } else {
+                if let access = model.invitations { roommates(access) }
                 HStack(spacing: 12) {
                     heading(model.invitations?.household.name ?? "Household members")
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,6 +173,83 @@ struct AccountHouseholdMembersSection: View {
         confirmation = Confirmation(accountID: accountID, householdID: access.household.id,
                                     version: access.household.version, action: action)
         confirming = true
+    }
+
+    /// The web's roommate cards (`roommate-grid` in `src/App.tsx`): who shares the household and their grocery runs.
+    private func roommates(_ access: HouseholdInvitationAccess) -> some View {
+        let members = model.ledger?.members ?? []
+        let active = members.filter { !$0.inactive }.count
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("WELCOME TO \(access.household.name.uppercased())")
+                        .font(RoomTheme.body(10).weight(.semibold)).tracking(1.2).foregroundStyle(RoomTheme.muted)
+                    Text("A seat at the table.").font(RoomTheme.heading(24)).foregroundStyle(RoomTheme.leaf)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(active) / 12")
+                    .font(RoomTheme.body(11).weight(.medium)).foregroundStyle(RoomTheme.muted)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(RoomTheme.leafSoft, in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(RoomTheme.border))
+                    .accessibilityLabel("\(active) of 12 roommates")
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), alignment: .top)],
+                      spacing: 12) {
+                ForEach(members) { member in roommateCard(member, viewer: access.memberID) }
+                if access.role == .owner, let onInvite {
+                    Button(action: onInvite) {
+                        VStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(RoomTheme.muted)
+                                .frame(width: 48, height: 48)
+                                .background(RoomTheme.leafSoft, in: Circle())
+                            Text("One more?").font(RoomTheme.body(14).weight(.semibold)).foregroundStyle(RoomTheme.muted)
+                                .padding(.top, 6)
+                            Text("Invite a roommate").font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                        .background(RoomTheme.surfaceMuted, in: RoundedRectangle(cornerRadius: 9))
+                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(RoomTheme.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                        .contentShape(RoundedRectangle(cornerRadius: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("invite-roommate")
+                }
+            }
+        }
+        .padding(.bottom, 12)
+    }
+
+    private func roommateCard(_ member: HouseholdMember, viewer: UUID) -> some View {
+        let runs = model.ledger?.expenses.filter { $0.bill == nil && $0.paidBy == member.id }.count ?? 0
+        return VStack(spacing: 4) {
+            Text(member.name.prefix(1).uppercased())
+                .font(RoomTheme.body(17).weight(.semibold))
+                .foregroundStyle(RoomTheme.primaryInk)
+                .frame(width: 48, height: 48)
+                .background(HouseholdMemberColor(hex: member.color).map(RoomTheme.member) ?? RoomTheme.sage, in: Circle())
+                .overlay(Circle().strokeBorder(RoomTheme.paper, lineWidth: 3))
+                .overlay(Circle().stroke(RoomTheme.border))
+                .accessibilityHidden(true)
+            Text(member.name).font(RoomTheme.body(14).weight(.semibold)).foregroundStyle(RoomTheme.muted)
+                .multilineTextAlignment(.center).padding(.top, 9)
+            Text(member.inactive ? "Former roommate" : member.id == viewer ? "That is you" : "Fellow fridge explorer")
+                .font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted).multilineTextAlignment(.center)
+            Rectangle().fill(RoomTheme.line).frame(height: 1).padding(.top, 16)
+            Label("\(runs) grocery runs", systemImage: "receipt")
+                .font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted).padding(.top, 10)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 14).padding(.top, 22).padding(.bottom, 16)
+        .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(RoomTheme.border))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("roommate-\(member.id.uuidString.lowercased())")
     }
 
     private func heading(_ text: String) -> some View {
