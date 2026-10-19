@@ -7,6 +7,7 @@ struct AccountSheet: View {
     @Environment(NativeNotifications.self) private var notifications
     @Bindable var model: AccountModel
     @State private var page = Page.email
+    @State private var scrollTarget: String?
     @State private var email = ""
     @State private var emailCode = ""
     @State private var displayName = ""
@@ -38,15 +39,22 @@ struct AccountSheet: View {
                 .padding(.vertical, 12)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             Rectangle().fill(RoomTheme.border).frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    feedback
-                    incomingInvitation
-                    incomingNotification
-                    accountContent
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        feedback
+                        incomingInvitation
+                        incomingNotification
+                        accountContent
+                    }
+                    .padding(24)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
                 }
-                .padding(24)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                .onChange(of: scrollTarget) { _, target in
+                    guard let target else { return }
+                    withAnimation { proxy.scrollTo(target, anchor: .top) }
+                    scrollTarget = nil
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .disabled(model.busy)
@@ -152,7 +160,10 @@ struct AccountSheet: View {
         case .create: createForm
         case .join: joinForm
         case .householdMembers:
-            AccountHouseholdMembersSection(model: model)
+            AccountHouseholdMembersSection(model: model, onInvite: { scrollTarget = "member-invitations" })
+            if model.invitations?.role == .owner {
+                AccountInvitationsSection(model: model).id("member-invitations")
+            }
             Button("Back to account") { page = .account }
                 .buttonStyle(RoomButtonStyle(kind: .text))
         case .householdAdmins:
