@@ -52,6 +52,14 @@ extension AccountUITests {
         XCTAssertTrue(app.otherElements["household-members"].waitForExistence(timeout: Wait.control))
     }
 
+    /// The roster's role hint for anyone who is no longer, or never was, the owner.
+    @MainActor
+    private func notOwnerHint(_ app: XCUIApplication) -> XCUIElement {
+        app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@ AND NOT label BEGINSWITH %@", "You are ", "You are the owner"
+        )).firstMatch
+    }
+
     @MainActor
     private func offerOwnership(_ peerID: String, in app: XCUIApplication) throws {
         try tap(app.buttons["transfer-ownership-\(peerID)"], in: app)
@@ -113,7 +121,7 @@ extension AccountUITests {
         XCTAssertTrue(app.buttons["account-entry"].waitForExistence(timeout: Wait.control))
         try openAccount(app)
         try openMembers(app)
-        XCTAssertTrue(app.staticTexts["Only the current owner can transfer ownership."].exists)
+        XCTAssertTrue(notOwnerHint(app).exists)
         XCTAssertFalse(app.buttons["transfer-ownership-\(members.peerId)"].exists)
     }
 
@@ -134,7 +142,7 @@ extension AccountUITests {
         XCTAssertEqual(uncertain.requests.count, 1)
         XCTAssertEqual(uncertain.version, before.version + 1)
         try tap(app.buttons["refresh-household-members"], in: app)
-        XCTAssertTrue(app.staticTexts["Only the current owner can transfer ownership."].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(notOwnerHint(app).waitForExistence(timeout: Wait.control))
         XCTAssertFalse(app.buttons["transfer-ownership-\(members.peerId)"].exists)
         let refreshed = try await ownershipState(home)
         XCTAssertEqual(refreshed.requests.count, 1)
@@ -185,7 +193,7 @@ extension AccountUITests {
         continueAfterFailure = false
         let (app, _, home, _) = try await launchOwnership(asPeer: true)
         try openMembers(app)
-        XCTAssertTrue(app.staticTexts["Only the current owner can transfer ownership."].exists)
+        XCTAssertTrue(notOwnerHint(app).exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "transfer-ownership-")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["Member; browser access only"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "Former roommate")).firstMatch.exists)

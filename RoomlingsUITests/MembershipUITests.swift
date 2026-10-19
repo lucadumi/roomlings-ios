@@ -109,22 +109,27 @@ extension AccountUITests {
         // The membership fixture seeds the linked peer as a room admin.
         let (app, _, seed) = try await launchMembership(asOwner: true)
         let peer = try XCTUnwrap(seed.peerId)
+        // Admin rights live on their own page, as in the web's household admins panel.
+        XCTAssertFalse(app.buttons["room-admin-\(peer)"].exists)
+        try tap(app.buttons["Back to account"], in: app)
+        try tap(app.buttons["manage-household-admins"], in: app)
+        XCTAssertTrue(app.otherElements["household-admins"].waitForExistence(timeout: Wait.control))
         let toggle = app.buttons["room-admin-\(peer)"]
         XCTAssertTrue(toggle.waitForExistence(timeout: Wait.control))
         XCTAssertTrue(toggle.label.hasPrefix("Remove admin rights"), toggle.label)
-        let row = app.otherElements["household-member-\(peer)"]
-        XCTAssertTrue(row.staticTexts["Admin; account linked"].exists)
+        let row = app.otherElements["room-admin-member-\(peer)"]
+        XCTAssertTrue(row.staticTexts["Admin"].exists)
 
         try tap(toggle, in: app)
         try tap(app.buttons["Confirm removal of admin rights"], in: app)
         XCTAssertTrue(app.staticTexts["Room admin access removed."].waitForExistence(timeout: Wait.control))
-        XCTAssertTrue(row.staticTexts["Member; account linked"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(row.staticTexts["Member"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.buttons["room-admin-\(peer)"].label.hasPrefix("Make "))
 
         try tap(app.buttons["room-admin-\(peer)"], in: app)
         try tap(app.buttons["Confirm admin access"], in: app)
         XCTAssertTrue(app.staticTexts["Room admin access granted."].waitForExistence(timeout: Wait.control))
-        XCTAssertTrue(row.staticTexts["Admin; account linked"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(row.staticTexts["Admin"].waitForExistence(timeout: Wait.control))
     }
 
     @MainActor

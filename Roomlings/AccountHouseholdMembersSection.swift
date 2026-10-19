@@ -3,6 +3,8 @@ import SwiftUI
 
 struct AccountHouseholdMembersSection: View {
     @Bindable var model: AccountModel
+    /// Shows the room admin roster, which the web keeps apart from household membership.
+    var admins = false
     @State private var confirmation: Confirmation?
     @State private var confirming = false
 
@@ -57,60 +59,68 @@ struct AccountHouseholdMembersSection: View {
     }
 
     var body: some View {
-        // Mirrors the web household access view: a plain roster with text actions (`src/Accounts.tsx`).
+        // Mirrors the web household access view and room admin panel: a plain roster with text actions
+        // (`src/Accounts.tsx`, `src/RoomAdminPanel.tsx`).
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Text(model.invitations?.household.name ?? "Household members")
-                    .font(RoomTheme.heading(21))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Button { Task { await model.refresh(includeInvitations: true) } } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(RoomTheme.ink)
-                        .frame(width: 44, height: 44)
-                        .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-                        .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
-                        .contentShape(Rectangle())
+            if admins {
+                heading("Room admins")
+            } else {
+                HStack(spacing: 12) {
+                    heading(model.invitations?.household.name ?? "Household members")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { Task { await model.refresh(includeInvitations: true) } } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(RoomTheme.ink)
+                            .frame(width: 44, height: 44)
+                            .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Refresh household members")
+                    .accessibilityIdentifier("refresh-household-members")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Refresh household members")
-                .accessibilityIdentifier("refresh-household-members")
             }
             if let access = model.invitations {
-                hint("You are \(roleDescription(access.role)). Owners and admins can configure rooms and manage admin rights. Only the owner manages invitations, removes roommates or transfers ownership. All active roommates can edit the shared ledger. Former roommates remain in financial history.")
+                if admins {
+                    hint("Owners and admins can add, remove and configure room components, and grant or remove admin rights. Everyone can use the shared shopping list, chores and daily room controls. Invitations, member removal and ownership transfers stay with the owner.")
+                } else {
+                    hint("You are \(roleDescription(access.role)). Owners and admins can configure rooms and manage admin rights. Only the owner manages invitations, removes roommates or transfers ownership. All active roommates can edit the shared ledger. Former roommates remain in financial history.")
+                }
                 if model.invitationNeedsRefresh {
                     RoomFeedback("Refresh household members before changing ownership or access.")
                 }
                 VStack(spacing: 0) {
                     ForEach(access.members) { member in row(member, access: access) }
                 }
-                if access.role != .owner {
-                    hint("Only the current owner can transfer ownership.")
-                } else if access.ownershipCandidates.isEmpty {
-                    hint("Another active roommate must join with a Roomlings account before they can become owner.")
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Rectangle().fill(RoomTheme.border).frame(height: 1).padding(.bottom, 12)
-                    Text("Leave this household").font(RoomTheme.heading(21))
-                    hint("Leaving removes access, not debts. Existing expenses, monthly bill schedules and repayments stay in the shared ledger. Review future bill participants with your roommates before leaving.")
-                    if !access.canLeave {
-                        hint("Transfer ownership to another active account-linked roommate before leaving this household.")
+                if admins {
+                    if access.role == .member { hint("Ask the owner or an admin if you need room editing access.") }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Rectangle().fill(RoomTheme.border).frame(height: 1).padding(.bottom, 8)
+                        heading("Leave this household")
+                        hint("Leaving removes access, not debts. Existing expenses, monthly bill schedules and repayments stay in the shared ledger. Review future bill participants with your roommates before leaving.")
+                        if !access.canLeave {
+                            hint("Transfer ownership to another active account-linked roommate before leaving this household.")
+                        }
+                        Button("Leave household") { present(.leave(access.household.name), access: access) }
+                            .buttonStyle(RoomButtonStyle(kind: .text, size: 13))
+                            .accessibilityLabel("Leave \(access.household.name)")
+                            .accessibilityIdentifier("leave-household")
+                            .disabled(!access.canLeave || model.invitationNeedsRefresh || !model.canUseAccount)
                     }
-                    Button("Leave household", role: .destructive) { present(.leave(access.household.name), access: access) }
-                        .buttonStyle(RoomButtonStyle(kind: .text))
-                        .accessibilityLabel("Leave \(access.household.name)")
-                        .accessibilityIdentifier("leave-household")
-                        .disabled(!access.canLeave || model.invitationNeedsRefresh || !model.canUseAccount)
+                    .padding(.top, 12)
                 }
-                .padding(.top, 12)
             } else {
-                hint("Load the current household members before managing ownership.")
+                hint(admins ? "Load the current household members before managing admins."
+                     : "Load the current household members before managing ownership.")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(model.busy)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("household-members")
+        .accessibilityIdentifier(admins ? "household-admins" : "household-members")
         .confirmationDialog(confirmation?.title ?? "Confirm household change", isPresented: $confirming,
                             titleVisibility: .visible, presenting: confirmation) { confirmation in
             Button(confirmation.button, role: confirmation.destructive ? .destructive : nil) {
@@ -162,8 +172,12 @@ struct AccountHouseholdMembersSection: View {
         confirming = true
     }
 
+    private func heading(_ text: String) -> some View {
+        Text(text).font(RoomTheme.body(21).weight(.medium)).foregroundStyle(RoomTheme.ink)
+    }
+
     private func hint(_ text: String) -> some View {
-        Text(text).font(RoomTheme.body(13)).foregroundStyle(RoomTheme.muted)
+        Text(text).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted).lineSpacing(4)
     }
 
     private func roleDescription(_ role: AccountRole) -> String {
@@ -177,11 +191,13 @@ struct AccountHouseholdMembersSection: View {
     /// One roster row: the name and status, with any owner or admin actions as text buttons beside them.
     private func row(_ member: HouseholdAccessMember, access: HouseholdInvitationAccess) -> some View {
         let actions = WrappingRow(spacing: 16) { actionButtons(member, access: access) }
-            .buttonStyle(RoomButtonStyle(kind: .text, size: 14))
+            .buttonStyle(RoomButtonStyle(kind: .text, size: 13))
         let details = VStack(alignment: .leading, spacing: 4) {
-            Text(member.name).font(RoomTheme.body(14).weight(.bold)).foregroundStyle(RoomTheme.leaf)
+            Text(admins && member.id == access.memberID ? "\(member.name) (you)" : member.name)
+                .font(RoomTheme.body(14).weight(.bold)).foregroundStyle(RoomTheme.leaf)
             Text(status(member)).font(RoomTheme.body(12)).foregroundStyle(RoomTheme.muted)
         }
+        .fixedSize(horizontal: false, vertical: true)
         return VStack(spacing: 0) {
             Rectangle().fill(RoomTheme.border).frame(height: 1)
             ViewThatFits(in: .horizontal) {
@@ -198,18 +214,12 @@ struct AccountHouseholdMembersSection: View {
             .padding(.vertical, 12)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("household-member-\(member.id.uuidString.lowercased())")
+        .accessibilityIdentifier("\(admins ? "room-admin-member" : "household-member")-\(member.id.uuidString.lowercased())")
     }
 
     @ViewBuilder private func actionButtons(_ member: HouseholdAccessMember, access: HouseholdInvitationAccess) -> some View {
         let blocked = model.invitationNeedsRefresh || !model.canUseAccount
-        Group {
-            if access.ownershipCandidates.contains(where: { $0.id == member.id }) {
-                Button("Make owner") { present(.transfer(member), access: access) }
-                    .accessibilityLabel("Make \(member.name) owner")
-                    .accessibilityIdentifier("transfer-ownership-\(member.id.uuidString.lowercased())")
-                    .disabled(blocked)
-            }
+        if admins {
             if access.role != .member, member.active, member.role != .owner {
                 let grant = member.role == .member
                 Button(grant ? "Make admin" : "Remove admin rights") { present(.admin(member, grant), access: access) }
@@ -217,8 +227,15 @@ struct AccountHouseholdMembersSection: View {
                     .accessibilityIdentifier("room-admin-\(member.id.uuidString.lowercased())")
                     .disabled(blocked)
             }
+        } else {
+            if access.ownershipCandidates.contains(where: { $0.id == member.id }) {
+                Button("Make owner") { present(.transfer(member), access: access) }
+                    .accessibilityLabel("Make \(member.name) owner")
+                    .accessibilityIdentifier("transfer-ownership-\(member.id.uuidString.lowercased())")
+                    .disabled(blocked)
+            }
             if access.removalCandidates.contains(where: { $0.id == member.id }) {
-                Button("Remove access", role: .destructive) { present(.remove(member), access: access) }
+                Button("Remove access") { present(.remove(member), access: access) }
                     .accessibilityLabel("Remove access for \(member.name)")
                     .accessibilityIdentifier("remove-member-\(member.id.uuidString.lowercased())")
                     .disabled(blocked)
@@ -234,7 +251,7 @@ struct AccountHouseholdMembersSection: View {
         case .admin: role = "Admin"
         case .member: role = "Member"
         }
-        return "\(role); \(member.linked ? "account linked" : "browser access only")"
+        return admins ? role : "\(role); \(member.linked ? "account linked" : "browser access only")"
     }
 }
 
