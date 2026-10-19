@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import ChoreRoomWorld from '@roomlings-web/src/ChoreRoomWorld.tsx'
 import type { ChoreRoomConfig, ChoreRoomWorldProps } from '@roomlings-web/src/ChoreRoomWorld.tsx'
 import BathroomWorld from '@roomlings-web/src/BathroomWorld.tsx'
 import LivingRoomWorld from '@roomlings-web/src/LivingRoomWorld.tsx'
 import { roomCameraZoom } from '@roomlings-web/src/camera.ts'
+import { installedRoomComponents } from '@roomlings-web/src/roomComponentScene.ts'
 
 export const choreRooms = { bathroom: BathroomWorld, 'living-room': LivingRoomWorld }
 type SharedRoom = typeof choreRooms[keyof typeof choreRooms]
@@ -22,7 +23,7 @@ function sharedConfig(room: SharedRoom): AnyConfig {
 }
 
 /** A shared bathroom or living room entered at the kitchen's native scale, like `KitchenPreview` with `roomZoom`. */
-export function ScaledChoreRoom({ room, roomZoom, ...props }: { room: SharedRoom; roomZoom: number }
+export function ScaledChoreRoom({ room, roomZoom, onComponentSelect, ...props }: { room: SharedRoom; roomZoom: number }
   & ChoreRoomWorldProps<string>) {
   // The scene reads its configuration once, so the camera reads the latest scale from a ref.
   const scale = useRef(roomZoom)
@@ -39,13 +40,27 @@ export function ScaledChoreRoom({ room, roomZoom, ...props }: { room: SharedRoom
         : 1),
     }
   }, [room])
+  // A tapped object stays selected so the camera frames it, as `KitchenPreview` does for the kitchen.
+  const [selection, setSelection] = useState<{ componentId: string; request: number } | null>(null)
+  const selectedComponentId = onComponentSelect && installedRoomComponents(props.components, config.roomId)
+    .some((component) => component.id === selection?.componentId) ? selection?.componentId ?? null : null
+  useEffect(() => {
+    if (!selectedComponentId) setSelection(null)
+  }, [selectedComponentId])
+  const selectComponent = (componentId: string) => {
+    if (props.paused) return
+    setSelection((previous) => ({ componentId, request: (previous?.request ?? 0) + 1 }))
+    onComponentSelect?.(componentId)
+  }
   const markers = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = markers.current
     return root ? smoothMarkers(root) : undefined
   }, [])
   return <div ref={markers} style={{ display: 'contents' }}>
-    <ChoreRoomWorld config={config} {...props} />
+    <ChoreRoomWorld config={config} {...props} selectedComponentId={selectedComponentId}
+      onComponentSelect={onComponentSelect ? selectComponent : undefined}
+      focusRequest={onComponentSelect ? { target: 'room', id: selection?.request ?? 0 } : props.focusRequest} />
   </div>
 }
 
