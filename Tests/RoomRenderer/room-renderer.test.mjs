@@ -630,6 +630,10 @@ test('@room the bundled bathroom and living room open native chores and shopping
       await expect.poll(() => page.evaluate(() => window.roomEvents.at(-1))).toEqual({
         version: 1, type: 'open-chores', householdId, componentId,
       })
+      // The tapped object stays selected so the camera frames it, as it does in the kitchen.
+      const world = page.locator(`.${roomId}-world`)
+      await expect(world).toHaveAttribute('data-selected-component', componentId)
+      await expect(world).toHaveAttribute('data-component-focus', 'true')
     }
     await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), householdState)
     await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
