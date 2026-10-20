@@ -96,7 +96,8 @@ struct RoomPreviewScreen: View {
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
                 // While a placement is previewed, the room belongs to the editor until it is placed or discarded.
-                .allowsHitTesting(editor?.placement == nil)
+                // Disabling, unlike blocking hit tests, also stops VoiceOver and keyboard activation.
+                .disabled(editor?.placement != nil)
                 if let editor, editor.placement != nil {
                     RoomPlacementBar(model: accounts, editor: editor)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { placementBarHeight = $0 }
