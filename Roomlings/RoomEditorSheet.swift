@@ -63,6 +63,7 @@ struct RoomEditorSheet: View {
                         } else {
                             Text(model.roomObjectsFailure ?? "Open a household to edit its room.").foregroundStyle(RoomTheme.muted)
                         }
+                        footer
                     }
                     .padding(24)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
@@ -78,8 +79,6 @@ struct RoomEditorSheet: View {
                     if notice != nil { proxy.scrollTo("editor-feedback", anchor: .top) }
                 }
             }
-            Rectangle().fill(RoomTheme.border).frame(height: 1)
-            footer
         }
         .font(RoomTheme.body())
         .foregroundStyle(RoomTheme.ink)
@@ -92,7 +91,7 @@ struct RoomEditorSheet: View {
         .presentationBackground(RoomTheme.paper)
         .presentationCornerRadius(16)
         .interactiveDismissDisabled(editor.hasChanges || editor.saving || editor.pendingSave != nil)
-        .modifier(RoomSheetPresentation(idealHeight: contentHeight + chromeHeight + 90))
+        .modifier(RoomSheetPresentation(idealHeight: contentHeight + chromeHeight + 1))
     }
 
     // MARK: - Feedback and footer
@@ -132,9 +131,11 @@ struct RoomEditorSheet: View {
         }
     }
 
+    /// The web's editor footer, at the end of the form.
     private var footer: some View {
         let count = editor.draft.entries.count
         return VStack(alignment: .leading, spacing: 10) {
+            Rectangle().fill(RoomTheme.border).frame(height: 1).padding(.bottom, 2)
             Text(count == 0 ? "No unapplied changes." : "\(count) \(count == 1 ? "object has" : "objects have") unapplied changes.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 .accessibilityIdentifier("room-editor-status")
@@ -146,8 +147,7 @@ struct RoomEditorSheet: View {
             .disabled(editor.locked || editor.draft.isEmpty || !editor.conflicts.isEmpty || editor.invalidLayout != nil)
             .accessibilityIdentifier("room-editor-apply")
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
+        .padding(.top, 8)
     }
 
     @ViewBuilder private func conflicts(layout: RoomLayout) -> some View {
@@ -155,9 +155,9 @@ struct RoomEditorSheet: View {
             let name = RoomEditor.name(entry.value, layout: layout)
             if let latest = editor.saved(entry.value.id) {
                 RoomFeedback("\(name) changed while you were editing. Latest: \(latest.name), \(latest.installed ? "in the room" : "in Storage").") {
-                    HStack(spacing: 8) {
-                        Button("Use latest values") { editor.useLatest(entry.value.id) }
-                        Button("Keep my draft") { editor.keepDraft(entry.value.id) }
+                    WrappingRow(spacing: 8, lineSpacing: 8) {
+                        Button("Use latest values") { editor.useLatest(entry.value.id) }.fixedSize()
+                        Button("Keep my draft") { editor.keepDraft(entry.value.id) }.fixedSize()
                     }
                     .buttonStyle(RoomButtonStyle(size: 14))
                 }
@@ -321,7 +321,6 @@ struct RoomEditorSheet: View {
                             value.supplies = value.supplies.map { $0.id == supply.id ? RoomObject.Supply(id: $0.id, name: $0.name, quantity: String(quantity.prefix(40))) : $0 }
                         }
                     }))
-                    .frame(maxWidth: 120)
                     Button { editor.update(object) { $0.supplies.removeAll { $0.id == supply.id } } } label: {
                         Image(systemName: "trash").frame(width: 44, height: 44).contentShape(Rectangle())
                     }
@@ -332,15 +331,17 @@ struct RoomEditorSheet: View {
                 .disabled(editor.locked)
             }
             if object.supplies.isEmpty { detail("No supply shortcuts for this object.") }
-            HStack(spacing: 8) {
+            WrappingRow(spacing: 12, lineSpacing: 8) {
                 Button { editor.addSupply(to: object) } label: { Label("Add supply shortcut", systemImage: "plus") }
                     .buttonStyle(RoomButtonStyle(size: 14))
+                    .fixedSize()
                     .disabled(editor.locked || object.supplies.count >= layout.supplyLimit)
                 Button { editor.update(object) { $0.supplies = layout.suggestedSupplies($0) } } label: {
                     Label("Use suggested supplies", systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(RoomButtonStyle(kind: .text, size: 14))
                 .disabled(editor.locked || object.supplies == layout.suggestedSupplies(object))
+                .fixedSize()
             }
             if object.supplies.count >= layout.supplyLimit {
                 detail("An object can have up to \(layout.supplyLimit) supply shortcuts.")
@@ -517,6 +518,7 @@ struct RoomEditorSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .top, spacing: 6) {
                         Text(label).font(RoomTheme.body(14).weight(.semibold)).foregroundStyle(RoomTheme.leaf)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let badge { availabilityBadge(badge) }
                     }
@@ -557,8 +559,7 @@ struct RoomEditorSheet: View {
 
     private func chips<Value: Hashable>(label: String, options: [(Value, String)], selected: Value,
                                         choose: @escaping (Value) -> Void) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+        WrappingRow(spacing: 6, lineSpacing: 6) {
                 ForEach(options, id: \.0) { value, title in
                     Button { choose(value) } label: {
                         Text(title)
@@ -573,8 +574,8 @@ struct RoomEditorSheet: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(value == selected ? .isSelected : [])
                 }
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(editor.locked)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
@@ -609,19 +610,10 @@ struct RoomPlacementBar: View {
                         .accessibilityIdentifier("placement-reason")
                 }
                 if swapping { swap(placement, name: name, layout: layout) }
-                HStack(spacing: 8) {
-                    Button {
-                        editor.acceptPlacement()
-                    } label: {
-                        Label((placement.swapIDs?.isEmpty ?? true) ? "Place object" : "Stage swap", systemImage: "checkmark")
-                    }
-                    .buttonStyle(RoomButtonStyle(kind: .primary))
-                    .disabled(editor.locked || (placement.readOnlyReason != nil && !swapping)
-                              || editor.placementIssue != nil || editor.proposedError != nil)
-                    .accessibilityIdentifier("place-object")
-                    Button { editor.discardPlacement() } label: { Label("Discard preview", systemImage: "xmark") }
-                        .disabled(editor.saving)
-                        .accessibilityIdentifier("discard-placement")
+                // Side by side only when both labels fit at full size; otherwise stacked.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { actions(placement, swapping: swapping) }.fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 8) { actions(placement, swapping: swapping) }
                 }
                 if placement.readOnlyReason != nil, !swapping, !editor.swapPositions.isEmpty {
                     Button("Choose a swap or another position") { editor.startSwap() }
@@ -632,9 +624,9 @@ struct RoomPlacementBar: View {
             }
             .padding(16)
             .frame(maxWidth: 560, alignment: .leading)
-            .background(RoomTheme.paper, in: RoundedRectangle(cornerRadius: 16))
+            // The shadow belongs to the card alone; on the whole view it would blur the text.
+            .background(RoundedRectangle(cornerRadius: 16).fill(RoomTheme.paper).shadow(color: .black.opacity(0.08), radius: 12, y: 4))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(RoomTheme.border))
-            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
             .font(RoomTheme.body())
             .foregroundStyle(RoomTheme.ink)
             .buttonStyle(RoomButtonStyle())
@@ -642,6 +634,21 @@ struct RoomPlacementBar: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("placement-bar")
         }
+    }
+
+    @ViewBuilder private func actions(_ placement: RoomEditor.Placement, swapping: Bool) -> some View {
+        Button {
+            editor.acceptPlacement()
+        } label: {
+            Label((placement.swapIDs?.isEmpty ?? true) ? "Place object" : "Stage swap", systemImage: "checkmark")
+        }
+        .buttonStyle(RoomButtonStyle(kind: .primary))
+        .disabled(editor.locked || (placement.readOnlyReason != nil && !swapping)
+                  || editor.placementIssue != nil || editor.proposedError != nil)
+        .accessibilityIdentifier("place-object")
+        Button { editor.discardPlacement() } label: { Label("Discard preview", systemImage: "xmark") }
+            .disabled(editor.saving)
+            .accessibilityIdentifier("discard-placement")
     }
 
     @ViewBuilder private func swap(_ placement: RoomEditor.Placement, name: String, layout: RoomLayout) -> some View {

@@ -122,6 +122,8 @@ extension AccountUITests {
         XCTAssertTrue(editor.waitForExistence(timeout: Wait.control))
         reveal(editor.buttons["Edit Kettle"], in: editor)
         try tap(editor.buttons["Edit Kettle"], in: app)
+        XCTAssertTrue(app.textFields["Object name"].waitForExistence(timeout: Wait.control))
+        attachObjectsScreenshot("Editor object settings")
         try tap(app.buttons["room-editor-store"], in: app)
         XCTAssertTrue(app.staticTexts["room-editor-notice"].waitForExistence(timeout: Wait.control))
         try tap(app.buttons["room-editor-apply"], in: app)

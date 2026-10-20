@@ -108,5 +108,20 @@ extension AccountUITests {
             try selectSegment(section, from: "money-sections", in: app)
             try audit(app, screen: "Money \(section)")
         }
+        try tap(app.buttons["Done"], in: app)
+
+        try tap(app.buttons["room-objects-entry"], in: app)
+        try tap(app.buttons["edit-room"], in: app)
+        XCTAssertTrue(app.otherElements["room-editor-sheet"].waitForExistence(timeout: Wait.control))
+        try audit(app, screen: "Edit room")
+        try selectSegment("Add objects", from: "room-editor-sections", in: app)
+        try audit(app, screen: "Edit room catalog")
+        try selectSegment("Storage (1)", from: "room-editor-sections", in: app)
+        try audit(app, screen: "Edit room storage")
+        try tap(app.buttons["Bring back Kettle"], in: app)
+        XCTAssertTrue(app.otherElements["placement-bar"].waitForExistence(timeout: Wait.control))
+        try audit(app, screen: "Placement preview")
+        try tap(app.buttons["discard-placement"], in: app)
+        try tap(app.buttons["room-editor-cancel"], in: app)
     }
 }

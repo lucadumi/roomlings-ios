@@ -339,12 +339,14 @@ struct AccountHouseholdMembersSection: View {
 /// wrapping text actions.
 struct WrappingRow: Layout {
     var spacing: CGFloat = 16
+    /// Space between wrapped lines.
+    var lineSpacing: CGFloat = 0
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let lines = lines(for: subviews, width: proposal.width)
         let width = lines.map { line in line.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(0, line.count - 1)) }.max() ?? 0
         return CGSize(width: proposal.width.map { min($0, width) } ?? width,
-                      height: lines.reduce(0) { $0 + ($1.map(\.height).max() ?? 0) })
+                      height: lines.reduce(0) { $0 + ($1.map(\.height).max() ?? 0) } + lineSpacing * CGFloat(max(0, lines.count - 1)))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -358,7 +360,7 @@ struct WrappingRow: Layout {
                 x += size.width + spacing
                 index += 1
             }
-            y += height
+            y += height + lineSpacing
         }
     }
 
