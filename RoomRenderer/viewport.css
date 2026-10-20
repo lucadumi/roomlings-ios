@@ -9,7 +9,9 @@ body { overscroll-behavior: none; }
 .native-room .world-camera-controls > * { flex-shrink: 0; }
 .native-room .world-camera-controls > span { min-width: 3.5em; font-size: max(11px, 0.6875rem); text-align: center; font-variant-numeric: tabular-nums; }
 .native-room .world-quick-actions { position: absolute; inset: auto auto 1rem 1rem; max-width: calc(100% - var(--camera-rail-space) - 2rem); }
-.native-room .world-quick-actions button { min-width: 44px; min-height: 44px; }
+.native-room .world-quick-actions button { min-width: 44px; min-height: 44px; color: var(--ink); }
+/* Match the native header's icon buttons: a 44pt square with a 17pt-weight glyph. */
+.native-room .world-quick-actions button > svg { width: 20px; height: 20px; }
 .native-room .world-view-label { position: absolute; top: 0.75rem; left: 50%; max-width: calc(100% - 2rem); }
 .native-room .world-interaction-hint { bottom: 4.75rem; }
 .native-room .scene-loading { inset: 0; justify-content: center; background: var(--room-backdrop-center); z-index: 4; }
