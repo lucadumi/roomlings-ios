@@ -119,8 +119,13 @@ await writeFile(join(output, 'chores.json'), JSON.stringify({
     id, name, kind, roomId, slotId, installed,
   })),
 }, null, 2) + '\n')
-const { componentFinishes, roomSlots } = await import(pathToFileURL(join(source, 'shared/roomComponents.ts')).href)
+const {
+  componentFinishes, roomSlots, componentKinds, componentCategories, componentIsRetired, createRoomComponent,
+  suggestedComponentSupplies, roomComponentLimit, componentSupplyLimit,
+} = await import(pathToFileURL(join(source, 'shared/roomComponents.ts')).href)
+const { componentSurfaces, roomZoneLabels, roomZoneCapacities } = await import(pathToFileURL(join(source, 'shared/roomZones.ts')).href)
 // Room object details for the native objects sheet: names, manual states, routines and the default layout.
+// `layout` carries the room editor's placement data; the native rules mirror src/componentAvailability.ts.
 await writeFile(join(output, 'objects.json'), JSON.stringify({
   version: 1,
   kinds: Object.fromEntries(Object.entries(componentCatalog).map(([kind, definition]) => [kind, {
@@ -130,6 +135,35 @@ await writeFile(join(output, 'objects.json'), JSON.stringify({
   finishes: Object.fromEntries(Object.entries(componentFinishes).map(([id, { name }]) => [id, name])),
   slots: Object.fromEntries(roomSlots.map(({ id, roomId, name }) => [id, { roomId, name }])),
   defaultComponents: defaultRoomComponents(),
+  layout: {
+    objectLimit: roomComponentLimit,
+    supplyLimit: componentSupplyLimit,
+    kindOrder: componentKinds,
+    finishOrder: Object.keys(componentFinishes),
+    finishColors: Object.fromEntries(Object.entries(componentFinishes).flatMap(([id, { color }]) => color ? [[id, color]] : [])),
+    categories: Object.entries(componentCategories).map(([id, name]) => ({ id, name })),
+    kinds: Object.fromEntries(componentKinds.map((kind) => {
+      const definition = componentCatalog[kind]
+      const rooms = roomIds.filter((roomId) => roomSlots.some((slot) => slot.roomId === roomId && slot.kinds.includes(kind)))
+      // A new object's name and suggested supplies depend on its room, and supplies also on its model.
+      const fresh = Object.fromEntries(rooms.map((roomId) => {
+        const slot = roomSlots.find((slot) => slot.roomId === roomId && slot.kinds.includes(kind))
+        return [roomId, {
+          name: createRoomComponent(kind, slot.id, 'layout').name,
+          supplies: Object.fromEntries(definition.variants.map(({ id: variant }) => [variant, suggestedComponentSupplies({ kind, roomId, variant })])),
+        }]
+      }))
+      return [kind, {
+        name: definition.name, category: definition.category, retired: componentIsRetired(kind),
+        placementRooms: definition.placementRooms ?? null, placementSlots: definition.placementSlots ?? null, rooms: fresh,
+      }]
+    })),
+    slots: roomSlots.map(({ id, roomId, name, kinds, removable, requires }) => ({
+      id, roomId, name, kinds, removable, requires: requires ?? null, surface: componentSurfaces[id] ?? null,
+    })),
+    zones: Object.entries(roomZoneLabels).map(([id, label]) => ({ id, label })),
+    zoneCapacities: roomZoneCapacities,
+  },
 }, null, 2) + '\n')
 const { roomStyleSchema } = await import(pathToFileURL(join(source, 'shared/domain.ts')).href)
 const { roomPresets } = await import(pathToFileURL(join(source, 'src/roomStyles.ts')).href)

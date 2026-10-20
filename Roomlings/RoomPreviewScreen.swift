@@ -24,9 +24,12 @@ struct RoomPreviewScreen: View {
     /// Chores opened from a room object's Add chore start on the add form, with an optional routine.
     @State private var choreAdding: RoomObjectCatalog.Routine??
     @State private var thumbnails = RoomThumbnails()
+    /// The room editor's private draft. It outlives the sheet while a placement is previewed in the room.
+    @State private var editor: RoomEditor?
+    @State private var placementBarHeight: CGFloat = 0
 
     private enum Sheet: String, Identifiable {
-        case account, chores, shopping, money, notifications, objects
+        case account, chores, shopping, money, notifications, objects, editor
         var id: String { rawValue }
     }
 
@@ -58,13 +61,13 @@ struct RoomPreviewScreen: View {
             let insets = RoomViewportInsets(
                 top: Double(max(0, geometry.safeAreaInsets.top + headerHeight)),
                 right: Double(max(0, geometry.safeAreaInsets.trailing)),
-                bottom: Double(max(0, geometry.safeAreaInsets.bottom)),
+                bottom: Double(max(0, geometry.safeAreaInsets.bottom + (editor?.placement == nil ? 0 : placementBarHeight + 16))),
                 left: Double(max(0, geometry.safeAreaInsets.leading))
             )
             ZStack(alignment: .top) {
                 RoomTheme.paper.ignoresSafeArea(.container)
                 if let roomZoom {
-                    RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: accounts.room.showing(room: roomID),
+                    RoomWebView(paused: scenePhase != .active || presentedSheet != nil, room: visibleRoom,
                                 viewportInsets: insets, roomZoom: roomZoom, thumbnails: thumbnails) { event in
                         switch event {
                         case .status(.unavailable):
@@ -92,6 +95,15 @@ struct RoomPreviewScreen: View {
                     presentedSheet = .account
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+                // While a placement is previewed, the room belongs to the editor until it is placed or discarded.
+                .allowsHitTesting(editor?.placement == nil)
+                if let editor, editor.placement != nil {
+                    RoomPlacementBar(model: accounts, editor: editor)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { placementBarHeight = $0 }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                }
                 if roomsOpen, let rooms = accounts.choreCatalog?.rooms {
                     Color.clear
                         .contentShape(Rectangle())
@@ -119,7 +131,7 @@ struct RoomPreviewScreen: View {
                 }
             }
         }
-        .sheet(item: $presentedSheet, onDismiss: presentPendingContent) { sheet in
+        .sheet(item: $presentedSheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
             case .account: AccountSheet(model: accounts)
             case .chores:
@@ -129,6 +141,10 @@ struct RoomPreviewScreen: View {
             case .money: MoneySheet(model: accounts, destination: moneyDestination)
             case .notifications: NotificationsSheet(model: accounts, onOpen: openInboxItem)
             case .objects: RoomObjectsSheet(model: accounts, roomID: roomID, thumbnails: thumbnails, onOpen: openObjectRoute)
+            case .editor:
+                if let editor {
+                    RoomEditorSheet(model: accounts, editor: editor, thumbnails: thumbnails, onClose: closeEditor)
+                }
             }
         }
         .task {
@@ -162,8 +178,17 @@ struct RoomPreviewScreen: View {
                 }
             }
         }
+        .onChange(of: editor?.placement != nil) { _, previewing in
+            // The editor steps aside so the placement can be judged in the live room, then returns.
+            if previewing, presentedSheet == .editor { presentedSheet = nil }
+            if !previewing, editor != nil, presentedSheet == nil { presentedSheet = .editor }
+        }
         .onChange(of: accounts.room.householdID) { _, householdID in
             failure = nil
+            if editor?.householdID.uuidString.lowercased() != householdID {
+                editor = nil
+                if presentedSheet == .editor { presentedSheet = nil }
+            }
             if householdID == nil { roomID = RoomVisualState.defaultRoomID }
             roomsOpen = false
             notifications.attach(to: accounts)
@@ -219,7 +244,7 @@ struct RoomPreviewScreen: View {
     }
 
     private func presentPendingInvitation() {
-        guard invitationPresentationPending, !accounts.busy,
+        guard invitationPresentationPending, !accounts.busy, editor == nil,
               presentedSheet == nil || presentedSheet == .account else { return }
         invitationPresentationPending = false
         presentedSheet = .account
@@ -227,7 +252,7 @@ struct RoomPreviewScreen: View {
 
     private func presentPendingContent() {
         presentPendingInvitation()
-        guard !openingNotification, !accounts.busy, presentedSheet == nil,
+        guard !openingNotification, !accounts.busy, presentedSheet == nil, editor == nil,
               let pending = notifications.pending else { return }
         guard accounts.canUseAccount else {
             presentedSheet = .account
@@ -397,7 +422,33 @@ struct RoomPreviewScreen: View {
         case .balances:
             moneyDestination = nil
             presentedSheet = .money
+        case .editRoom:
+            guard accounts.canEditRoom, let householdID = accounts.state?.session?.household.id else {
+                accounts.message = "Ask an admin for room editing access."
+                return
+            }
+            editor = RoomEditor(accounts: accounts, householdID: householdID, roomID: roomID)
+            presentedSheet = .editor
         }
+    }
+
+    /// The room on screen, with the editor's draft while one is open for this room.
+    private var visibleRoom: RoomVisualState {
+        let room = accounts.room.showing(room: roomID)
+        guard let editor, editor.roomID == roomID, room.householdID == editor.householdID.uuidString.lowercased() else { return room }
+        return room.editing(editor.roomComponents, placementID: editor.placement?.candidate.id)
+    }
+
+    private func sheetDismissed() {
+        // A swipe closes an editor without changes; one previewing a placement is only stepping aside.
+        if presentedSheet == nil, let editor, editor.placement == nil { closeEditor() }
+        presentPendingContent()
+    }
+
+    private func closeEditor() {
+        editor = nil
+        if presentedSheet == .editor { presentedSheet = nil }
+        presentPendingContent()
     }
 
     /// Opens what a notification is about, as the web inbox does, and marks it read.

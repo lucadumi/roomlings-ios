@@ -6,7 +6,7 @@ import SwiftUI
 struct RoomObjectsSheet: View {
     enum Route {
         case chores(objectID: String), addChore(objectID: String, routine: RoomObjectCatalog.Routine?)
-        case roomChores, shopping, receipts, balances
+        case roomChores, shopping, receipts, balances, editRoom
     }
 
     private enum Change {
@@ -132,6 +132,12 @@ struct RoomObjectsSheet: View {
             } else {
                 if selectedID != nil {
                     RoomFeedback("This object is no longer in the room.")
+                }
+                if model.canEditRoom {
+                    Button { open(.editRoom) } label: { Label("Edit room", systemImage: "pencil") }
+                        .buttonStyle(RoomButtonStyle(size: 14))
+                        .disabled(model.busy)
+                        .accessibilityIdentifier("edit-room")
                 }
                 list(catalog: catalog)
             }
@@ -316,7 +322,7 @@ struct RoomObjectsSheet: View {
         }
         section("Supplies") {
             if object.supplies.isEmpty {
-                detail("No supplies set. \(model.canEditRoom ? "Add them on the web in Edit room." : "An admin can add them.")")
+                detail("No supplies set. \(model.canEditRoom ? "Add them in Edit room." : "An admin can add them.")")
             } else {
                 ForEach(object.supplies) { supply in supplyRow(object, supply: supply) }
                 if object.kind != "shopping-bag" {

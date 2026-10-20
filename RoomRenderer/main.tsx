@@ -47,12 +47,18 @@ const stateSchema = z.object({
   shoppingEnabled: z.boolean().default(false),
   moneyEnabled: z.boolean().default(false),
   roomComponents: z.array(roomComponentSchema).max(roomComponentLimit).optional(),
+  // The native room editor's private draft: the room shows it, and a previewed placement as the web's hologram.
+  editMode: z.boolean().default(false),
+  placementPreviewId: roomComponentIdSchema.nullable().default(null),
   // The household's chore schedule and calendar, so overdue care dirties objects as on the web.
   billingTimeZone: timeZoneSchema.default('UTC'),
   chores: z.array(choreCareSchema).max(200).default([]),
   viewportInsets: z.object({ top: inset, right: inset, bottom: inset, left: inset }).strict()
     .default({ top: 0, right: 0, bottom: 0, left: 0 }),
-}).strict().refine((value) => (!value.choresEnabled && !value.shoppingEnabled && !value.moneyEnabled)
+}).strict().refine((value) => value.editMode || value.placementPreviewId === null, {
+  message: 'Only the room editor previews a placement.',
+  path: ['placementPreviewId'],
+}).refine((value) => (!value.choresEnabled && !value.shoppingEnabled && !value.moneyEnabled)
   || value.householdId !== null, {
   message: 'Household tools require a selected household.',
   path: ['householdId'],
@@ -63,9 +69,13 @@ const stateSchema = z.object({
 })
 
 type RoomState = z.infer<typeof stateSchema>
-// The kitchen preview forwards every prop to the kitchen, which draws overdue dirt. The renderer
-// test checks that each dirty object's marker reports its level.
-const Kitchen = KitchenPreview as ComponentType<KitchenPreviewProps & { grime: Readonly<Record<string, ChoreGrime>> }>
+// The kitchen preview forwards every prop to the kitchen, which draws overdue dirt and the editor's
+// placement preview. The renderer test checks that each dirty object's marker reports its level.
+const Kitchen = KitchenPreview as ComponentType<KitchenPreviewProps & {
+  grime: Readonly<Record<string, ChoreGrime>>
+  editMode: boolean
+  placementPreviewId: string | null
+}>
 
 // Today's date in the household calendar, refreshed so dirt grows past midnight without a reload.
 function useBillingDate(timeZone: string) {
@@ -175,9 +185,11 @@ function Room() {
   const [dockSpace, setDockSpace] = useState(0)
   const [dockWidth, setDockWidth] = useState(0)
   const [dockHeight, setDockHeight] = useState(0)
-  const hasChores = current.choresEnabled && current.householdId !== null
-  const hasShopping = current.shoppingEnabled && current.householdId !== null
-  const hasMoney = current.moneyEnabled && current.householdId !== null
+  // While editing, the native editor owns the controls, as the web hides its room tools.
+  const editing = current.editMode && current.householdId !== null
+  const hasChores = !editing && current.choresEnabled && current.householdId !== null
+  const hasShopping = !editing && current.shoppingEnabled && current.householdId !== null
+  const hasMoney = !editing && current.moneyEnabled && current.householdId !== null
   const hasTools = hasChores || hasShopping || hasMoney
   useLayoutEffect(() => {
     const element = viewport.current
@@ -236,10 +248,12 @@ function Room() {
       {choreRoom
         ? <ScaledChoreRoom room={choreRoom} roomZoom={current.roomZoom} roomStyle={current.roomStyle} paused={current.paused} panelOpen={false} onStatus={reportStatus}
           focusRequest={{ target: 'room', id: 0 }} dueChores={dueChores} grime={grime} components={components}
+          editMode={editing} placementPreviewId={editing ? current.placementPreviewId : null}
           onOpenChores={() => openChores()} onRestock={openShopping}
           onComponentSelect={hasChores ? openChores : undefined} />
         : <Kitchen grime={grime} roomStyle={current.roomStyle} roomZoom={current.roomZoom} paused={current.paused} onStatus={reportStatus}
           wholeRoomView={false} cameraToolsInQuickActions={landscape}
+          editMode={editing} placementPreviewId={editing ? current.placementPreviewId : null}
           onComponentSelect={hasChores ? openChores : undefined} components={components} />}
     </PreviewBoundary>
     {currentStatus === 'loading' && <SceneLoading label={`Opening the ${room.name.toLowerCase()}...`} />}

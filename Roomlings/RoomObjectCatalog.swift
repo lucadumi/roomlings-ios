@@ -33,12 +33,15 @@ struct RoomObjectCatalog: Sendable {
         let finishes: [String: String]
         let slots: [String: Slot]
         let defaultComponents: [JSONValue]
+        let layout: RoomLayout
     }
 
     let kinds: [String: Kind]
     let finishes: [String: String]
     let slots: [String: Slot]
     let defaults: [RoomObject]
+    /// Positions, zones and new-object templates for the room editor.
+    let layout: RoomLayout
 
     /// The web's object shortcuts (`src/RoomComponents.tsx`), limited to those with a native destination.
     static let shortcuts: [String: String] = [
@@ -55,10 +58,13 @@ struct RoomObjectCatalog: Sendable {
         let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
         let defaults = try file.defaultComponents.map(RoomObject.init)
         guard file.version == 1, !file.kinds.isEmpty, !defaults.isEmpty,
-              defaults.allSatisfy({ file.kinds[$0.kind] != nil && file.slots[$0.slotID] != nil }) else {
+              defaults.allSatisfy({ file.kinds[$0.kind] != nil && file.slots[$0.slotID] != nil }),
+              file.layout.kindOrder.allSatisfy({ file.kinds[$0] != nil && file.layout.kinds[$0] != nil }),
+              file.layout.slots.allSatisfy({ file.slots[$0.id] != nil }),
+              file.layout.finishOrder.allSatisfy({ file.finishes[$0] != nil }) else {
             throw ChoreCatalog.CatalogError.invalidCatalog
         }
-        return Self(kinds: file.kinds, finishes: file.finishes, slots: file.slots, defaults: defaults)
+        return Self(kinds: file.kinds, finishes: file.finishes, slots: file.slots, defaults: defaults, layout: file.layout)
     }
 
     func modelName(_ object: RoomObject) -> String {

@@ -13,7 +13,11 @@ const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
 const requireWeb = createRequire(join(web, 'package.json'))
 const { chromium, expect: baseExpect } = requireWeb('@playwright/test')
 const expect = baseExpect.configure({ timeout: process.env.CI ? 10_000 : 5_000 })
-const { defaultRoomComponents, componentCatalog, componentChoreArea } = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const {
+  defaultRoomComponents, componentCatalog, componentChoreArea, componentKinds, roomSlots, availableComponentSlots, createRoomComponent,
+  suggestedComponentSupplies,
+} = await import(pathToFileURL(join(web, 'shared/roomComponents.ts')).href)
+const { componentSurfaces, roomZoneCapacities } = await import(pathToFileURL(join(web, 'shared/roomZones.ts')).href)
 const { roomIds, roomCatalog } = await import(pathToFileURL(join(web, 'shared/rooms.ts')).href)
 const { cameraFraming, roomCameraZoom } = await import(pathToFileURL(join(web, 'src/camera.ts')).href)
 const { billingDate, categoryLabels, roomStyleSchema } = await import(pathToFileURL(join(web, 'shared/domain.ts')).href)
@@ -70,6 +74,76 @@ test('the native chore catalog is generated from the shared rooms and object def
   })))
   assert.deepEqual(await readFile(join(project, 'Build/RoomRenderer/roomlings-loader.png')),
     await readFile(join(web, 'public/brand/roomlings-icon-flat-256.png')))
+})
+
+test('the native room editor reads positions, zones and new objects from the shared source', async () => {
+  const { layout } = JSON.parse(await readFile(join(project, 'Build/RoomRenderer/objects.json'), 'utf8'))
+  assert.deepEqual(layout.kindOrder, componentKinds)
+  assert.deepEqual(layout.slots, roomSlots.map(({ id, roomId, name, kinds, removable, requires }) => ({
+    id, roomId, name, kinds, removable, requires: requires ?? null, surface: componentSurfaces[id] ?? null,
+  })))
+  assert.deepEqual(layout.zoneCapacities, roomZoneCapacities)
+  for (const slot of roomSlots) {
+    for (const kind of slot.kinds) {
+      const fresh = createRoomComponent(kind, slot.id, 'layout')
+      assert.equal(layout.kinds[kind].rooms[slot.roomId].name, fresh.name)
+      for (const { id: variant } of componentCatalog[kind].variants) {
+        assert.deepEqual(layout.kinds[kind].rooms[slot.roomId].supplies[variant], suggestedComponentSupplies({ kind, roomId: slot.roomId, variant }))
+      }
+    }
+  }
+})
+
+test('@room the room editor previews a placement with the web hologram in every room', async () => {
+  const types = { '/': 'text/html', '/room.js': 'text/javascript', '/room.css': 'text/css' }
+  const resources = new Map()
+  for (const path of Object.keys(types)) {
+    resources.set(path, await readFile(join(project, 'Build/RoomRenderer', path === '/' ? 'index.html' : path.slice(1))))
+  }
+  const server = createServer((request, response) => {
+    const body = resources.get(request.url)
+    response.writeHead(body ? 200 : 404, { 'Content-Type': types[request.url] ?? 'text/plain' })
+    response.end(body ?? 'Not found')
+  }).listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  let browser
+  try {
+    browser = await chromium.launch()
+    const page = await browser.newPage({ viewport: { width: 390, height: 750 }, hasTouch: true, reducedMotion: 'reduce' })
+    page.setDefaultTimeout(process.env.CI ? 90_000 : 30_000)
+    page.on('pageerror', (error) => console.error('Bundled room error:', error.message))
+    await page.addInitScript(() => {
+      window.webkit = { messageHandlers: { roomlings: { postMessage: () => {} } } }
+    })
+    await page.goto(`http://127.0.0.1:${server.address().port}/`)
+    await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+    const saved = defaultRoomComponents()
+    const householdState = {
+      version: 1, type: 'state', paused: false, roomStyle: 'original', householdId: randomUUID(), roomComponents: saved,
+      choresEnabled: true, shoppingEnabled: true, moneyEnabled: true,
+    }
+    for (const roomId of roomIds) {
+      const kind = componentKinds.find((kind) => availableComponentSlots(saved, roomId, kind).length)
+      const candidate = createRoomComponent(kind, availableComponentSlots(saved, roomId, kind)[0].id, randomUUID())
+      await page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+        ...householdState, roomId, editMode: true, roomComponents: [...saved, candidate], placementPreviewId: candidate.id,
+      })
+      await expect(page.locator('html')).toHaveAttribute('data-room-status', 'ready', { timeout: 30_000 })
+      await expect(page.locator('canvas[data-placement-arrow]')).toHaveAttribute('data-placement-arrow', 'true')
+      await expect(page.locator('[data-edit-mode="true"]')).toHaveCount(1)
+      // The native editor owns the controls while editing: no household tools or quick actions.
+      await expect(page.locator('.native-tools-dock')).toHaveCount(0)
+      await expect(page.locator('.world-quick-actions')).toHaveCount(0)
+    }
+    await assert.rejects(page.evaluate((payload) => window.RoomlingsRoom.receive(payload), {
+      ...householdState, placementPreviewId: saved[0].id,
+    }))
+  } finally {
+    await browser?.close()
+    const closed = once(server, 'close')
+    server.close()
+    await closed
+  }
 })
 
 test('@room the bundled kitchen stays offline, uses the shared controls and validates the native bridge', async () => {
