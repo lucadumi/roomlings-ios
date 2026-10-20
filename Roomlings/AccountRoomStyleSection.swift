@@ -28,7 +28,7 @@ struct AccountRoomStyleSection: View {
             if let current = model.roomStyle, let catalog = model.roomStyleCatalog,
                let household = model.state?.session?.household {
                 let selected = form.selected ?? current.style
-                Text("One shared look for your household. Your groceries, bills and balances stay the same.")
+                Text("One shared look for everyone.")
                     .foregroundStyle(RoomTheme.muted)
                 ForEach(catalog.styles) { style in
                     option(style, selected: selected == style.id, current: current.style == style.id)

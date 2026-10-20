@@ -51,7 +51,7 @@ struct RoomObjectsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RoomSheetHeader(title: restock == nil ? "\(roomName) objects" : "Restock a household supply.") {
+            RoomSheetHeader(title: restock == nil ? "\(roomName) objects" : "Add to shopping list") {
                 Button("Done") { dismiss() }
                     .buttonStyle(RoomButtonStyle(kind: .text))
                     .disabled(model.busy || pending != nil)
@@ -131,7 +131,7 @@ struct RoomObjectsSheet: View {
                 details(selected, catalog: catalog)
             } else {
                 if selectedID != nil {
-                    RoomFeedback("This object is in Storage or unavailable. Shopping entries and chore history are kept.")
+                    RoomFeedback("This object is no longer in the room.")
                 }
                 list(catalog: catalog)
             }
@@ -299,7 +299,7 @@ struct RoomObjectsSheet: View {
         }
         if let states = kind?.states, !states.isEmpty {
             section("Manual state") {
-                RoomPickerField("Manual state", selectedLabel: catalog.stateName(object) ?? "Not set",
+                RoomMenuPicker("Manual state", selectedLabel: catalog.stateName(object) ?? "Not set",
                                 selection: Binding(get: { object.state ?? "" }, set: { value in
                     let state = value.isEmpty ? nil : value
                     if state != object.state { start(.state(object, state)) }
@@ -308,18 +308,16 @@ struct RoomObjectsSheet: View {
                     ForEach(states, id: \.id) { Text($0.name).tag($0.id) }
                 }
                 .disabled(changesBlocked)
-                detail("Manual status only. No appliance control, chore completion or payment.")
                 if let changedAt = object.stateChangedAt, let calendar = model.choreCalendar {
                     let name = model.chores?.members.first { $0.id == object.stateChangedBy }?.name ?? "a former roommate"
-                    detail("Last set by \(name) on \(ChoreCalendar.title(calendar.completionDay(changedAt), today: calendar.day())).")
+                    detail("Set by \(name) · \(ChoreCalendar.title(calendar.completionDay(changedAt), today: calendar.day()))")
                 }
             }
         }
-        section("Supply shortcuts") {
+        section("Supplies") {
             if object.supplies.isEmpty {
                 detail("No supplies set. \(model.canEditRoom ? "Add them on the web in Edit room." : "An admin can add them.")")
             } else {
-                detail("Shared shopping shortcuts, not stock tracking.")
                 ForEach(object.supplies) { supply in supplyRow(object, supply: supply) }
                 if object.kind != "shopping-bag" {
                     Button { open(.shopping) } label: { Label("Open shopping list", systemImage: "basket") }
@@ -378,7 +376,7 @@ struct RoomObjectsSheet: View {
         let full = (model.chores?.items.count ?? 0) >= 200
         section("Chores") {
             if linked.isEmpty {
-                detail("No chores yet. Add one or choose a routine.")
+                detail("No chores yet.")
             } else if let chores = model.chores, let calendar = model.choreCalendar {
                 let today = calendar.day()
                 ForEach(linked) { chore in
@@ -426,8 +424,6 @@ struct RoomObjectsSheet: View {
 
     @ViewBuilder private func restockForm(_ value: Restock) -> some View {
         let binding = Binding(get: { restock ?? value }, set: { restock = $0 })
-        Text("Review the quantity before adding it to the shared shopping list.")
-            .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
         RoomField("Item name", text: binding.name)
         RoomField("Quantity", text: binding.quantity)
         RoomField("Notes", text: binding.notes, axis: .vertical)

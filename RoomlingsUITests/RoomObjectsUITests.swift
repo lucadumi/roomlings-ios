@@ -30,16 +30,16 @@ extension AccountUITests {
         try tap(sheet.buttons["All room objects"], in: app)
 
         try tap(sheet.buttons["room-object-default-kitchen-sink"], in: app)
-        XCTAssertTrue(sheet.staticTexts["Supply shortcuts"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(sheet.staticTexts["Supplies"].waitForExistence(timeout: Wait.control))
         try choose("Needs cleaning", from: "Manual state", in: app)
         XCTAssertTrue(app.staticTexts["Object state saved."].waitForExistence(timeout: Wait.control))
-        let lastSet = sheet.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Last set by Ada")).firstMatch
+        let lastSet = sheet.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Set by Ada")).firstMatch
         XCTAssertTrue(lastSet.waitForExistence(timeout: Wait.control))
         attachObjectsScreenshot("Sink details")
 
         // A supply shortcut is reviewed, then added to the shared list once.
         try tap(sheet.buttons["Restock Dish soap"], in: app)
-        XCTAssertTrue(app.staticTexts["Restock a household supply."].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.staticTexts["Add to shopping list"].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(app.textFields["Quantity"].value as? String, "1 bottle")
         try tap(app.buttons["Add item"], in: app)
         XCTAssertTrue(app.staticTexts["Supply added to shopping list."].waitForExistence(timeout: Wait.control))

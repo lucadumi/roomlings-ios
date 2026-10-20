@@ -87,9 +87,9 @@ struct AccountHouseholdMembersSection: View {
             }
             if let access = model.invitations {
                 if admins {
-                    hint("Owners and admins can add, remove and configure room components, and grant or remove admin rights. Everyone can use the shared shopping list, chores and daily room controls. Invitations, member removal and ownership transfers stay with the owner.")
+                    hint("Admins can change room objects and give admin rights.")
                 } else {
-                    hint("You are \(roleDescription(access.role)). Owners and admins can configure rooms and manage admin rights. Only the owner manages invitations, removes roommates or transfers ownership. All active roommates can edit the shared ledger. Former roommates remain in financial history.")
+                    hint("You are \(roleDescription(access.role)). Everyone shares the ledger.")
                 }
                 if model.invitationNeedsRefresh {
                     RoomFeedback("Refresh household members before changing ownership or access.")
@@ -98,14 +98,14 @@ struct AccountHouseholdMembersSection: View {
                     ForEach(access.members) { member in row(member, access: access) }
                 }
                 if admins {
-                    if access.role == .member { hint("Ask the owner or an admin if you need room editing access.") }
+                    if access.role == .member { hint("Ask an admin for room editing access.") }
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
                         Rectangle().fill(RoomTheme.border).frame(height: 1).padding(.bottom, 8)
                         heading("Leave this household")
-                        hint("Leaving removes access, not debts. Existing expenses, monthly bill schedules and repayments stay in the shared ledger. Review future bill participants with your roommates before leaving.")
+                        hint("Your debts and history stay in the ledger.")
                         if !access.canLeave {
-                            hint("Transfer ownership to another active account-linked roommate before leaving this household.")
+                            hint("Make another roommate owner before leaving.")
                         }
                         Button("Leave household") { present(.leave(access.household.name), access: access) }
                             .buttonStyle(RoomButtonStyle(kind: .text, size: 13))

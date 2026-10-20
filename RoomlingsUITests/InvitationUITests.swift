@@ -111,7 +111,7 @@ extension AccountUITests {
         try await waitForAnalytics("invite_accepted", count: 1, homes: [home])
         attachHeaderScreenshot("Native saved invited-member header, portrait")
         try openAccount(member)
-        XCTAssertTrue(member.staticTexts["Only the household owner can create or revoke invitations. Ask them to share a link."]
+        XCTAssertTrue(member.staticTexts["Only the owner can invite people."]
             .waitForExistence(timeout: Wait.control))
         XCTAssertFalse(member.buttons["create-invitation"].exists)
         member.terminate()

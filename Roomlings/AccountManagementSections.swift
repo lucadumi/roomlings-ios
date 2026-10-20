@@ -96,9 +96,9 @@ struct AccountRecoveryCodesSection: View {
         Group {
             if let result = model.recoveryCodes {
                 AccountSection("Your account recovery codes") {
-                    Text("Save these codes in your password manager or another private place. Each code signs in to your account once, without an email code. Anyone with a code and your email can access your account.")
+                    Text("Keep these somewhere private. Each code signs in once, and anyone with one can use your account.")
                         .foregroundStyle(RoomTheme.muted)
-                    Text("This is the only time these codes are shown. They are not saved on this device and cannot be displayed again after you leave this screen.")
+                    Text("They won't be shown again.")
                         .font(RoomTheme.body().weight(.semibold))
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(result.codes, id: \.self) { code in
@@ -118,13 +118,11 @@ struct AccountRecoveryCodesSection: View {
                     .buttonStyle(RoomButtonStyle(kind: .primary))
                     .accessibilityIdentifier("saved-recovery-codes")
                 } footer: {
-                    Text("Copied codes are kept on this device's clipboard for two minutes and are not shared with other devices.")
+                    Text("Copied codes clear from the clipboard after two minutes.")
                 }
             } else if let status = model.recoveryStatus {
                 AccountSection("\(status.remaining) unused recovery \(status.remaining == 1 ? "code" : "codes")") {
-                    Text("Account recovery codes are a backup when email sign-in is unavailable. They restore your existing account and memberships, without creating another roommate or signing out your other devices.")
-                        .foregroundStyle(RoomTheme.muted)
-                    Text("Generate \(AccountRecoveryStatus.codeCount) single-use codes and keep them somewhere private. You may need to verify your email again before changing them.")
+                    Text("Backup sign-in codes for when email isn't available. Keep them private.")
                         .foregroundStyle(RoomTheme.muted)
                     if let updatedAt = status.updatedAt {
                         Text("Last changed: \(AccountDevicesSection.date(updatedAt))").foregroundStyle(RoomTheme.muted)
