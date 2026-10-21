@@ -7,8 +7,16 @@ export function invitationAssociation(settings) {
   if (!['YES', 'NO'].includes(enabled)) {
     throw new Error('Set ROOMLINGS_UNIVERSAL_LINKS to YES or NO. See docs/invitations.md.')
   }
-  const entitlements = enabled === 'YES' ? 'Roomlings/RoomlingsLinks.entitlements' : 'Roomlings/Roomlings.entitlements'
-  if (settings.PLATFORM_NAME === 'iphoneos' && settings.CODE_SIGN_ENTITLEMENTS !== entitlements) {
+  const personalTeam = settings.ROOMLINGS_PERSONAL_TEAM ?? 'NO'
+  if (!['YES', 'NO'].includes(personalTeam)) {
+    throw new Error('Set ROOMLINGS_PERSONAL_TEAM to YES or NO. See docs/development.md.')
+  }
+  if (personalTeam === 'YES' && enabled === 'YES') {
+    throw new Error('Personal Teams cannot sign Universal Links. Set ROOMLINGS_PERSONAL_TEAM=NO first. See docs/invitations.md.')
+  }
+  const entitlements = personalTeam === 'YES' ? ''
+    : enabled === 'YES' ? 'Roomlings/RoomlingsLinks.entitlements' : 'Roomlings/Roomlings.entitlements'
+  if (settings.PLATFORM_NAME === 'iphoneos' && (settings.CODE_SIGN_ENTITLEMENTS ?? '') !== entitlements) {
     throw new Error('Use the shared CODE_SIGN_ENTITLEMENTS selection for ROOMLINGS_UNIVERSAL_LINKS. See docs/invitations.md.')
   }
   if (enabled === 'NO') return null

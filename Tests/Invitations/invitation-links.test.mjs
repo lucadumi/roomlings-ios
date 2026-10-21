@@ -91,6 +91,20 @@ test('device builds cannot silently disagree with the entitlement opt-in', () =>
   }
 })
 
+test('Personal Team device builds sign without entitlements and cannot enable links', () => {
+  const device = { ROOMLINGS_PERSONAL_TEAM: 'YES', PLATFORM_NAME: 'iphoneos' }
+  for (const entitlements of [undefined, '']) {
+    assert.equal(invitationAssociation({ ...device, CODE_SIGN_ENTITLEMENTS: entitlements }), null)
+  }
+  for (const incorrect of ['Roomlings/Roomlings.entitlements', 'Roomlings/RoomlingsLinks.entitlements']) {
+    assert.throws(() => invitationAssociation({ ...device, CODE_SIGN_ENTITLEMENTS: incorrect }), /CODE_SIGN_ENTITLEMENTS/)
+  }
+  assert.throws(() => invitationAssociation({ ...settings, ...device }), /Personal Teams cannot sign Universal Links/)
+  for (const invalid of ['', 'yes', 'true', '$(inherited)']) {
+    assert.throws(() => invitationAssociation({ ROOMLINGS_PERSONAL_TEAM: invalid }), /ROOMLINGS_PERSONAL_TEAM to YES or NO/)
+  }
+})
+
 test('generation writes exactly the association JSON and disabling removes only that artifact', async (context) => {
   const directory = await mkdtemp(join(tmpdir(), 'roomlings-invitation-links-'))
   context.after(() => rm(directory, { recursive: true, force: true }))
@@ -139,15 +153,16 @@ test('both entitlement variants preserve APNs and the default requests no associ
 
 test('Xcode resolves the actual entitlement switch for device builds and leaves simulators unchanged',
   { skip: process.platform !== 'darwin' }, () => {
-    for (const [enabled, destination, expected] of [
-      ['NO', 'generic/platform=iOS', 'Roomlings/Roomlings.entitlements'],
-      ['YES', 'generic/platform=iOS', 'Roomlings/RoomlingsLinks.entitlements'],
-      ['YES', 'generic/platform=iOS Simulator', undefined],
+    for (const [enabled, personalTeam, destination, expected] of [
+      ['NO', 'NO', 'generic/platform=iOS', 'Roomlings/Roomlings.entitlements'],
+      ['YES', 'NO', 'generic/platform=iOS', 'Roomlings/RoomlingsLinks.entitlements'],
+      ['YES', 'NO', 'generic/platform=iOS Simulator', undefined],
+      ['NO', 'YES', 'generic/platform=iOS', undefined],
     ]) {
       const result = spawnSync('xcodebuild', [
         '-project', join(project, 'Roomlings.xcodeproj'), '-scheme', 'Roomlings',
         '-configuration', 'Release', '-destination', destination, '-showBuildSettings', '-json',
-        'CODE_SIGNING_ALLOWED=NO', `ROOMLINGS_UNIVERSAL_LINKS=${enabled}`,
+        'CODE_SIGNING_ALLOWED=NO', `ROOMLINGS_UNIVERSAL_LINKS=${enabled}`, `ROOMLINGS_PERSONAL_TEAM=${personalTeam}`,
       ], { cwd: project, encoding: 'utf8' })
       assert.equal(result.status, 0, result.stderr)
       const actual = JSON.parse(result.stdout).find((target) => target.target === 'Roomlings')?.buildSettings

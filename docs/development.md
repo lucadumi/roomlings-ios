@@ -15,6 +15,20 @@ Both support `NODE_BINARY`, `ROOMLINGS_WEB_ROOT`, `ROOMLINGS_API_SCHEME` and `RO
 Debug defaults to the local API; Release has no public host until configured.
 Release does not inherit Debug overrides. See [invitation settings](invitations.md) and [archive safeguards](testflight.md).
 
+## Physical devices
+
+Add your signing team to `Configuration/Local.xcconfig`. A free Personal Team cannot sign Push Notifications, so also set `ROOMLINGS_PERSONAL_TEAM` and an unregistered bundle identifier:
+
+```xcconfig
+DEVELOPMENT_TEAM = <your team ID>
+ROOMLINGS_PERSONAL_TEAM = YES
+PRODUCT_BUNDLE_IDENTIFIER = <your reverse domain>.roomlings
+ROOMLINGS_API_HOST[sdk=iphoneos*] = <your Mac>.local:4311
+```
+
+Personal Team builds have no push entitlement, so enabling notifications reports a registration failure. Archives reject this setting.
+Start the local API with `HOST=0.0.0.0` so the phone can reach it, then trust your developer profile under **Settings > General > VPN & Device Management**.
+
 The room build bundles the web renderer without copying its source into this repository.
 It records the source revision and dependency lock hash, generates the native theme, and checks the shared branding assets.
 Missing or incompatible web source and dependencies fail the build.
