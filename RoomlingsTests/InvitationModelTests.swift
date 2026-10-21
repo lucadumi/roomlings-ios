@@ -7,6 +7,12 @@ import XCTest
 
 @MainActor
 final class InvitationModelTests: XCTestCase {
+    func testNewAccountNamesComeFromTheEmailWithinTheServerLimit() {
+        XCTAssertEqual(AccountModel.newAccountName(email: " ada.lovelace@example.test "), "ada.lovelace")
+        XCTAssertEqual(AccountModel.newAccountName(email: String(repeating: "a", count: 60) + "@example.test").count, 50)
+        XCTAssertEqual(AccountModel.newAccountName(email: "@example.test"), "@example.test")
+    }
+
     func testAnIncomingInvitationSurvivesRestoreAndSignInUntilExplicitAcceptance() async throws {
         let (model, transport, _) = try makeModel([
             fixture.state(signedIn: false), fixture.state(token: true), fixture.state()
@@ -17,11 +23,15 @@ final class InvitationModelTests: XCTestCase {
         XCTAssertTrue(initialRequests.isEmpty)
         await model.start()
         XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
-        let signedIn = await model.verify(email: "ada@example.test", code: "123456", name: "Ada", label: "iPhone")
+        let signedIn = await model.verify(email: "ada@example.test", code: "123456", label: "iPhone")
         XCTAssertTrue(signedIn)
         XCTAssertEqual(model.pendingInvitation?.value, fixture.code)
         let beforeJoin = await transport.requests
         XCTAssertEqual(beforeJoin.map { $0.url?.path }, ["/api/account", "/api/account/verify"])
+        // Only the code is typed; the name is for a brand-new account and the server keeps an existing one.
+        let verifyBody = try JSONSerialization.jsonObject(with: XCTUnwrap(beforeJoin.last?.httpBody)) as? [String: Any]
+        XCTAssertEqual(verifyBody?["name"] as? String, "ada")
+        XCTAssertEqual(verifyBody?["label"] as? String, "iPhone")
         let joined = await model.join(code: fixture.code, memberName: "Ada")
         XCTAssertTrue(joined)
         XCTAssertNil(model.pendingInvitation)
@@ -79,7 +89,7 @@ final class InvitationModelTests: XCTestCase {
         await model.start()
         await store.failSaves()
         model.receiveInvitation(try fixture.link())
-        let signedIn = await model.verify(email: "ada@example.test", code: "123456", name: "Ada", label: "iPhone")
+        let signedIn = await model.verify(email: "ada@example.test", code: "123456", label: "iPhone")
         XCTAssertFalse(signedIn)
         XCTAssertFalse(model.signedIn)
         XCTAssertEqual(model.pendingInvitation?.value, fixture.code)

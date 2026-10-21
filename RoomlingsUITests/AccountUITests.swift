@@ -235,7 +235,6 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Email address"], email)
         try tap(app.buttons["Send sign-in code"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
-        try fill(app.textFields["Display name"], "Ada")
         try tap(app.buttons["Verify and sign in"], in: app)
         try waitForSignedIn(app)
     }

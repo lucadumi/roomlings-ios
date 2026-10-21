@@ -205,10 +205,18 @@ final class AccountModel {
         }
     }
 
-    func verify(email: String, code: String, name: String, label: String) async -> Bool {
+    func verify(email: String, code: String, label: String) async -> Bool {
         await perform(.verify) {
-            try await $0.verifyEmailCode(email: email, code: code, name: name, deviceLabel: label)
+            try await $0.verifyEmailCode(email: email, code: code, name: Self.newAccountName(email: email), deviceLabel: label)
         }
+    }
+
+    /// The server names only brand-new accounts with this and keeps an existing account's name,
+    /// so signing in needs just the code. New accounts can rename themselves in Account.
+    nonisolated static func newAccountName(email: String) -> String {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let local = trimmed.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        return String((local.isEmpty ? trimmed : local).prefix(50))
     }
 
     func recover(email: String, code: String, label: String) async -> Bool {
