@@ -101,6 +101,7 @@ struct RoomField: View {
     @Binding var text: String
     var secure = false
     var axis = Axis.horizontal
+    @FocusState private var focused: Bool
 
     init(_ label: String, text: Binding<String>, secure: Bool = false, axis: Axis = .horizontal) {
         self.label = label
@@ -112,15 +113,20 @@ struct RoomField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            if secure {
-                SecureField("", text: $text)
-                    .accessibilityLabel(label)
-                    .accessibilityIdentifier(label)
-            } else {
-                TextField("", text: $text, axis: axis)
-                    .accessibilityLabel(label)
-                    .accessibilityIdentifier(label)
+            Group {
+                if secure {
+                    SecureField("", text: $text)
+                } else {
+                    TextField("", text: $text, axis: axis)
+                }
             }
+            .focused($focused)
+            // Only the line of text accepts taps natively; the padded box around it should too.
+            // A simultaneous tap leaves cursor placement inside the text to the field.
+            .contentShape(RoundedRectangle(cornerRadius: RoomTheme.radius))
+            .simultaneousGesture(TapGesture().onEnded { focused = true })
+            .accessibilityLabel(label)
+            .accessibilityIdentifier(label)
         }
     }
 }

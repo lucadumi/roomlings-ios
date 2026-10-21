@@ -75,6 +75,25 @@ final class RoomlingsUITests: XCTestCase {
     }
 
     @MainActor
+    func testOneTapAnywhereInAFieldStartsTyping() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["ROOMLINGS_API_ORIGIN"] = "http://127.0.0.1:1"
+        app.launchEnvironment["ROOMLINGS_KEYCHAIN_SERVICE"] = "com.roomlings.field-test.\(UUID().uuidString)"
+        app.launch()
+        let email = app.textFields["Email address"]
+        XCTAssertTrue(email.waitForExistence(timeout: Wait.control))
+        // Aim at the box's padding below the line of text, where people often tap.
+        email.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Wait.control), "One tap should focus the field")
+        email.typeText("ada@example")
+        // Tapping the text itself still edits in place.
+        email.tap()
+        email.typeText(".com")
+        XCTAssertEqual(email.value as? String, "ada@example.com")
+    }
+
+    @MainActor
     func testSharedKitchenLoadsOfflineAndItsControlsWork() throws {
         // Software-rendered simulators need time for the full gesture and orientation flow.
         executionTimeAllowance = 360
