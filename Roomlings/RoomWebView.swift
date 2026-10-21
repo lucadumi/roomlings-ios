@@ -104,31 +104,66 @@ final class RoomThumbnails {
     @ObservationIgnored weak var webView: WKWebView?
     private(set) var pictures: [String: Picture] = [:]
 
+    /// How an object looks: all a picture needs. Drafts in the room editor are drawn before they are saved.
+    struct Look: Hashable {
+        let kind: String
+        let roomID: String
+        let slotID: String
+        let variant: String
+        let finish: String
+        let state: String?
+
+        init(_ object: RoomObject) {
+            self.init(RoomObjectConfiguration(object), state: object.state)
+        }
+
+        init(_ object: RoomObjectConfiguration, state: String? = nil) {
+            kind = object.kind
+            roomID = object.roomID
+            slotID = object.slotID
+            variant = object.variant
+            finish = object.finish
+            self.state = state
+        }
+    }
+
     static func request(_ object: RoomObject, roomStyle: String) -> [String: Any] {
+        request(Look(object), roomStyle: roomStyle)
+    }
+
+    static func request(_ look: Look, roomStyle: String) -> [String: Any] {
         [
-            "version": 1, "roomId": object.roomID, "kind": object.kind, "slotId": object.slotID,
-            "variant": object.variant, "finish": object.finish, "state": object.state ?? NSNull(), "roomStyle": roomStyle,
+            "version": 1, "roomId": look.roomID, "kind": look.kind, "slotId": look.slotID,
+            "variant": look.variant, "finish": look.finish, "state": look.state ?? NSNull(), "roomStyle": roomStyle,
         ]
     }
 
-    static func key(_ object: RoomObject, roomStyle: String) -> String {
-        [object.kind, object.slotID, object.variant, object.finish, object.state ?? "", roomStyle].joined(separator: ":")
+    static func key(_ look: Look, roomStyle: String) -> String {
+        [look.kind, look.slotID, look.variant, look.finish, look.state ?? "", roomStyle].joined(separator: ":")
     }
 
     func picture(_ object: RoomObject, roomStyle: String) -> Picture {
-        pictures[Self.key(object, roomStyle: roomStyle)] ?? .loading
+        picture(Look(object), roomStyle: roomStyle)
+    }
+
+    func picture(_ look: Look, roomStyle: String) -> Picture {
+        pictures[Self.key(look, roomStyle: roomStyle)] ?? .loading
+    }
+
+    func load(_ object: RoomObject, roomStyle: String) {
+        load(Look(object), roomStyle: roomStyle)
     }
 
     /// Draws a picture once per look. A failed picture is drawn again the next time the sheet asks.
-    func load(_ object: RoomObject, roomStyle: String) {
-        let key = Self.key(object, roomStyle: roomStyle)
+    func load(_ look: Look, roomStyle: String) {
+        let key = Self.key(look, roomStyle: roomStyle)
         if let current = pictures[key], current != .unavailable { return }
         guard let webView else {
             pictures[key] = .unavailable
             return
         }
         pictures[key] = .loading
-        let request = Self.request(object, roomStyle: roomStyle)
+        let request = Self.request(look, roomStyle: roomStyle)
         Task { [weak self, weak webView] in
             guard let webView else { return }
             let picture: Picture

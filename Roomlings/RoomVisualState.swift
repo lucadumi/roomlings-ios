@@ -20,6 +20,14 @@ struct RoomVisualState: Equatable, Sendable {
     let billingTimeZone: String?
     /// The shared room on screen. The signed-out preview is always the kitchen.
     private(set) var roomID = Self.defaultRoomID
+    /// The room editor's private draft, shown only on this device until it is applied.
+    private(set) var editing: Editing?
+
+    struct Editing: Equatable, Sendable {
+        let components: JSONValue
+        /// The object previewed with the web's placement hologram.
+        let placementID: String?
+    }
 
     static let defaultRoomID = "kitchen"
     static let choreCareFields: Set<String> = ["roomId", "area", "componentId", "dueDate", "archived"]
@@ -73,6 +81,13 @@ struct RoomVisualState: Equatable, Sendable {
         return state
     }
 
+    /// The same room showing an editor draft.
+    func editing(_ components: JSONValue, placementID: String?) -> RoomVisualState {
+        var state = self
+        state.editing = householdID == nil ? nil : Editing(components: components, placementID: placementID)
+        return state
+    }
+
     func message(paused: Bool, viewportInsets: RoomViewportInsets = .zero, roomZoom: Double = 1) throws -> [String: Any] {
         struct Message: Encodable {
             let version = 1
@@ -86,6 +101,8 @@ struct RoomVisualState: Equatable, Sendable {
             let roomId: String
             let roomZoom: Double
             let roomComponents: JSONValue?
+            let editMode: Bool
+            let placementPreviewId: String?
             let billingTimeZone: String?
             let chores: JSONValue?
             let viewportInsets: RoomViewportInsets
@@ -93,7 +110,8 @@ struct RoomVisualState: Equatable, Sendable {
         let message = Message(paused: paused, householdId: householdID, choresEnabled: householdID != nil,
                               shoppingEnabled: householdID != nil, moneyEnabled: householdID != nil,
                               roomStyle: roomStyle, roomId: roomID, roomZoom: roomZoom,
-                              roomComponents: components, billingTimeZone: billingTimeZone, chores: chores,
+                              roomComponents: editing?.components ?? components, editMode: editing != nil,
+                              placementPreviewId: editing?.placementID, billingTimeZone: billingTimeZone, chores: chores,
                               viewportInsets: viewportInsets)
         let data = try JSONEncoder().encode(message)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {

@@ -137,7 +137,7 @@ final class RoomBridgeTests: XCTestCase {
         let visual = try RoomVisualState(household: household)
         let insets = RoomViewportInsets(top: 150, right: 12, bottom: 34, left: 12)
         let message = try visual.message(paused: true, viewportInsets: insets, roomZoom: 1.35)
-        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomId", "roomZoom", "roomComponents", "billingTimeZone", "chores", "viewportInsets"])
+        XCTAssertEqual(Set(message.keys), ["version", "type", "paused", "householdId", "choresEnabled", "shoppingEnabled", "moneyEnabled", "roomStyle", "roomId", "roomZoom", "roomComponents", "editMode", "billingTimeZone", "chores", "viewportInsets"])
         XCTAssertEqual(message["roomId"] as? String, "kitchen")
         XCTAssertEqual(message["billingTimeZone"] as? String, "Europe/Berlin")
         let care = try XCTUnwrap(message["chores"] as? [[String: Any]])
@@ -171,6 +171,14 @@ final class RoomBridgeTests: XCTestCase {
         XCTAssertEqual(preview["roomZoom"] as? Double, 1)
         let signedOut = try RoomVisualState.preview.showing(room: "bathroom").message(paused: false)
         XCTAssertEqual(signedOut["roomId"] as? String, "kitchen", "The signed-out preview stays in the kitchen.")
+        XCTAssertEqual(message["editMode"] as? Bool, false)
+        // The room editor's draft replaces the saved objects on this device only, with the previewed object.
+        let draft: JSONValue = .array([.object(["id": .string("kettle")])])
+        let editing = try visual.editing(draft, placementID: "kettle").message(paused: false)
+        XCTAssertEqual(editing["editMode"] as? Bool, true)
+        XCTAssertEqual(editing["placementPreviewId"] as? String, "kettle")
+        XCTAssertEqual((editing["roomComponents"] as? [[String: Any]])?.first?["id"] as? String, "kettle")
+        XCTAssertEqual(try RoomVisualState.preview.editing(draft, placementID: nil).message(paused: false)["editMode"] as? Bool, false)
     }
 
     func testOnlyKnownStatusMessagesAreAccepted() throws {

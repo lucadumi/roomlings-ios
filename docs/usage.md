@@ -12,9 +12,11 @@ The room adapts to either orientation. Zoom includes object focus; **Reset room 
 | **Shopping** | Add, edit, claim and pick up items. Record a paid receipt to split its cost in the shared ledger. Picking up an item alone creates no debt. |
 | **Money** | View receipts, balances and repayments. **Bills** schedules monthly bills and records or undoes their payments. **Export ledger** shares the complete ledger as the same CSV file the web exports. Roomlings tracks money; it never moves it. |
 | Bell beside **Rooms** | Your chore turns that are due or overdue, plus expenses, bills and repayments from the last 30 days that involve you. Select one to open it; **Mark all read** clears the count. Read state is yours alone and follows you across devices. |
-| Box beside the bell | The objects in this room. Select one to set its manual state, review its supply shortcuts and add them to the shopping list, or open, add and choose suggested chores. Edit room stays on the web. |
+| Box beside the bell | The objects in this room. Select one to set its manual state, review its supply shortcuts and add them to the shopping list, or open, add and choose suggested chores. Owners and room admins use **Edit room** to add, move, customise and store objects. |
 | Household name or avatar | Open **Account**. |
 
+**Edit room** keeps a private draft. Previewing an object steps the sheet aside to show it in the live room; a blocked position offers a swap into Storage.
+Nothing reaches roommates until **Apply for everyone**. Stored objects pause their linked chores and keep their history.
 Use the pencil or archive action beside **Mark done** to manage a chore.
 **Archived** restores saved schedules; **History > Schedule again** reschedules a completed one-off without changing its completion history.
 Stored-object chores must wait for their object to return before editing or restoring. Archiving keeps history and does not free a chore slot.

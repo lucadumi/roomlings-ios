@@ -48,6 +48,7 @@ All methods below belong to `AccountUITests`.
 | Area | Methods |
 | --- | --- |
 | Rooms | `testRoomsSwitchFromTheHeaderAndOpenThatRoomsChores`, `testOverdueChoresDirtyTheirObjectUntilCompleted` |
+| Room objects | `testRoomObjectsShowDetailsSaveStatesAndRestockSupplies`, `testRoomEditorPlacesObjectsInTheRoomAndAppliesThemForEveryone` |
 | Notification inbox | `testNotificationsListYourTurnsAndKeepReadStateOnTheServer` |
 | Chore management | `testChoresEditArchiveRestoreAndKeepSharedHistory`, `testChoreEditsPreserveDraftsAndRequireConflictReview`, `testChoreEditsRetryAndScheduleCompletedOneOffsWithoutChangingHistory` |
 | Shopping | `testShoppingEditsClaimsAndPicksWithoutCreatingDebt` |

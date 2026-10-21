@@ -44,6 +44,7 @@ final class AccountModel {
     private(set) var roomObjects: [RoomObject] = []
     private(set) var roomObjectsFailure: String?
     private(set) var roomObjectSaveFailure = HouseholdSaveFailure.none
+    private(set) var roomLayoutSaveFailure = HouseholdSaveFailure.none
     private(set) var invitations: HouseholdInvitationAccess?
     private(set) var invitationLink: URL?
     private(set) var invitationNeedsRefresh = false
@@ -928,6 +929,20 @@ final class AccountModel {
         return saved
     }
 
+    /// Applies the room editor's draft for everyone. Owners and room admins only; the server checks the same rule.
+    func applyRoomDraft(_ patch: RoomObjectsPatch, householdID: UUID, version: Int64, mutationID: UUID) async -> Bool {
+        guard let defaults = roomObjectCatalog?.defaults else {
+            message = roomObjectsFailure ?? "Refresh your account before editing the room."
+            return false
+        }
+        let saved = await perform(.roomLayout) {
+            try await $0.updateRoomObjects(patch, defaults: defaults, householdID: householdID,
+                                           version: version, mutationID: mutationID)
+        }
+        if saved { notice = "Room saved." }
+        return saved
+    }
+
     /// Adds an object's supply to the shared shopping list, as the web's supply shortcuts do.
     func restock(_ object: RoomObject, supply: RoomObject.Supply, draft: ShoppingDraft, householdID: UUID,
                  version: Int64, mutationID: UUID) async -> Bool {
@@ -970,6 +985,7 @@ final class AccountModel {
         if action == .houseRules { houseRulesSaveFailure = .none }
         if action == .roomStyle { roomStyleSaveFailure = .none }
         if action == .roomObjectState { roomObjectSaveFailure = .none }
+        if action == .roomLayout { roomLayoutSaveFailure = .none }
         let previousDeletion = deletionStatus
         let previousDeparture = pendingHouseholdDeparture
         do {
@@ -1015,6 +1031,11 @@ final class AccountModel {
             if action == .roomObjectState, let roomObjectsFailure {
                 message = roomObjectsFailure
                 roomObjectSaveFailure = .retrySameChange
+                return false
+            }
+            if action == .roomLayout, let roomObjectsFailure {
+                message = roomObjectsFailure
+                roomLayoutSaveFailure = .retrySameChange
                 return false
             }
             if action == .houseRules, let houseRulesFailure {
@@ -1182,6 +1203,7 @@ final class AccountModel {
             else if action == .houseRules { houseRulesSaveFailure = failure }
             else if action == .roomStyle { roomStyleSaveFailure = failure }
             else if action == .roomObjectState { roomObjectSaveFailure = failure }
+            else if action == .roomLayout { roomLayoutSaveFailure = failure }
             else { ledgerSaveFailure = failure }
         }
         message = deletionCleanupRequired
@@ -1192,7 +1214,7 @@ final class AccountModel {
     private enum Action {
         case refresh, sendCode, verify, recover, create, join, select, logout, reauthenticate, deleteAccount
         case addChore, editChore, archiveChore, completeChore, undoChore, shopping, ledger, houseRules, roomStyle
-        case roomObjectState
+        case roomObjectState, roomLayout
         case invitationLoad, invitationCreate, invitationRevoke
         case householdAccessLoad, ownershipTransfer, removeMember, leaveHousehold, roomRole
         case profile, deviceRevoke, recoveryLoad, recoveryChange
@@ -1209,13 +1231,14 @@ final class AccountModel {
             if self == .houseRules { return .houseRules }
             if self == .roomStyle { return .roomStyle }
             if self == .roomObjectState { return .roomObjects }
+            if self == .roomLayout { return .roomLayout }
             return self == .ledger ? .ledger : nil
         }
     }
 
     /// Wording for the household collection a failed mutation touched.
     private enum Resource {
-        case chores, shopping, ledger, houseRules, roomStyle, roomObjects
+        case chores, shopping, ledger, houseRules, roomStyle, roomObjects, roomLayout
 
         var name: String {
             switch self {
@@ -1225,6 +1248,7 @@ final class AccountModel {
             case .houseRules: "house rules"
             case .roomStyle: "the room style"
             case .roomObjects: "room objects"
+            case .roomLayout: "the room"
             }
         }
 
@@ -1236,6 +1260,7 @@ final class AccountModel {
             case .houseRules: "House rules"
             case .roomStyle: "The room style"
             case .roomObjects: "Room objects"
+            case .roomLayout: "The room"
             }
         }
 
@@ -1247,6 +1272,7 @@ final class AccountModel {
             case .houseRules: "household"
             case .roomStyle: "household"
             case .roomObjects: "object"
+            case .roomLayout: "room"
             }
         }
 
@@ -1258,6 +1284,7 @@ final class AccountModel {
             case .houseRules: "house rules"
             case .roomStyle: "room style"
             case .roomObjects: "object state"
+            case .roomLayout: "room"
             }
         }
 
@@ -1269,6 +1296,7 @@ final class AccountModel {
             case .houseRules: "Check the household name and a budget from 0.01 to 1,000,000.00. Currency stays fixed after money is recorded."
             case .roomStyle: "Choose one of the shared room styles."
             case .roomObjects: "Choose a state this object supports."
+            case .roomLayout: "Check each object's name, position and supply shortcuts, then review the room."
             }
         }
     }
@@ -1455,6 +1483,8 @@ final class AccountModel {
                 : "\(resource.subject) changed elsewhere. Refresh \(name) and review the latest state before trying again."
         case AccountError.server(403, _) where resource == .roomStyle:
             return "Only a household owner or admin can change the room style. Ask an admin for room editing access."
+        case AccountError.server(403, _) where resource == .roomLayout:
+            return "Only a household owner or admin can edit the room. Your draft is still here; ask an admin for room editing access."
         case AccountError.server(let status, _) where status == 403 || status == 404:
             return "This \(resource.item) or household is no longer available. Refresh \(name) before trying again."
         case AccountError.server(429, _):

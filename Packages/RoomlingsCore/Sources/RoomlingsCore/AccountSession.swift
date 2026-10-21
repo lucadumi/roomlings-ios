@@ -672,6 +672,18 @@ public actor AccountSession {
         }
     }
 
+    /// Applies a room editor draft for everyone. Owners and room admins only; the server checks the same rule.
+    public func updateRoomObjects(
+        _ patch: RoomObjectsPatch, defaults: [RoomObject], householdID: UUID, version: Int64, mutationID: UUID
+    ) async throws -> AccountState {
+        try await mutateSelectedHousehold(householdID: householdID, version: version) { [api] token, memberID, current in
+            try await api.updateRoomObjects(
+                patch, defaults: defaults, version: version, mutationID: mutationID, memberID: memberID,
+                current: current, token: token
+            )
+        }
+    }
+
     /// Grants or removes room admin rights. Reload household access afterwards to read the confirmed roles.
     @discardableResult
     public func setRoomRole(

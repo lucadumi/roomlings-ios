@@ -2,10 +2,16 @@ import Foundation
 
 /// A room object as the shared household saves it (`shared/roomComponents.ts`).
 public struct RoomObject: Sendable, Equatable, Identifiable {
-    public struct Supply: Sendable, Equatable, Identifiable {
+    public struct Supply: Sendable, Equatable, Hashable, Identifiable, Decodable {
         public let id: String
         public let name: String
         public let quantity: String
+
+        public init(id: String, name: String, quantity: String) {
+            self.id = id
+            self.name = name
+            self.quantity = quantity
+        }
     }
 
     public let id: String
