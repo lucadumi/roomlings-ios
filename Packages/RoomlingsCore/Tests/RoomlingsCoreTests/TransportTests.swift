@@ -35,6 +35,21 @@ struct TransportTests {
         #expect(throws: AccountError.invalidOrigin) { try APIConfiguration(origin: origin) }
     }
 
+    @Test(arguments: ["http://my-mac.local:4311", "HTTP://My-Mac.Local"])
+    func acceptsLocalNetworkOriginsOnlyWhenAllowed(origin: String) throws {
+        #expect(throws: AccountError.invalidOrigin) { try APIConfiguration(origin: origin) }
+        let configuration = try APIConfiguration(origin: origin, allowsLocalNetwork: true)
+        #expect(configuration.contains(configuration.url(for: .verify)))
+    }
+
+    @Test(arguments: [
+        "http://local", "http://.local", "http://my-mac..local", "http://my-mac.local.evil.example",
+        "http://my_mac.local", "http://api.roomlings.example", "http://192.168.1.2:4311"
+    ])
+    func rejectsOtherHTTPOriginsWhenLocalNetworkIsAllowed(origin: String) {
+        #expect(throws: AccountError.invalidOrigin) { try APIConfiguration(origin: origin, allowsLocalNetwork: true) }
+    }
+
     @Test(arguments: [0.0, -1.0, Double.infinity, Double.nan])
     func requiresFiniteTimeout(timeout: Double) {
         #expect(throws: AccountError.invalidTimeout) {

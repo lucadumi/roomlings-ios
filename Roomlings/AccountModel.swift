@@ -148,14 +148,16 @@ final class AccountModel {
         var origin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsAPIOrigin") as? String ?? ""
         var invitationOrigin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsInvitationOrigin") as? String ?? ""
         var service = "\(bundleID).account"
+        var allowsLocalNetwork = false
         #if DEBUG
+        allowsLocalNetwork = true
         let environment = ProcessInfo.processInfo.environment
         if let configured = environment["ROOMLINGS_API_ORIGIN"] { origin = configured }
         if let configured = environment["ROOMLINGS_INVITATION_ORIGIN"] { invitationOrigin = configured }
         if let isolated = environment["ROOMLINGS_KEYCHAIN_SERVICE"] { service = isolated }
         #endif
         do {
-            let configuration = try APIConfiguration(origin: origin)
+            let configuration = try APIConfiguration(origin: origin, allowsLocalNetwork: allowsLocalNetwork)
             let originKey = SHA256.hash(data: Data(configuration.origin.absoluteString.utf8))
                 .map { String(format: "%02x", $0) }.joined()
             let store = try KeychainSessionTokenStore(service: "\(service).\(originKey)")
@@ -163,7 +165,8 @@ final class AccountModel {
             let client = AccountSession(configuration: configuration, tokenStore: store)
             let analytics = NativeAnalytics(client: client)
             do {
-                return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin),
+                let invitations = try APIConfiguration(origin: invitationOrigin, allowsLocalNetwork: allowsLocalNetwork)
+                return AccountModel(client: client, invitationOrigin: invitations,
                                     notificationStore: notifications, analytics: analytics)
             } catch {
                 // Account access remains usable; invitationSetupError explains the missing link configuration.
