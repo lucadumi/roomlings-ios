@@ -235,8 +235,13 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Email address"], email)
         try tap(app.buttons["Send sign-in code"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
-        // iPad can drop the tap while the code's keyboard is up. Tap again only while the button is
-        // still present and enabled; a verification that started disables or replaces it first.
+        try verifySignIn(app)
+    }
+
+    /// iPad can drop the tap while the code's keyboard is up. Tap again only while the button is
+    /// still present and enabled; a verification that started disables or replaces it first.
+    @MainActor
+    func verifySignIn(_ app: XCUIApplication) throws {
         let verify = app.buttons["Verify and sign in"]
         for _ in 1...3 {
             try tap(verify, in: app)
