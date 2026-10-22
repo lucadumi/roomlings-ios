@@ -325,13 +325,16 @@ struct ChoresSheet: View {
             : currentStatus?.rawValue.capitalized ?? "Status unavailable"
         return VStack(alignment: .leading, spacing: 12) {
             ViewThatFits(in: .horizontal) {
+                // Titles wrap rather than truncate, at any text size.
                 HStack(alignment: .top) {
                     Text(chore.title).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     badge(status)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(chore.title).font(RoomTheme.heading(20)).foregroundStyle(RoomTheme.leaf)
+                        .fixedSize(horizontal: false, vertical: true)
                     badge(status)
                 }
             }

@@ -231,7 +231,7 @@ struct MoneySheet: View {
         VStack(alignment: .leading, spacing: 16) {
             RoomSegmentedPicker("Money sections", selection: $section, options: Section.allCases, icon: {
                 switch $0 {
-                case .balances: "arrow.left.arrow.right"
+                case .balances: "scalemass"
                 case .receipts: "doc.text"
                 case .bills: "calendar"
                 }
