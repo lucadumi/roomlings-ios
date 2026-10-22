@@ -29,6 +29,13 @@ final class BrandAssetsTests: XCTestCase {
         }
     }
 
+    func testTheHeaderWordmarkKeepsTheSharedProportionsAndColour() throws {
+        let wordmark = try XCTUnwrap(UIImage(named: "Wordmark", in: .main, compatibleWith: nil))
+        XCTAssertEqual(wordmark.size.height, 26)
+        XCTAssertEqual(wordmark.size.width, 118, accuracy: 1)
+        XCTAssertEqual(wordmark.renderingMode, .alwaysOriginal)
+    }
+
     func testTheLaunchMarkStaysSmallAndCentredInBothOrientations() throws {
         let storyboard = UIStoryboard(name: "LaunchScreen", bundle: .main)
         let controller = try XCTUnwrap(storyboard.instantiateInitialViewController())

@@ -1,14 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "source": "src/assets/brand/roomlings-icon-flat.svg",
-  "webRevisionAtGeneration": "b06cd70d216eb0242af3238dcc18ccd577112f97",
+  "webRevisionAtGeneration": "f4c5382201f1dcb825532f77b922fb94d4fc98f6",
   "svgSHA256": "a95f507fb05e0bbd91abc1016b5f187cec97cd5e4cfe9120290a784614c7e21a",
+  "wordmarkSource": "src/assets/brand/roomlings-wordmark.svg",
+  "wordmarkSHA256": "1ba7461f80c6e2ebfe359c2383d96448d5418cf9d9beb4df7d590c2c72a1557b",
+  "wordmarkPoints": 26,
   "background": "#ffffff",
   "launchSizePoints": 64,
   "images": {
     "AppIcon.appiconset/AppIcon.png": "4b24cf36a3b57a1f7a7497b5bfb12241865282b3cfb046e6cce821ccba065fe5",
     "LaunchMark.imageset/LaunchMark.png": "5c4aae64a93b3a264ac3edb9513aefe7e153f320ae45ee18e4b0a5333121f76e",
     "LaunchMark.imageset/LaunchMark@2x.png": "91e00408e0f2e159ae764a7a9297eb9e62854aa06ad770ec2c0206a9434c566c",
-    "LaunchMark.imageset/LaunchMark@3x.png": "74c93df7c12f385d45bb760372d30af6775eae8b14ce641297fdb69d1dd5dccd"
+    "LaunchMark.imageset/LaunchMark@3x.png": "74c93df7c12f385d45bb760372d30af6775eae8b14ce641297fdb69d1dd5dccd",
+    "Wordmark.imageset/Wordmark.png": "080e55a2f52e976d142b42775c0c3731aaa0c0ea34254e5889f2700f87b6ac46",
+    "Wordmark.imageset/Wordmark@2x.png": "bbd4aa12859e089071b81c171b7483e5083f1aa97bd91aab354bf876d6c308c3",
+    "Wordmark.imageset/Wordmark@3x.png": "6bad8b3d708bb9caf91bbc23b8367b41917907a931157a5fe9aaf7dba80bc7c3"
   }
 }
