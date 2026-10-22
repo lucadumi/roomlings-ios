@@ -235,17 +235,24 @@ final class AccountUITests: XCTestCase {
         try fill(app.textFields["Email address"], email)
         try tap(app.buttons["Send sign-in code"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
-        try tap(app.buttons["Verify and sign in"], in: app)
+        // iPad can drop the tap while the code's keyboard is up. Tap again only while the button is
+        // still present and enabled; a verification that started disables or replaces it first.
+        let verify = app.buttons["Verify and sign in"]
+        for _ in 1...3 {
+            try tap(verify, in: app)
+            if (try? waitForSignedIn(app, timeout: Wait.flip)) != nil { return }
+            guard verify.exists, verify.isEnabled else { break }
+        }
         try waitForSignedIn(app)
     }
 
     @MainActor
-    private func waitForSignedIn(_ app: XCUIApplication) throws {
+    private func waitForSignedIn(_ app: XCUIApplication, timeout: TimeInterval = Wait.control) throws {
         let signedIn = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label == %@", "Account"),
             object: app.buttons["account-entry"]
         )
-        guard XCTWaiter.wait(for: [signedIn], timeout: Wait.control) == .completed else {
+        guard XCTWaiter.wait(for: [signedIn], timeout: timeout) == .completed else {
             throw FlowError.missingElement("Signed-in account state")
         }
     }

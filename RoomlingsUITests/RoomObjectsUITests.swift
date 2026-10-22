@@ -19,7 +19,7 @@ extension AccountUITests {
         try tap(app.buttons["room-objects-entry"], in: app)
         let sheet = app.otherElements["room-objects-sheet"]
         XCTAssertTrue(sheet.waitForExistence(timeout: Wait.control))
-        XCTAssertTrue(sheet.staticTexts["Kitchen objects"].exists)
+        XCTAssertTrue(sheet.staticTexts["Kitchen objects."].exists)
         // The stored kettle is not placed, so the list leaves it out.
         XCTAssertFalse(sheet.buttons["room-object-default-kitchen-kettle"].exists)
         attachObjectsScreenshot("Kitchen objects")
@@ -39,7 +39,7 @@ extension AccountUITests {
 
         // A supply shortcut is reviewed, then added to the shared list once.
         try tap(sheet.buttons["Restock Dish soap"], in: app)
-        XCTAssertTrue(app.staticTexts["Add to shopping list"].waitForExistence(timeout: Wait.control))
+        XCTAssertTrue(app.staticTexts["Add to shopping list."].waitForExistence(timeout: Wait.control))
         XCTAssertEqual(app.textFields["Quantity"].value as? String, "1 bottle")
         try tap(app.buttons["Add item"], in: app)
         XCTAssertTrue(app.staticTexts["Supply added to shopping list."].waitForExistence(timeout: Wait.control))

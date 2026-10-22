@@ -13,9 +13,9 @@ struct NotificationsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Text("Notifications").font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
+                Text("Notifications.").font(RoomTheme.heading()).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                Button("Done") { dismiss() }
+                RoomCloseButton { dismiss() }
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
             .padding(.horizontal, 24)

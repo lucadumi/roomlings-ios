@@ -36,7 +36,7 @@ struct ShoppingSheet: View {
 
         var title: String {
             switch self {
-            case .board: "Shared shopping list"
+            case .board: "The shopping bag."
             case .form(let item): item == nil ? "Add to the shared list." : "Edit a shopping item."
             case .remove: "Remove this shopping item?"
             case .release: "Release this shopping claim?"
@@ -71,7 +71,7 @@ struct ShoppingSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             RoomSheetHeader(title: page.title) {
-                Button("Done") { dismiss() }.disabled(dismissalBlocked)
+                RoomCloseButton { dismiss() }.disabled(dismissalBlocked)
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
             .padding(.horizontal, 24)
@@ -174,7 +174,12 @@ struct ShoppingSheet: View {
         let basket = shopping.items.filter { shopping.inBasket($0, memberID: memberID) }
         let items = section == .basket ? basket : shopping.items
         return VStack(alignment: .leading, spacing: 16) {
-            RoomSegmentedPicker("Shopping sections", selection: $section, options: Section.allCases) { $0.rawValue }
+            RoomSegmentedPicker("Shopping sections", selection: $section, options: Section.allCases, icon: {
+                switch $0 {
+                case .list: "list.bullet"
+                case .basket: "basket"
+                }
+            }) { $0.rawValue }
                 .accessibilityIdentifier("shopping-sections")
             Text("Claim what you'll buy, then tick it off. Ticking never creates a debt.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
@@ -183,9 +188,7 @@ struct ShoppingSheet: View {
                     .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                 Spacer()
                 if section == .list {
-                    Button("Add item") { openForm(nil) }
-                        .buttonStyle(RoomButtonStyle(kind: .primary))
-                        .fixedSize(horizontal: true, vertical: false)
+                    RoomAddButton("Add item") { openForm(nil) }
                         .disabled(changesBlocked || shopping.items.count >= HouseholdShopping.itemLimit)
                 }
             }

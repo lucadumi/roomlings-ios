@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ChoresSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Bindable var model: AccountModel
     @State private var section = Section.chores
     @State private var roomFilter = "kitchen"
@@ -59,7 +60,7 @@ struct ChoresSheet: View {
         if let editing { return editing.dueDate == nil ? "Schedule this chore again." : "Edit this chore." }
         if let archiving { return archiving.archived ? "Restore this chore?" : "Archive this chore?" }
         return adding ? "Add a household chore." : undoing != nil ? "Undo this chore completion?"
-            : confirming != nil ? "Mark this chore done?" : "Household chores"
+            : confirming != nil ? "Mark this chore done?" : "Household chores."
     }
     private var pageID: String {
         if adding { return "add" }
@@ -72,7 +73,7 @@ struct ChoresSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             RoomSheetHeader(title: title) {
-                Button("Done") { dismiss() }.disabled(dismissalBlocked)
+                RoomCloseButton { dismiss() }.disabled(dismissalBlocked)
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
             .padding(.horizontal, 24)
@@ -211,7 +212,13 @@ struct ChoresSheet: View {
             .filter { !mine || $0.completedBy == model.state?.session?.memberID || $0.assignedTo == model.state?.session?.memberID }
             .sorted { $0.completedAt == $1.completedAt ? $0.id.uuidString > $1.id.uuidString : $0.completedAt > $1.completedAt }
         return VStack(alignment: .leading, spacing: 16) {
-            RoomSegmentedPicker("Chore sections", selection: $section, options: Section.allCases) {
+            RoomSegmentedPicker("Chore sections", selection: $section, options: Section.allCases, icon: {
+                switch $0 {
+                case .chores: "checklist"
+                case .history: "clock.arrow.circlepath"
+                case .archived: "archivebox"
+                }
+            }) {
                 $0.rawValue
             }
             .accessibilityIdentifier("chore-sections")
@@ -235,9 +242,7 @@ struct ChoresSheet: View {
                          : "\(due) due / \(scheduled.count) scheduled" + (paused.isEmpty ? "" : " / \(paused.count) paused in Storage"))
                         .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
                     Spacer()
-                    Button("Add chore") { openForm() }
-                        .buttonStyle(RoomButtonStyle(kind: .primary))
-                        .fixedSize(horizontal: true, vertical: false)
+                    RoomAddButton("Add chore") { openForm() }
                         .disabled(changesBlocked || chores.items.count >= 200)
                 }
                 if items.isEmpty {
@@ -260,7 +265,11 @@ struct ChoresSheet: View {
         let objects = model.choreObjects.filter {
             (roomFilter == "all" || $0.roomID == roomFilter) && (areaFilter.isEmpty || $0.area == areaFilter)
         }
-        return VStack(alignment: .leading, spacing: 12) {
+        // The web keeps the filters on one row; long values wrap and accessibility sizes stack them.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
+        return layout {
             RoomPickerField("Chore room", selectedLabel: roomFilter == "all" ? "All rooms"
                         : catalog.location(roomID: roomFilter == "home" ? nil : roomFilter, area: nil),
                         selection: Binding(get: { roomFilter }, set: {

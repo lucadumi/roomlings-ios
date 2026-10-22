@@ -166,42 +166,30 @@ struct RoomSwitch: View {
     }
 }
 
+/// The web's checkbox: a sage-ticked box before its label (`accent-color: var(--sage)`).
+/// It keeps the toggle trait, so VoiceOver and tests still treat it as a switch.
 private struct StyledRoomSwitch: View {
     @Environment(\.isEnabled) private var enabled
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.layoutDirection) private var layoutDirection
-    @GestureState private var drag: CGFloat = 0
     let label: String
     @Binding var isOn: Bool
 
     var body: some View {
-        let direction: CGFloat = layoutDirection == .rightToLeft ? -1 : 1
-        let position = min(10, max(-10, (isOn ? 10 : -10) * direction + drag))
         Button { isOn.toggle() } label: {
-            HStack(spacing: 12) {
-                Text(label).frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: RoomTheme.radius)
-                        .fill(isOn ? RoomTheme.leafSoft : RoomTheme.fieldSurface)
-                    RoundedRectangle(cornerRadius: RoomTheme.radius)
-                        .stroke(isOn ? RoomTheme.sage : RoomTheme.fieldBorder)
-                    RoundedRectangle(cornerRadius: max(0, RoomTheme.radius - 3))
-                        .fill(isOn ? RoomTheme.sage : RoomTheme.muted)
-                        .frame(width: 26, height: 26)
-                        .offset(x: position)
-                }
-                .frame(width: 52, height: 32)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isOn)
-                .highPriorityGesture(DragGesture(minimumDistance: 6)
-                    .updating($drag) { value, offset, _ in
-                        if enabled && abs(value.translation.width) > abs(value.translation.height) {
-                            offset = value.translation.width
-                        }
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isOn ? RoomTheme.sage : RoomTheme.fieldSurface)
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(isOn ? RoomTheme.sage : RoomTheme.fieldBorder, lineWidth: 1.5)
+                    if isOn {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(RoomTheme.paper)
                     }
-                    .onEnded { value in
-                        guard enabled, abs(value.translation.width) > abs(value.translation.height) else { return }
-                        isOn = (isOn ? 10 : -10) + value.translation.width * direction > 0
-                    })
+                }
+                .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
+                Text(label).frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(RoomTheme.body())
             .foregroundStyle(RoomTheme.ink)
@@ -213,6 +201,48 @@ private struct StyledRoomSwitch: View {
         .accessibilityLabel(label)
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityAddTraits(.isToggle)
+    }
+}
+
+/// The web's boxed close control (`.icon-button.control-surface` with an X). It keeps the
+/// "Done" label VoiceOver users already know from these sheets.
+struct RoomCloseButton: View {
+    @Environment(\.isEnabled) private var enabled
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(RoomTheme.ink)
+                .frame(width: 36, height: 36)
+                .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+                .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.5)
+        .accessibilityLabel("Done")
+    }
+}
+
+/// The web's small red add control: a primary button showing only a plus, named for VoiceOver.
+struct RoomAddButton: View {
+    let label: String
+    let action: () -> Void
+
+    init(_ label: String, action: @escaping () -> Void) {
+        self.label = label
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus").font(.system(size: 17, weight: .bold))
+        }
+        .buttonStyle(RoomButtonStyle(kind: .primary, iconOnly: true))
+        .accessibilityLabel(label)
     }
 }
 
@@ -255,11 +285,15 @@ struct RoomSegmentedPicker<Selection: Hashable>: View {
     let label: String
     let options: [Selection]
     let title: (Selection) -> String
+    /// SF Symbols for the web's icon tabs. The titles stay as each tab's accessible name.
+    let icon: ((Selection) -> String)?
 
-    init(_ label: String, selection: Binding<Selection>, options: [Selection], title: @escaping (Selection) -> String) {
+    init(_ label: String, selection: Binding<Selection>, options: [Selection],
+         icon: ((Selection) -> String)? = nil, title: @escaping (Selection) -> String) {
         self.label = label
         _selection = selection
         self.options = options
+        self.icon = icon
         self.title = title
     }
 
@@ -283,11 +317,19 @@ struct RoomSegmentedPicker<Selection: Hashable>: View {
     private func segments(wrapping: Bool) -> some View {
         ForEach(options, id: \.self) { option in
             Button { selection = option } label: {
-                Text(title(option))
-                    .font(RoomTheme.body(14).weight(.semibold))
+                Group {
+                    if let icon {
+                        Image(systemName: icon(option))
+                            .font(.system(size: 20, weight: .bold))
+                            .accessibilityLabel(title(option))
+                    } else {
+                        Text(title(option))
+                            .font(RoomTheme.body(14).weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: !wrapping, vertical: true)
+                    }
+                }
                     .foregroundStyle(RoomTheme.ink)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: !wrapping, vertical: true)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, minHeight: 44)
