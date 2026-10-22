@@ -113,20 +113,31 @@ struct RoomField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            Group {
-                if secure {
-                    SecureField("", text: $text)
-                } else {
-                    TextField("", text: $text, axis: axis)
+            ZStack(alignment: .leading) {
+                // Only the line of text takes taps natively. The box behind it catches taps on the
+                // padding and focuses the field, without any gesture on the field itself.
+                RoundedRectangle(cornerRadius: RoomTheme.radius)
+                    .fill(RoomTheme.fieldSurface)
+                    .onTapGesture { focused = true }
+                    .accessibilityHidden(true)
+                Group {
+                    if secure {
+                        SecureField("", text: $text)
+                    } else {
+                        TextField("", text: $text, axis: axis)
+                    }
                 }
+                .textFieldStyle(.plain)
+                .font(RoomTheme.body())
+                .foregroundStyle(RoomTheme.ink)
+                .focused($focused)
+                .padding(12)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier(label)
             }
-            .focused($focused)
-            // Only the line of text accepts taps natively; the padded box around it should too.
-            // A simultaneous tap leaves cursor placement inside the text to the field.
-            .contentShape(RoundedRectangle(cornerRadius: RoomTheme.radius))
-            .simultaneousGesture(TapGesture().onEnded { focused = true })
-            .accessibilityLabel(label)
-            .accessibilityIdentifier(label)
+            .frame(minHeight: 44)
+            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.fieldBorder, lineWidth: 1)
+                .allowsHitTesting(false))
         }
     }
 }
