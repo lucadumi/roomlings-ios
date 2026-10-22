@@ -83,7 +83,7 @@ extension AccountUITests {
         try tap(app.buttons["Send sign-in code"], in: app)
         try fill(app.textFields["Email sign-in code"], "123456")
         try audit(app, screen: "Verify")
-        try tap(app.buttons["Verify and sign in"], in: app)
+        try verifySignIn(app)
         try openAccount(app)
         try tap(app.buttons["Open Cedar House"], in: app)
         XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
