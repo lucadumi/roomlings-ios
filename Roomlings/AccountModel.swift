@@ -82,6 +82,11 @@ final class AccountModel {
     var accountDeletionConfirmed: Bool { deletionStatus.serverConfirmed }
     var membershipNeedsRefresh: Bool { pendingHouseholdDeparture != nil }
     var householdName: String? { canUseAccount ? state?.session?.household.name : nil }
+    /// The web header's house pot for the open household. Saves return the household, so it stays current.
+    var housePot: HousePot? {
+        guard canUseAccount, let household = state?.session?.household else { return nil }
+        return try? HousePot(household: household)
+    }
     var viewerColor: HouseholdMemberColor? { viewer.flatMap { HouseholdMemberColor(hex: $0.color) } }
     var canUseAccount: Bool {
         signedIn && !deletionPending && !deletionNeedsRefresh && !deletionCleanupRequired && !membershipNeedsRefresh
