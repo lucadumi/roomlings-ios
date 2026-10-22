@@ -112,7 +112,8 @@ struct RoomMenuPicker<Selection: Hashable, Options: View>: View {
                     .pickerStyle(.inline)
                     .labelsHidden()
             } label: {
-                HStack(spacing: 12) {
+                // Tight enough that a room name fits a third of a phone row, as the web's filters do.
+                HStack(spacing: 6) {
                     Text(selectedLabel)
                         .foregroundStyle(enabled ? RoomTheme.leaf : RoomTheme.muted)
                         .multilineTextAlignment(.leading)
@@ -123,7 +124,7 @@ struct RoomMenuPicker<Selection: Hashable, Options: View>: View {
                         .accessibilityHidden(true)
                 }
                 .font(RoomTheme.body())
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
