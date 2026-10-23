@@ -10,7 +10,6 @@ struct AccountSheet: View {
     @State private var scrollTarget: String?
     @State private var email = ""
     @State private var emailCode = ""
-    @State private var displayName = ""
     @State private var recoveryCode = ""
     @State private var deviceLabel = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
     @State private var householdName = ""
@@ -105,7 +104,6 @@ struct AccountSheet: View {
             if model.accountDeletionConfirmed {
                 email = ""
                 recoveryCode = ""
-                displayName = ""
                 memberName = ""
                 householdName = ""
                 invitation = ""
@@ -361,19 +359,16 @@ struct AccountSheet: View {
                 RoomField("Email sign-in code", text: $emailCode)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
-                RoomField("Display name", text: $displayName)
-                    .textContentType(.nickname)
-                RoomField("Device name", text: $deviceLabel)
                 Button("Verify and sign in") {
                     Task {
-                        if await model.verify(email: email, code: emailCode, name: displayName, label: deviceLabel) {
+                        if await model.verify(email: email, code: emailCode, label: deviceLabel) {
                             emailCode = ""
                             finishEntry()
                         }
                     }
                 }
                 .buttonStyle(RoomButtonStyle(kind: .primary))
-                .disabled(emailCode.isEmpty || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || deviceLabel.isEmpty)
+                .disabled(emailCode.isEmpty)
             }
             AccountSection {
                 Button("Send a new code") { Task { await model.sendCode(email: email) } }
@@ -735,7 +730,6 @@ struct AccountSheet: View {
         email = ""
         emailCode = ""
         recoveryCode = ""
-        displayName = ""
         memberName = ""
         page = .email
     }

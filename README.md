@@ -12,7 +12,7 @@ npm --prefix ../roomlings ci
 open Roomlings.xcodeproj
 ```
 
-Run the **Roomlings** scheme on a simulator. Physical devices need your signing team.
+Run the **Roomlings** scheme on a simulator. Physical devices need your [signing team](docs/development.md#physical-devices).
 Keep `npm --prefix ../roomlings run preview:local` running for local sign-in.
 See [development setup](docs/development.md) for configuration and tests.
 

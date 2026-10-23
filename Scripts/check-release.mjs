@@ -49,6 +49,9 @@ export function checkArchiveSettings(settings) {
   if (settings.ROOMLINGS_APNS_ENVIRONMENT !== 'production') {
     failures.push('TestFlight uses production APNs; set ROOMLINGS_APNS_ENVIRONMENT=production.')
   }
+  if ((settings.ROOMLINGS_PERSONAL_TEAM ?? 'NO') !== 'NO') {
+    failures.push('Personal Team builds omit Push Notifications; set ROOMLINGS_PERSONAL_TEAM=NO.')
+  }
   const swiftFlags = (settings.OTHER_SWIFT_FLAGS ?? '').replace(/["']/g, '')
   if (/\bDEBUG\b/.test(settings.SWIFT_ACTIVE_COMPILATION_CONDITIONS ?? '')
       || /(?:^|\s)-D\s*DEBUG(?:\s|$)/.test(swiftFlags)

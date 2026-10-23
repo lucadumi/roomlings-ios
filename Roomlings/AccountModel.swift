@@ -148,14 +148,16 @@ final class AccountModel {
         var origin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsAPIOrigin") as? String ?? ""
         var invitationOrigin = Bundle.main.object(forInfoDictionaryKey: "RoomlingsInvitationOrigin") as? String ?? ""
         var service = "\(bundleID).account"
+        var allowsLocalNetwork = false
         #if DEBUG
+        allowsLocalNetwork = true
         let environment = ProcessInfo.processInfo.environment
         if let configured = environment["ROOMLINGS_API_ORIGIN"] { origin = configured }
         if let configured = environment["ROOMLINGS_INVITATION_ORIGIN"] { invitationOrigin = configured }
         if let isolated = environment["ROOMLINGS_KEYCHAIN_SERVICE"] { service = isolated }
         #endif
         do {
-            let configuration = try APIConfiguration(origin: origin)
+            let configuration = try APIConfiguration(origin: origin, allowsLocalNetwork: allowsLocalNetwork)
             let originKey = SHA256.hash(data: Data(configuration.origin.absoluteString.utf8))
                 .map { String(format: "%02x", $0) }.joined()
             let store = try KeychainSessionTokenStore(service: "\(service).\(originKey)")
@@ -163,7 +165,8 @@ final class AccountModel {
             let client = AccountSession(configuration: configuration, tokenStore: store)
             let analytics = NativeAnalytics(client: client)
             do {
-                return AccountModel(client: client, invitationOrigin: try APIConfiguration(origin: invitationOrigin),
+                let invitations = try APIConfiguration(origin: invitationOrigin, allowsLocalNetwork: allowsLocalNetwork)
+                return AccountModel(client: client, invitationOrigin: invitations,
                                     notificationStore: notifications, analytics: analytics)
             } catch {
                 // Account access remains usable; invitationSetupError explains the missing link configuration.
@@ -205,10 +208,18 @@ final class AccountModel {
         }
     }
 
-    func verify(email: String, code: String, name: String, label: String) async -> Bool {
+    func verify(email: String, code: String, label: String) async -> Bool {
         await perform(.verify) {
-            try await $0.verifyEmailCode(email: email, code: code, name: name, deviceLabel: label)
+            try await $0.verifyEmailCode(email: email, code: code, name: Self.newAccountName(email: email), deviceLabel: label)
         }
+    }
+
+    /// The server names only brand-new accounts with this and keeps an existing account's name,
+    /// so signing in needs just the code. New accounts can rename themselves in Account.
+    nonisolated static func newAccountName(email: String) -> String {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let local = trimmed.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        return String((local.isEmpty ? trimmed : local).prefix(50))
     }
 
     func recover(email: String, code: String, label: String) async -> Bool {

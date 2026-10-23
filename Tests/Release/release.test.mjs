@@ -82,6 +82,7 @@ test('shipping configurations require signing, production APNs and no debug/test
     ['CODE_SIGNING_ALLOWED', 'NO', /code signing/],
     ['CODE_SIGNING_REQUIRED', 'NO', /code signing/],
     ['ROOMLINGS_APNS_ENVIRONMENT', 'development', /production APNs/],
+    ['ROOMLINGS_PERSONAL_TEAM', 'YES', /ROOMLINGS_PERSONAL_TEAM=NO/],
     ['SWIFT_ACTIVE_COMPILATION_CONDITIONS', 'FEATURE DEBUG OTHER', /DEBUG code/],
     ['OTHER_SWIFT_FLAGS', '-DDEBUG', /DEBUG code/],
     ['OTHER_SWIFT_FLAGS', '-D DEBUG -D FEATURE', /DEBUG code/],

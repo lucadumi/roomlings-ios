@@ -4,7 +4,7 @@ public struct APIConfiguration: Sendable, Equatable {
     public let origin: URL
     public let requestTimeout: TimeInterval
 
-    public init(origin: String, requestTimeout: TimeInterval = 30) throws {
+    public init(origin: String, requestTimeout: TimeInterval = 30, allowsLocalNetwork: Bool = false) throws {
         guard requestTimeout.isFinite, requestTimeout > 0 else { throw AccountError.invalidTimeout }
         guard !origin.contains("\\"),
               origin.rangeOfCharacter(from: .whitespacesAndNewlines.union(.controlCharacters)) == nil,
@@ -16,7 +16,8 @@ public struct APIConfiguration: Sendable, Equatable {
               components.percentEncodedPath.isEmpty || components.percentEncodedPath == "/",
               components.percentEncodedHost?.contains("%") == false,
               components.port.map({ (1...65535).contains($0) }) ?? true,
-              scheme == "https" || (scheme == "http" && Self.loopbackHosts.contains(host)) else {
+              scheme == "https" || (scheme == "http" && (Self.loopbackHosts.contains(host)
+                  || (allowsLocalNetwork && Self.isLocalNetworkHost(host)))) else {
             throw AccountError.invalidOrigin
         }
         components.scheme = scheme
@@ -44,6 +45,14 @@ public struct APIConfiguration: Sendable, Equatable {
     }
 
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]
+
+    // Bonjour names such as "my-mac.local" reach a development Mac from a physical device.
+    private static func isLocalNetworkHost(_ host: String) -> Bool {
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count >= 2 && labels.last == "local" && labels.dropLast().allSatisfy {
+            !$0.isEmpty && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
+        }
+    }
 
     private static func port(for url: URL) -> Int {
         url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)

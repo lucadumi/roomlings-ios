@@ -101,6 +101,7 @@ struct RoomField: View {
     @Binding var text: String
     var secure = false
     var axis = Axis.horizontal
+    @FocusState private var focused: Bool
 
     init(_ label: String, text: Binding<String>, secure: Bool = false, axis: Axis = .horizontal) {
         self.label = label
@@ -112,15 +113,31 @@ struct RoomField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)
-            if secure {
-                SecureField("", text: $text)
-                    .accessibilityLabel(label)
-                    .accessibilityIdentifier(label)
-            } else {
-                TextField("", text: $text, axis: axis)
-                    .accessibilityLabel(label)
-                    .accessibilityIdentifier(label)
+            ZStack(alignment: .leading) {
+                // Only the line of text takes taps natively. The box behind it catches taps on the
+                // padding and focuses the field, without any gesture on the field itself.
+                RoundedRectangle(cornerRadius: RoomTheme.radius)
+                    .fill(RoomTheme.fieldSurface)
+                    .onTapGesture { focused = true }
+                    .accessibilityHidden(true)
+                Group {
+                    if secure {
+                        SecureField("", text: $text)
+                    } else {
+                        TextField("", text: $text, axis: axis)
+                    }
+                }
+                .textFieldStyle(.plain)
+                .font(RoomTheme.body())
+                .foregroundStyle(RoomTheme.ink)
+                .focused($focused)
+                .padding(12)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier(label)
             }
+            .frame(minHeight: 44)
+            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.fieldBorder, lineWidth: 1)
+                .allowsHitTesting(false))
         }
     }
 }
