@@ -98,7 +98,7 @@ jobs:
     name: Native (${{ matrix.name }}, ${{ matrix.shard }}/3)
     needs: web-revision
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -179,7 +179,7 @@ jobs:
           DEVICE: ${{ steps.simulator.outputs.device }}
         run: xcrun simctl bootstatus "$DEVICE" -b
       - name: Run the native account and room shard
-        timeout-minutes: 68
+        timeout-minutes: 83
         env:
           DESTINATION: ${{ steps.simulator.outputs.destination }}
           SHARD: ${{ matrix.shard }}

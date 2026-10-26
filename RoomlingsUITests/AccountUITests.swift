@@ -238,10 +238,12 @@ final class AccountUITests: XCTestCase {
         try verifySignIn(app)
     }
 
-    /// iPad can drop the tap while the code's keyboard is up. Tap again only while the button is
-    /// still present and enabled; a verification that started disables or replaces it first.
+    /// iPad can drop the tap while the code's keyboard is up, so hide it first. Tap again only while
+    /// the button is still present and enabled; a verification that started disables or replaces it.
     @MainActor
     func verifySignIn(_ app: XCUIApplication) throws {
+        let hide = app.keyboards.buttons["Hide keyboard"]
+        if hide.exists, hide.isHittable { hide.tap() }
         let verify = app.buttons["Verify and sign in"]
         for _ in 1...3 {
             try tap(verify, in: app)
