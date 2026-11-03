@@ -148,6 +148,7 @@ final class RoomBridgeTests: XCTestCase {
         let bathroom = try visual.showing(room: "bathroom").message(paused: false)
         XCTAssertEqual(bathroom["roomId"] as? String, "bathroom")
         XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["top"], 150)
+        XCTAssertEqual((message["viewportInsets"] as? [String: Double])?["bottomTrailing"], 0)
         XCTAssertEqual(message["householdId"] as? String, householdID)
         XCTAssertEqual(message["roomStyle"] as? String, "clay")
         XCTAssertEqual(message["paused"] as? Bool, true)
@@ -211,6 +212,9 @@ final class RoomBridgeTests: XCTestCase {
             "version": 1, "type": "open-money", "householdId": householdID.uuidString,
         ])
         XCTAssertEqual(money.event, .openMoney(householdID: householdID))
+        let layout = try RoomBridgeMessage.decode(["version": 1, "type": "layout", "dockSpace": 91])
+        XCTAssertEqual(layout.event, .layout(dockSpace: 91))
+        XCTAssertEqual(try RoomBridgeMessage.decode(["version": 1, "type": "layout", "dockSpace": 0]).event, .layout(dockSpace: 0))
         let invalidMessages: [[String: Any]] = [
             ["version": 2, "type": "open-chores", "householdId": householdID.uuidString],
             ["version": true, "type": "open-chores", "householdId": householdID.uuidString],
@@ -227,6 +231,11 @@ final class RoomBridgeTests: XCTestCase {
             ["version": 1, "type": "open-money", "householdId": householdID.uuidString, "componentId": "default-kitchen-fridge"],
             ["version": 1, "type": "open-money", "householdId": householdID.uuidString, "accessToken": "not-allowed"],
             ["version": 1, "type": "open-money"],
+            ["version": 1, "type": "layout"],
+            ["version": 1, "type": "layout", "dockSpace": -1],
+            ["version": 1, "type": "layout", "dockSpace": 5_000],
+            ["version": 1, "type": "layout", "dockSpace": "91"],
+            ["version": 1, "type": "layout", "dockSpace": 91, "householdId": householdID.uuidString],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "url": "https://example.com"],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": ""],
             ["version": 1, "type": "open-chores", "householdId": householdID.uuidString, "componentId": NSNull()],

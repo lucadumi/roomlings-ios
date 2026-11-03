@@ -6,6 +6,8 @@ struct RoomViewportInsets: Codable, Equatable, Sendable {
     let right: Double
     let bottom: Double
     let left: Double
+    /// The house pot's bottom-right corner, which the room's camera rail keeps clear of.
+    var bottomTrailing: Double = 0
 
     static let zero = RoomViewportInsets(top: 0, right: 0, bottom: 0, left: 0)
 }
