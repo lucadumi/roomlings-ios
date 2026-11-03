@@ -90,7 +90,9 @@ struct RoomPreviewScreen: View {
                 roomFailure
                 RoomAccountHeader(accounts: accounts, roomID: roomID, roomsOpen: $roomsOpen,
                                   onRoomEntryFrame: { roomEntryFrame = $0 }, openNotifications: openNotifications,
-                                  openObjects: openObjects) {
+                                  openObjects: openObjects, openHousePot: {
+                                      if let id = accounts.state?.session?.household.id { openMoney(householdID: id) }
+                                  }) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
@@ -509,85 +511,170 @@ struct RoomAccountHeader: View {
     var onRoomEntryFrame: (CGRect) -> Void = { _ in }
     let openNotifications: () -> Void
     var openObjects: () -> Void = {}
+    var openHousePot: () -> Void = {}
     let openAccount: () -> Void
 
+    /// The web's phone header (`.game-hud`): the brand and house pot on top, then the room
+    /// caption and house tools. The saved member's avatar joins the tools, as the web's player button.
     var body: some View {
-        // The room selector sits below the header, inside the measured area the room keeps clear.
         VStack(alignment: .leading, spacing: 8) {
-            plate
+            if accounts.room.householdID == nil {
+                // Without a household the header stays one line, naming the preview beside sign-in.
+                // A narrow phone drops the wordmark before it drops the preview's name.
+                ViewThatFits(in: .horizontal) {
+                    previewLine(wordmark: true, name: true)
+                    previewLine(wordmark: false, name: true)
+                    previewLine(wordmark: true, name: false)
+                    VStack(alignment: .leading, spacing: 8) {
+                        brand()
+                        HStack(spacing: 8) {
+                            householdEntry(showsName: false)
+                            accountEntry
+                        }
+                    }
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        brand()
+                        Spacer(minLength: 0)
+                        topTrailing
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        brand()
+                        topTrailing
+                    }
+                }
+            }
             if accounts.room.householdID != nil {
                 HStack(alignment: .top, spacing: 8) {
                     roomEntry
+                    // The household's name shows beside the house when the row has room for all of it.
+                    ViewThatFits(in: .horizontal) {
+                        householdEntry(showsName: true)
+                        householdEntry(showsName: false)
+                    }
                     Spacer(minLength: 0)
                     objectsEntry
                     notificationsEntry
+                    if accounts.viewer != nil { accountEntry }
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
-    }
-
-    private var plate: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                brand
-                householdEntry(singleLine: true)
-                Spacer(minLength: 0)
-                accountEntry
-            }
-            VStack(spacing: 4) {
-                HStack(spacing: 10) {
-                    brand
-                    householdEntry(singleLine: false)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                HStack {
-                    Spacer(minLength: 0)
-                    accountEntry
-                }
-            }
-        }
-        .foregroundStyle(RoomTheme.ink)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
-        .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("room-account-header")
     }
 
-    private var brand: some View {
-        HStack(spacing: 10) {
-            RoomBrandMark(size: 36)
-            Rectangle()
-                .fill(RoomTheme.line)
-                .frame(width: 1, height: 24)
-                .accessibilityHidden(true)
+    @ViewBuilder private var topTrailing: some View {
+        if let pot = accounts.housePot {
+            housePot(pot)
+        } else if accounts.viewer == nil {
+            accountEntry
         }
-        .fixedSize()
     }
 
-    private func householdEntry(singleLine: Bool) -> some View {
-        Button(action: openAccount) {
-            HStack(spacing: 8) {
-                Text(accounts.householdName ?? "Kitchen preview")
-                    .font(RoomTheme.body(14).weight(.semibold))
-                    .lineLimit(singleLine ? 1 : nil)
-                    .fixedSize(horizontal: singleLine, vertical: true)
-                    .multilineTextAlignment(.leading)
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 6, height: 6)
-                    .padding(3)
-                    .background(statusColor.opacity(0.12), in: Circle())
-                    .accessibilityHidden(true)
+    private func previewLine(wordmark: Bool, name: Bool) -> some View {
+        HStack(spacing: 8) {
+            brand(wordmark: wordmark)
+            Spacer(minLength: 0)
+            householdEntry(showsName: name)
+            accountEntry
+        }
+    }
+
+    private func brand(wordmark: Bool = true) -> some View {
+        HStack(spacing: 5) {
+            RoomBrandMark(size: 36)
+            if wordmark { Image(decorative: "Wordmark") }
+        }
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Roomlings")
+        .accessibilityAddTraits(.isImage)
+    }
+
+    /// The web's `.fund-trigger`: this month's budget left, opening the shared money.
+    private func housePot(_ pot: HousePot) -> some View {
+        let over = pot.remaining < 0
+        return Button(action: openHousePot) {
+            HStack(spacing: 9) {
+                Image(systemName: "dollarsign.circle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(RoomTheme.sunflower)
+                    .frame(width: 35, height: 35)
+                    .background(RoomTheme.sunflowerFill, in: Circle())
+                    .overlay(Circle().stroke(RoomTheme.sunflowerBorder))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("HOUSE POT")
+                        .font(.system(size: 8, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(RoomTheme.sunflower)
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(Money.text(abs(pot.remaining), currency: pot.currency))
+                            .font(RoomTheme.body(20).weight(.semibold))
+                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.leaf)
+                        Text(over ? "over" : "left")
+                            .font(RoomTheme.body(11))
+                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.sunflower)
+                    }
+                    .lineLimit(1)
+                }
             }
-            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .padding(.vertical, 6)
+            .frame(minHeight: 44)
+            .background(RoomTheme.sunflowerSoft, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(RoomTheme.sunflowerBorder))
+            .compositingGroup()
+            .shadow(color: RoomTheme.sunflowerBorder.opacity(0.6), radius: 0, y: 3)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(accounts.busy)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("House pot")
+        .accessibilityValue("\(Money.text(abs(pot.remaining), currency: pot.currency)) \(over ? "over" : "left")")
+        .accessibilityHint("Opens the shared money")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("house-pot-entry")
+    }
+
+    /// The web's household button (`.game-house`): a house, the household's name when it fits, and
+    /// the connection dot. Narrow rows keep only the house, as the web's compact header does.
+    private func householdEntry(showsName: Bool) -> some View {
+        Button(action: openAccount) {
+            HStack(spacing: 8) {
+                Image(systemName: "house")
+                    .font(.system(size: 17, weight: .semibold))
+                if showsName {
+                    Text(accounts.householdName ?? "Kitchen preview")
+                        .font(RoomTheme.body(14).weight(.semibold))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .foregroundStyle(RoomTheme.ink)
+            .padding(.horizontal, showsName ? 12 : 14)
+            .frame(minWidth: 44, minHeight: 44)
+            .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
+            .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                    .overlay(Circle().stroke(RoomTheme.paper, lineWidth: 1.5))
+                    .offset(x: 2, y: -2)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accounts.householdName ?? "Kitchen preview")
         .accessibilityAddTraits(.isButton)
@@ -601,16 +688,12 @@ struct RoomAccountHeader: View {
         if accounts.room.householdID != nil, let rooms = accounts.choreCatalog?.rooms, rooms.count > 1 {
             let current = rooms.first { $0.id == roomID } ?? rooms[0]
             Button { roomsOpen.toggle() } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.grid.2x2")
-                        .accessibilityHidden(true)
-                    Text(current.name)
-                        .font(RoomTheme.body(14).weight(.semibold))
-                        .lineLimit(1)
-                }
+                // Icon only, as the web's compact room caption; the room is in the accessible value.
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityHidden(true)
                 .foregroundStyle(RoomTheme.ink)
-                .padding(.horizontal, 16)
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(width: 44, height: 44)
                 .background(RoomTheme.surface, in: RoundedRectangle(cornerRadius: RoomTheme.radius))
                 .overlay(RoundedRectangle(cornerRadius: RoomTheme.radius).stroke(RoomTheme.border))
                 .contentShape(Rectangle())

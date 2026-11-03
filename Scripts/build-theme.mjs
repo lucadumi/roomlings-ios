@@ -28,6 +28,7 @@ export async function buildTheme({ source, project, requireWeb }) {
     leaf: '--leaf-ink', leafSoft: '--leaf-soft',
     sky: '--sky-ink', skySoft: '--sky-soft', surfaceMuted: '--surface-muted',
     tomato: '--tomato', sunflower: '--sunflower-ink', sunflowerSoft: '--sunflower-soft',
+    sunflowerFill: '--sunflower', sunflowerBorder: '--sunflower-border',
   }
   const values = Object.entries(names).map(([name, property]) => {
     const color = resolve(property)

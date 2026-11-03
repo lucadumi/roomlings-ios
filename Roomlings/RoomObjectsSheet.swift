@@ -51,9 +51,8 @@ struct RoomObjectsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RoomSheetHeader(title: restock == nil ? "\(roomName) objects" : "Add to shopping list") {
-                Button("Done") { dismiss() }
-                    .buttonStyle(RoomButtonStyle(kind: .text))
+            RoomSheetHeader(title: restock == nil ? "\(roomName) objects." : "Add to shopping list.") {
+                RoomCloseButton { dismiss() }
                     .disabled(model.busy || pending != nil)
             }
             .padding(.horizontal, 24)

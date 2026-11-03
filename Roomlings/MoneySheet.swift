@@ -68,7 +68,7 @@ struct MoneySheet: View {
 
         var title: String {
             switch self {
-            case .board: "Shared money"
+            case .board: "Shared money."
             case .expense: "Record a paid receipt."
             case .removeReceipt: "Remove this receipt?"
             case .settle: "Record a repayment."
@@ -102,7 +102,7 @@ struct MoneySheet: View {
     var body: some View {
         VStack(spacing: 0) {
             RoomSheetHeader(title: page.title) {
-                Button("Done") { dismiss() }.disabled(dismissalBlocked)
+                RoomCloseButton { dismiss() }.disabled(dismissalBlocked)
             }
             .buttonStyle(RoomButtonStyle(kind: .text))
             .padding(.horizontal, 24)
@@ -229,7 +229,13 @@ struct MoneySheet: View {
 
     private func board(_ ledger: HouseholdLedger, currency: HouseholdCurrency, memberID: UUID) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            RoomSegmentedPicker("Money sections", selection: $section, options: Section.allCases) { $0.rawValue }
+            RoomSegmentedPicker("Money sections", selection: $section, options: Section.allCases, icon: {
+                switch $0 {
+                case .balances: "scalemass"
+                case .receipts: "doc.text"
+                case .bills: "calendar"
+                }
+            }) { $0.rawValue }
                 .accessibilityIdentifier("money-sections")
             Text("Roomlings tracks who owes what. It never moves money.")
                 .font(RoomTheme.body(14)).foregroundStyle(RoomTheme.muted)

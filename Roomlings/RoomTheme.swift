@@ -30,6 +30,8 @@ enum RoomTheme {
     static let tomato = color(WebThemeValues.tomato)
     static let sunflower = color(WebThemeValues.sunflower)
     static let sunflowerSoft = color(WebThemeValues.sunflowerSoft)
+    static let sunflowerFill = color(WebThemeValues.sunflowerFill)
+    static let sunflowerBorder = color(WebThemeValues.sunflowerBorder)
     static let surfaceMuted = color(WebThemeValues.surfaceMuted)
     static let line = color(WebThemeValues.line)
     static let radius = WebThemeValues.radius
@@ -51,6 +53,8 @@ struct RoomButtonStyle: ButtonStyle {
     var kind = Kind.secondary
     /// A smaller label for compact text actions, like the web's roster text buttons.
     var size: CGFloat?
+    /// A square control holding only an icon, like the web's small add buttons.
+    var iconOnly = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -66,10 +70,10 @@ struct RoomButtonStyle: ButtonStyle {
             .lineLimit(singleLine ? 1 : nil)
             .minimumScaleFactor(singleLine ? 0.8 : 1)
             .foregroundStyle(foreground)
-            .padding(.horizontal, text ? 0 : 14)
-            .padding(.vertical, 8)
-            .frame(minHeight: 44)
-            .frame(maxWidth: text ? nil : .infinity)
+            .padding(.horizontal, text || iconOnly ? 0 : 14)
+            .padding(.vertical, iconOnly ? 0 : 8)
+            .frame(minWidth: iconOnly ? 44 : nil, minHeight: 44)
+            .frame(maxWidth: text || iconOnly ? nil : .infinity)
             .contentShape(Rectangle())
             .background(text ? Color.clear
                 : primary ? (configuration.isPressed ? RoomTheme.primaryPressed : RoomTheme.primary)

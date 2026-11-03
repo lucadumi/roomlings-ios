@@ -20,9 +20,9 @@ Fill in the approved Apple Developer team and public HTTPS API/invitation hosts.
 
 The approved treatment uses the existing four-colour Roomlings mark on an opaque white app-icon canvas, plus a small centred mark on a white launch screen. The launch storyboard keeps the image at 64 points in either orientation on iPhone and iPad. It adds no text, animation, controls or custom icon mask.
 
-The PNGs in `Roomlings/Resources/Assets.xcassets` are derived platform resources, not separately editable branding. `Scripts/build-brand-assets.mjs` renders the shared `src/assets/brand/roomlings-icon-flat.svg` using the web project's existing Playwright tooling. The icon is 1024 by 1024 RGB with no alpha channel; the launch mark has transparent 1x, 2x and 3x variants. Web favicons are unchanged.
+The PNGs in `Roomlings/Resources/Assets.xcassets` are derived platform resources, not separately editable branding. `Scripts/build-brand-assets.mjs` renders the shared `src/assets/brand/roomlings-icon-flat.svg` and the header's `roomlings-wordmark.svg` using the web project's existing Playwright tooling. The icon is 1024 by 1024 RGB with no alpha channel; the launch mark and the 26-point wordmark have transparent 1x, 2x and 3x variants. Web favicons are unchanged.
 
-`Roomlings/Resources/BrandAssets.json` records the vector source hash, generation revision, approved background and image hashes. Every room build checks those against the selected web source and fails if the artwork is stale or altered. The paper colour must still be the approved white. Ordinary Xcode builds only check the assets; they do not launch a browser or regenerate them.
+`Roomlings/Resources/BrandAssets.json` records the vector source hashes, generation revision, approved background and image hashes. Every room build checks those against the selected web source and fails if the artwork is stale or altered. The paper colour must still be the approved white. Ordinary Xcode builds only check the assets; they do not launch a browser or regenerate them.
 
 After an approved branding change, use a compatible web checkout with its locked dependencies and Playwright browser available:
 
