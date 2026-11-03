@@ -264,6 +264,20 @@ final class AccountUITests: XCTestCase {
         }
     }
 
+    /// The header shows the household's name beside the house only when its row has room for it, so a
+    /// longer name leaves just the house. The household button always carries the name as its label.
+    @MainActor
+    func expectHousehold(
+        _ name: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let entry = app.buttons["household-entry"]
+        let opened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", name), object: entry)
+        if XCTWaiter.wait(for: [opened], timeout: Wait.control) != .completed {
+            XCTFail("The header named \(entry.exists ? entry.label : "no household") instead of \(name).",
+                    file: file, line: line)
+        }
+    }
+
     // Account refreshes and notification work can outlive the UI event that started them.
     @MainActor
     func expectHeaderStatus(
@@ -429,14 +443,14 @@ final class AccountUITests: XCTestCase {
         try choose("USD", from: "Currency", in: app)
         XCTAssertEqual(picker("Currency", in: app).value as? String, "USD")
         try tap(app.buttons["Create household"], in: app)
-        XCTAssertTrue(app.staticTexts["Our new home"].waitForExistence(timeout: Wait.control))
+        expectHousehold("Our new home", in: app)
         try openAccount(app)
         try tap(app.buttons["Join a household"], in: app)
         try fill(app.textFields["Invitation link or code"],
              "http://localhost:5173/#account-invite=\(seeded.invitation)")
         try fill(app.textFields["Your name in this household"], "Ben")
         try tap(app.buttons["Join household"], in: app)
-        XCTAssertTrue(app.staticTexts["Cedar House"].waitForExistence(timeout: Wait.control))
+        expectHousehold("Cedar House", in: app)
         try openAccount(app)
         XCTAssertTrue(app.buttons["Open Our new home"].waitForExistence(timeout: Wait.control))
         XCTAssertTrue(app.buttons["Open Cedar House"].exists)
