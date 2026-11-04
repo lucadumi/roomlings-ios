@@ -79,7 +79,7 @@ All methods below belong to `AccountUITests`.
 
 CI covers Swift, the shared renderer and native flows on iPhone and iPad.
 Each device's UI coverage is split using Xcode's compiled test inventory. Model tests run once per device, on shard 1; result bundles must contain exactly the assigned tests, all passing without skips.
-In CI a failed test reruns in place up to three times; the shard still fails if no attempt passes.
+In CI the script reruns failed or unfinished tests for up to three attempts in total; the shard still fails if a test passes on none of them.
 
 ```sh
 node Scripts/test-accounts.mjs --include-room --shard 1/3

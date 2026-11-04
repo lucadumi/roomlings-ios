@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseShard, planNativeShard, requireCompleteShard } from '../../Scripts/native-test-plan.mjs'
+import { parseShard, planNativeShard, requireCompleteShard, unconfirmedShardTests } from '../../Scripts/native-test-plan.mjs'
 
 const inventory = {
   errors: [],
@@ -95,4 +95,18 @@ test('a green summary must still contain every assigned test and no skips or une
   duplicate.testNodes[0].children[0] = duplicate.testNodes[0].children[1]
   assert.throws(() => requireCompleteShard(passed, expected, duplicate), /exactly the test identifiers assigned/)
   assert.throws(() => requireCompleteShard(passed, expected, {}), /exactly the test identifiers assigned/)
+})
+
+test('a rerun covers only tests the attempt did not confirm, including ones it never reached', () => {
+  const [a, b, c, d] = ['testA', 'testB', 'testC', 'testD'].map((name) => `RoomlingsUITests/AccountUITests/${name}`)
+  const node = (id, result) => ({ nodeType: 'Test Case', nodeIdentifierURL: `test://com.apple.xcode/Roomlings/${id}`, result })
+  const results = { testNodes: [{ nodeType: 'Test Plan', children: [{
+    nodeType: 'Test Suite',
+    children: [node(a, 'Passed'), node(b, 'Failed'), node(c, 'Skipped')],
+  }] }] }
+  assert.deepEqual(unconfirmedShardTests([a, b, c, d], results), [b, c, d])
+  assert.deepEqual(unconfirmedShardTests([a], results), [])
+  assert.deepEqual(unconfirmedShardTests([a, b], {}), [a, b])
+  const restarted = { testNodes: [node(a, 'Failed'), node(a, 'Passed')] }
+  assert.deepEqual(unconfirmedShardTests([a], restarted), [a])
 })
