@@ -11,6 +11,8 @@ enum RoomRenderEvent: Equatable {
     case openChores(householdID: UUID, componentID: String? = nil)
     case openShopping(householdID: UUID)
     case openMoney(householdID: UUID)
+    /// The height the room's dock takes above the bottom inset, for native controls beside it.
+    case layout(dockSpace: Double)
     case failure(String)
 }
 
@@ -32,7 +34,7 @@ struct RoomBridgeMessage: Decodable {
     let event: RoomRenderEvent
 
     private enum CodingKeys: String, CodingKey {
-        case version, type, status
+        case version, type, status, dockSpace
         case householdID = "householdId"
         case componentID = "componentId"
     }
@@ -59,6 +61,10 @@ struct RoomBridgeMessage: Decodable {
             event = .openShopping(householdID: try container.decode(UUID.self, forKey: .householdID))
         case "open-money":
             event = .openMoney(householdID: try container.decode(UUID.self, forKey: .householdID))
+        case "layout":
+            let space = try container.decode(Double.self, forKey: .dockSpace)
+            guard space.isFinite, (0...4_096).contains(space) else { throw BridgeError.invalidMessage }
+            event = .layout(dockSpace: space)
         default:
             throw BridgeError.invalidMessage
         }
@@ -78,6 +84,8 @@ struct RoomBridgeMessage: Decodable {
             expected = ["version", "type", "householdId"]
         case "open-money":
             expected = ["version", "type", "householdId"]
+        case "layout":
+            expected = ["version", "type", "dockSpace"]
         default: throw BridgeError.invalidMessage
         }
         guard Set(fields.keys) == expected else {

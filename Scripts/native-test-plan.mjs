@@ -45,6 +45,22 @@ export function planNativeShard(enumeration, shard) {
   }
 }
 
+// The tests an attempt did not confirm: failures, skips and anything a crash kept from running.
+export function unconfirmedShardTests(expected, results) {
+  const passed = new Set()
+  const rejected = new Set()
+  const visit = (node) => {
+    if (node.nodeType === 'Test Case') {
+      const id = /^test:\/\/com\.apple\.xcode\/[^/]+\/(.+)$/.exec(node.nodeIdentifierURL ?? '')?.[1]
+      ;(node.result === 'Passed' ? passed : rejected).add(id)
+      return
+    }
+    for (const child of node.children ?? []) visit(child)
+  }
+  for (const node of results?.testNodes ?? []) visit(node)
+  return expected.filter((test) => !passed.has(test) || rejected.has(test))
+}
+
 export function requireCompleteShard(summary, expected, results) {
   if (summary.result !== 'Passed' || summary.passedTests !== expected.length || summary.totalTestCount !== expected.length
       || summary.failedTests !== 0 || summary.skippedTests !== 0) {

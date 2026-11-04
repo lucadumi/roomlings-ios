@@ -53,8 +53,9 @@ const stateSchema = z.object({
   // The household's chore schedule and calendar, so overdue care dirties objects as on the web.
   billingTimeZone: timeZoneSchema.default('UTC'),
   chores: z.array(choreCareSchema).max(200).default([]),
-  viewportInsets: z.object({ top: inset, right: inset, bottom: inset, left: inset }).strict()
-    .default({ top: 0, right: 0, bottom: 0, left: 0 }),
+  // bottomTrailing is the native house pot's corner, which the camera rail keeps clear of.
+  viewportInsets: z.object({ top: inset, right: inset, bottom: inset, left: inset, bottomTrailing: inset.default(0) }).strict()
+    .default({ top: 0, right: 0, bottom: 0, left: 0, bottomTrailing: 0 }),
 }).strict().refine((value) => value.editMode || value.placementPreviewId === null, {
   message: 'Only the room editor previews a placement.',
   path: ['placementPreviewId'],
@@ -93,6 +94,7 @@ type NativeMessage = { version: 1; type: 'status'; status: Status }
   | { version: 1; type: 'open-chores'; householdId: string; componentId?: string }
   | { version: 1; type: 'open-shopping'; householdId: string }
   | { version: 1; type: 'open-money'; householdId: string }
+  | { version: 1; type: 'layout'; dockSpace: number }
 
 declare global {
   interface Window {
@@ -216,11 +218,16 @@ function Room() {
     measure()
     return () => observer.disconnect()
   }, [hasTools, landscape, currentStatus])
-  const viewportStyle: CSSProperties & Record<`--native-${'top' | 'right' | 'bottom' | 'left' | 'dock-space' | 'dock-width' | 'dock-height'}`, string> = {
+  // The native house pot sits just above the dock's space, so report it whenever it changes.
+  useEffect(() => {
+    window.webkit?.messageHandlers?.roomlings?.postMessage({ version: 1, type: 'layout', dockSpace: Math.round(dockSpace) })
+  }, [dockSpace])
+  const viewportStyle: CSSProperties & Record<`--native-${'top' | 'right' | 'bottom' | 'left' | 'bottom-trailing' | 'dock-space' | 'dock-width' | 'dock-height'}`, string> = {
     '--native-top': `${current.viewportInsets.top}px`,
     '--native-right': `${current.viewportInsets.right}px`,
     '--native-bottom': `${current.viewportInsets.bottom}px`,
     '--native-left': `${current.viewportInsets.left}px`,
+    '--native-bottom-trailing': `${current.viewportInsets.bottomTrailing}px`,
     '--native-dock-space': `${dockSpace}px`,
     '--native-dock-width': `${hasTools ? dockWidth : 0}px`,
     '--native-dock-height': `${hasTools ? dockHeight : 0}px`,

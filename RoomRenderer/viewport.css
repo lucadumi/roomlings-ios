@@ -5,7 +5,8 @@ body { overscroll-behavior: none; }
 .native-room button { touch-action: manipulation; }
 /* Keep WebKit taps on the button when its SVG icon changes. */
 .native-room button > * { pointer-events: none; }
-.native-room .world-camera-controls { --control-compact-height: max(44px, 2.75rem); right: 8px; max-height: calc(100% - 2rem); overflow-y: auto; }
+/* The rail is centred, so it gives up the native house pot's corner at both ends. */
+.native-room .world-camera-controls { --control-compact-height: max(44px, 2.75rem); right: 8px; max-height: calc(100% - 2rem - 2 * var(--native-bottom-trailing, 0px)); overflow-y: auto; }
 .native-room .world-camera-controls > * { flex-shrink: 0; }
 .native-room .world-camera-controls > span { min-width: 3.5em; font-size: max(11px, 0.6875rem); text-align: center; font-variant-numeric: tabular-nums; }
 .native-room .world-quick-actions { position: absolute; inset: auto auto 1rem 1rem; max-width: calc(100% - var(--camera-rail-space) - 2rem); }

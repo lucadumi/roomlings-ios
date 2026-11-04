@@ -27,6 +27,9 @@ struct RoomPreviewScreen: View {
     /// The room editor's private draft. It outlives the sheet while a placement is previewed in the room.
     @State private var editor: RoomEditor?
     @State private var placementBarHeight: CGFloat = 0
+    /// The room dock's height above the bottom inset, reported by the renderer for the house pot.
+    @State private var dockSpace: Double = 0
+    @State private var housePotHeight: CGFloat = 0
 
     private enum Sheet: String, Identifiable {
         case account, chores, shopping, money, notifications, objects, editor
@@ -55,6 +58,9 @@ struct RoomPreviewScreen: View {
         return min(1, max(0.3, Double(width / height) / entryAspect))
     }
 
+    /// The room editor owns the bottom of the screen while it is open.
+    private var housePotVisible: Bool { accounts.housePot != nil && editor == nil }
+
     var body: some View {
         GeometryReader { geometry in
             let viewport = Viewport(size: geometry.size, safeAreaInsets: geometry.safeAreaInsets)
@@ -62,7 +68,8 @@ struct RoomPreviewScreen: View {
                 top: Double(max(0, geometry.safeAreaInsets.top + headerHeight)),
                 right: Double(max(0, geometry.safeAreaInsets.trailing)),
                 bottom: Double(max(0, geometry.safeAreaInsets.bottom + (editor?.placement == nil ? 0 : placementBarHeight + 16))),
-                left: Double(max(0, geometry.safeAreaInsets.leading))
+                left: Double(max(0, geometry.safeAreaInsets.leading)),
+                bottomTrailing: housePotVisible ? Double(housePotHeight) + 24 : 0
             )
             ZStack(alignment: .top) {
                 RoomTheme.paper.ignoresSafeArea(.container)
@@ -76,6 +83,8 @@ struct RoomPreviewScreen: View {
                             failure = message
                         case .status:
                             break
+                        case .layout(let space):
+                            dockSpace = space
                         case .openChores(let householdID, let componentID):
                             openChores(householdID: householdID, componentID: componentID)
                         case .openShopping(let householdID):
@@ -90,9 +99,7 @@ struct RoomPreviewScreen: View {
                 roomFailure
                 RoomAccountHeader(accounts: accounts, roomID: roomID, roomsOpen: $roomsOpen,
                                   onRoomEntryFrame: { roomEntryFrame = $0 }, openNotifications: openNotifications,
-                                  openObjects: openObjects, openHousePot: {
-                                      if let id = accounts.state?.session?.household.id { openMoney(householdID: id) }
-                                  }) {
+                                  openObjects: openObjects) {
                     accounts.clearFeedback()
                     presentedSheet = .account
                 }
@@ -100,6 +107,16 @@ struct RoomPreviewScreen: View {
                 // While a placement is previewed, the room belongs to the editor until it is placed or discarded.
                 // Disabling, unlike blocking hit tests, also stops VoiceOver and keyboard activation.
                 .disabled(editor?.placement != nil)
+                // The house pot sits bottom right, just above the room's dock, mirroring the room actions.
+                if housePotVisible, let pot = accounts.housePot {
+                    RoomHousePotButton(pot: pot, busy: accounts.busy) {
+                        if let id = accounts.state?.session?.household.id { openMoney(householdID: id) }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { housePotHeight = $0 }
+                    .padding(.trailing, 16)
+                    .padding(.bottom, dockSpace + 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
                 if let editor, editor.placement != nil {
                     RoomPlacementBar(model: accounts, editor: editor)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { placementBarHeight = $0 }
@@ -511,10 +528,9 @@ struct RoomAccountHeader: View {
     var onRoomEntryFrame: (CGRect) -> Void = { _ in }
     let openNotifications: () -> Void
     var openObjects: () -> Void = {}
-    var openHousePot: () -> Void = {}
     let openAccount: () -> Void
 
-    /// The web's phone header (`.game-hud`): the brand and house pot on top, then the room
+    /// The web's phone header (`.game-hud`): the brand on top, then the room
     /// caption and house tools. The saved member's avatar joins the tools, as the web's player button.
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -569,9 +585,7 @@ struct RoomAccountHeader: View {
     }
 
     @ViewBuilder private var topTrailing: some View {
-        if let pot = accounts.housePot {
-            housePot(pot)
-        } else if accounts.viewer == nil {
+        if accounts.viewer == nil {
             accountEntry
         }
     }
@@ -594,54 +608,6 @@ struct RoomAccountHeader: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Roomlings")
         .accessibilityAddTraits(.isImage)
-    }
-
-    /// The web's `.fund-trigger`: this month's budget left, opening the shared money.
-    private func housePot(_ pot: HousePot) -> some View {
-        let over = pot.remaining < 0
-        return Button(action: openHousePot) {
-            HStack(spacing: 9) {
-                Image(systemName: "dollarsign.circle")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(RoomTheme.sunflower)
-                    .frame(width: 35, height: 35)
-                    .background(RoomTheme.sunflowerFill, in: Circle())
-                    .overlay(Circle().stroke(RoomTheme.sunflowerBorder))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("HOUSE POT")
-                        .font(.system(size: 8, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(RoomTheme.sunflower)
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(Money.text(abs(pot.remaining), currency: pot.currency))
-                            .font(RoomTheme.body(20).weight(.semibold))
-                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.leaf)
-                        Text(over ? "over" : "left")
-                            .font(RoomTheme.body(11))
-                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.sunflower)
-                    }
-                    .lineLimit(1)
-                }
-            }
-            .padding(.leading, 8)
-            .padding(.trailing, 14)
-            .padding(.vertical, 6)
-            .frame(minHeight: 44)
-            .background(RoomTheme.sunflowerSoft, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(RoomTheme.sunflowerBorder))
-            .compositingGroup()
-            .shadow(color: RoomTheme.sunflowerBorder.opacity(0.6), radius: 0, y: 3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .fixedSize()
-        .disabled(accounts.busy)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("House pot")
-        .accessibilityValue("\(Money.text(abs(pot.remaining), currency: pot.currency)) \(over ? "over" : "left")")
-        .accessibilityHint("Opens the shared money")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("house-pot-entry")
     }
 
     /// The web's household button (`.game-house`): a house, the household's name when it fits, and
@@ -854,5 +820,59 @@ struct RoomPickerMenu: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, onClose)
         .accessibilityIdentifier("room-picker")
+    }
+}
+
+/// The web's `.fund-trigger`: this month's budget left, opening the shared money.
+struct RoomHousePotButton: View {
+    let pot: HousePot
+    let busy: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let over = pot.remaining < 0
+        return Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: "dollarsign.circle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(RoomTheme.sunflower)
+                    .frame(width: 35, height: 35)
+                    .background(RoomTheme.sunflowerFill, in: Circle())
+                    .overlay(Circle().stroke(RoomTheme.sunflowerBorder))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("HOUSE POT")
+                        .font(.system(size: 8, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(RoomTheme.sunflower)
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(Money.text(abs(pot.remaining), currency: pot.currency))
+                            .font(RoomTheme.body(20).weight(.semibold))
+                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.leaf)
+                        Text(over ? "over" : "left")
+                            .font(RoomTheme.body(11))
+                            .foregroundStyle(over ? RoomTheme.error : RoomTheme.sunflower)
+                    }
+                    .lineLimit(1)
+                }
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .padding(.vertical, 6)
+            .frame(minHeight: 44)
+            .background(RoomTheme.sunflowerSoft, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(RoomTheme.sunflowerBorder))
+            .compositingGroup()
+            .shadow(color: RoomTheme.sunflowerBorder.opacity(0.6), radius: 0, y: 3)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(busy)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("House pot")
+        .accessibilityValue("\(Money.text(abs(pot.remaining), currency: pot.currency)) \(over ? "over" : "left")")
+        .accessibilityHint("Opens the shared money")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("house-pot-entry")
     }
 }

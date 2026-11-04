@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { readFile } from 'node:fs/promises'
-import { parseShard, planNativeShard, requireCompleteShard } from './native-test-plan.mjs'
+import { parseShard, planNativeShard, requireCompleteShard, unconfirmedShardTests } from './native-test-plan.mjs'
 
 const project = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const web = resolve(project, process.env.ROOMLINGS_WEB_ROOT ?? '../roomlings')
@@ -818,29 +818,39 @@ try {
     shardedPlan = planNativeShard(JSON.parse(await readFile(enumerationPath, 'utf8')), shard)
     console.log(`Native shard ${shardedPlan.shard}: ${shardedPlan.modelTests} model tests and ${shardedPlan.uiTests} of ${shardedPlan.totalUITests} UI flows.`)
   }
-  const [code, signal] = await runXcode([
-    '-resultBundlePath', result,
-    ...(shardedPlan ? shardedPlan.tests.map((test) => `-only-testing:${test}`) : selection),
+  const runTests = (bundle, tests) => runXcode([
+    '-resultBundlePath', bundle,
+    ...(tests ? tests.map((test) => `-only-testing:${test}`) : selection),
     '-parallel-testing-enabled', 'NO',
     ...(process.env.CI ? [
       '-destination-timeout', '60',
       '-test-timeouts-enabled', 'YES',
       '-default-test-execution-time-allowance', '300',
       '-maximum-test-execution-time-allowance', '600',
-      // Hosted simulators sometimes fail to launch or terminate the app. Each flow seeds its own
-      // fixture state, so a failed flow reruns in place and must pass on a later attempt.
-      '-retry-tests-on-failure', '-test-iterations', '3',
     ] : ['-quiet']),
     shardedPlan ? 'test-without-building' : 'test',
   ])
+  const readResults = (bundle, kind) => JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', kind, '--path', bundle], { encoding: 'utf8' }))
+  let bundle = result
+  let tests = shardedPlan?.tests
+  let [code, signal] = await runTests(bundle, tests)
+  // Hosted simulators sometimes stall or fail to launch or terminate the app. A failed UI flow also
+  // restarts the test runner, which loses xcodebuild's own -retry-tests-on-failure, so the script
+  // reruns what is unconfirmed. Each flow seeds its own fixture state and must pass on a later attempt.
+  for (let attempt = 2; process.env.CI && shardedPlan && code !== 0 && !signal && attempt <= 3; attempt += 1) {
+    tests = unconfirmedShardTests(tests, readResults(bundle, 'tests'))
+    if (!tests.length) break
+    console.log(`Attempt ${attempt} of 3 reruns: ${tests.join(', ')}`)
+    bundle = join(project, 'Build', `Account-flows-${runID}-attempt-${attempt}.xcresult`)
+    ;[code, signal] = await runTests(bundle, tests)
+  }
   if (code !== 0) {
-    console.error(`Account device flows failed${signal ? ` (${signal})` : ''}. Results: ${result}`)
+    console.error(`Account device flows failed${signal ? ` (${signal})` : ''}. Results: ${bundle}`)
     process.exitCode = code ?? 1
   } else {
-    const summary = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result], { encoding: 'utf8' }))
+    const summary = readResults(bundle, 'summary')
     if (shardedPlan) {
-      const executed = JSON.parse(execFileSync('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', result], { encoding: 'utf8' }))
-      requireCompleteShard(summary, shardedPlan.tests, executed)
+      requireCompleteShard(summary, tests, readResults(bundle, 'tests'))
     } else {
       const expected = 103 + (selectedFlows ? selectedFlows.length : values['chores-only'] ? 8 : 44)
         + (values['include-room'] ? 2 : 0)
